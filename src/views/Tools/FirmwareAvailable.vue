@@ -1,30 +1,6 @@
 <template>
   <div class="p-3 firmware-available-page">
     <div class="grid">
-      <div class="col-12">
-        <Card class="overview-card">
-          <template #title>
-            <div class="flex align-items-center justify-content-between flex-wrap gap-2">
-              <span>Available Firmware</span>
-              <Button
-                icon="pi pi-refresh"
-                label="Refresh"
-                class="p-button-sm"
-                :loading="loading"
-                @click="refreshNow"
-              />
-            </div>
-          </template>
-          <template #content>
-            <div class="flex align-items-center gap-2 flex-wrap status-tags">
-              <Tag :value="`Network: ${network || 'unknown'}`" severity="info" />
-              <Tag v-if="metadataSyncedAt" :value="`Synced: ${formatReleaseTime(metadataSyncedAt)}`" severity="success" />
-              <Tag v-if="error" value="Metadata API Error" severity="danger" />
-            </div>
-          </template>
-        </Card>
-      </div>
-
       <div class="col-6 md:col-4 lg:col-2" v-for="stat in stats" :key="stat.label">
         <div class="card mb-0 stat-card">
           <div class="stat-label">{{ stat.label }}</div>
@@ -33,80 +9,96 @@
       </div>
 
       <div class="col-12">
-        <Card class="filters-card">
-          <template #title>Filters</template>
+        <Card class="table-card">
+          <template #title>
+            <div class="flex align-items-center justify-content-between gap-2 flex-wrap">
+              <div class="flex align-items-center gap-2 flex-wrap">
+                <span>Latest Firmware</span>
+                <Tag :value="`Network: ${network || 'unknown'}`" severity="info" />
+                <Tag v-if="metadataSyncedAt" :value="`Synced: ${formatReleaseTime(metadataSyncedAt)}`" severity="success" />
+              </div>
+              <div class="flex align-items-center gap-2 flex-wrap">
+                <div class="table-meta text-600 text-sm">
+                  Showing {{ totalCount === 0 ? 0 : pageFirst + 1 }} - {{ Math.min(pageFirst + pageSize, totalCount) }} of {{ totalCount }} records
+                </div>
+                <Button
+                  icon="pi pi-filter"
+                  class="p-button-text p-button-sm p-button-rounded"
+                  v-tooltip.top="'Show/Hide Filters'"
+                  @click="tableFiltersExpanded = !tableFiltersExpanded"
+                />
+                <Button
+                  icon="pi pi-refresh"
+                  class="p-button-text p-button-sm p-button-rounded"
+                  :loading="loading"
+                  v-tooltip.top="'Refresh'"
+                  @click="refreshNow"
+                />
+              </div>
+            </div>
+          </template>
           <template #content>
-            <div class="grid">
-              <div class="col-12 md:col-3">
+            <div v-show="tableFiltersExpanded" class="table-filters grid mb-3">
+              <div class="col-12 md:col-2">
                 <label class="filter-label">VID</label>
-                <InputText v-model="filters.vid" class="w-full" placeholder="Contains..." />
+                <InputText v-model="filters.vid" class="w-full p-inputtext-sm" placeholder="Contains..." />
               </div>
-              <div class="col-12 md:col-3">
+              <div class="col-12 md:col-2">
                 <label class="filter-label">PID</label>
-                <InputText v-model="filters.pid" class="w-full" placeholder="Contains..." />
+                <InputText v-model="filters.pid" class="w-full p-inputtext-sm" placeholder="Contains..." />
               </div>
-              <div class="col-12 md:col-3">
+              <div class="col-12 md:col-2">
                 <label class="filter-label">Vendor Name</label>
-                <InputText v-model="filters.vendorName" class="w-full" placeholder="Contains..." />
+                <InputText v-model="filters.vendorName" class="w-full p-inputtext-sm" placeholder="Contains..." />
               </div>
-              <div class="col-12 md:col-3">
+              <div class="col-12 md:col-2">
                 <label class="filter-label">Product Name</label>
-                <InputText v-model="filters.productName" class="w-full" placeholder="Contains..." />
+                <InputText v-model="filters.productName" class="w-full p-inputtext-sm" placeholder="Contains..." />
               </div>
-              <div class="col-12 md:col-3">
+              <div class="col-12 md:col-2">
                 <label class="filter-label">Software Version</label>
-                <InputText v-model="filters.softwareVersion" class="w-full" placeholder="Contains..." />
+                <InputText v-model="filters.softwareVersion" class="w-full p-inputtext-sm" placeholder="Contains..." />
               </div>
-              <div class="col-12 md:col-3">
+              <div class="col-12 md:col-2">
                 <label class="filter-label">Software Version String</label>
-                <InputText v-model="filters.softwareVersionString" class="w-full" placeholder="Contains..." />
+                <InputText v-model="filters.softwareVersionString" class="w-full p-inputtext-sm" placeholder="Contains..." />
               </div>
-              <div class="col-12 md:col-3">
+              <div class="col-12 md:col-2">
                 <label class="filter-label">Release Time</label>
-                <InputText v-model="filters.releaseTime" class="w-full" placeholder="Contains..." />
+                <InputText v-model="filters.releaseTime" class="w-full p-inputtext-sm" placeholder="Contains..." />
               </div>
-              <div class="col-12 md:col-3">
+              <div class="col-12 md:col-2">
                 <label class="filter-label">Block Height</label>
-                <InputText v-model="filters.blockHeight" class="w-full" placeholder="Contains..." />
+                <InputText v-model="filters.blockHeight" class="w-full p-inputtext-sm" placeholder="Contains..." />
               </div>
-              <div class="col-12 md:col-3">
+              <div class="col-12 md:col-2">
                 <label class="filter-label">TxHash (Last 8)</label>
-                <InputText v-model="filters.txHashLast8" class="w-full" placeholder="Contains..." />
+                <InputText v-model="filters.txHashLast8" class="w-full p-inputtext-sm" placeholder="Contains..." />
               </div>
-              <div class="col-12 md:col-3">
+              <div class="col-12 md:col-2">
                 <label class="filter-label">Formality Conformance</label>
                 <Dropdown
                   v-model="filters.formalityConformance"
-                  class="w-full"
+                  class="w-full p-inputtext-sm"
                   :options="conformanceFilterOptions"
                   placeholder="Any"
                   showClear
                 />
               </div>
-              <div class="col-12 md:col-6 flex align-items-end justify-content-end gap-2">
+              <div class="col-12 md:col-4 lg:col-2 flex align-items-end justify-content-end gap-2">
                 <Button
                   label="Clear"
                   icon="pi pi-filter-slash"
-                  class="p-button-text"
+                  class="p-button-text p-button-sm"
                   @click="clearFilters"
                 />
                 <Button
                   label="Apply Filters"
                   icon="pi pi-search"
+                  class="p-button-sm"
                   @click="applyFilters"
                 />
               </div>
-            </div>
-          </template>
-        </Card>
-      </div>
-
-      <div class="col-12">
-        <Card class="table-card">
-          <template #title>Latest Firmware</template>
-          <template #content>
-            <div class="table-meta text-600 text-sm mb-2">
-              Showing {{ totalCount === 0 ? 0 : pageFirst + 1 }} - {{ Math.min(pageFirst + pageSize, totalCount) }} of {{ totalCount }} records
             </div>
             <Message v-if="error" severity="error" :closable="false" class="mb-3">
               {{ error }}
@@ -213,6 +205,7 @@ export default {
       pageFirst: 0,
       uiSortField: 'releaseTime',
       sortOrder: -1,
+      tableFiltersExpanded: false,
       filters: this.defaultFilters(),
       conformanceFilterOptions: ['pass', 'violation', 'pending', 'unknown']
     };
@@ -425,14 +418,8 @@ export default {
 </script>
 
 <style scoped>
-.firmware-available-page .overview-card,
-.firmware-available-page .filters-card,
 .firmware-available-page .table-card {
   border-radius: 12px;
-}
-
-.firmware-available-page .status-tags {
-  row-gap: 0.5rem;
 }
 
 .firmware-available-page .stat-card {
@@ -442,15 +429,15 @@ export default {
 
 .firmware-available-page .stat-label {
   color: #6b7280;
-  font-size: 0.76rem;
+  font-size: 0.7rem;
   line-height: 1.1;
 }
 
 .firmware-available-page .stat-value {
   color: #111827;
-  font-size: 1rem;
+  font-size: 1.24rem;
   font-weight: 600;
-  margin-top: 0.4rem;
+  margin-top: 0.32rem;
   line-height: 1.2;
   word-break: break-word;
 }
@@ -463,7 +450,13 @@ export default {
 }
 
 .firmware-available-page .table-meta {
-  display: flex;
-  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+.firmware-available-page .table-filters {
+  padding: 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
 }
 </style>
