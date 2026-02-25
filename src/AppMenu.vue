@@ -6,6 +6,12 @@ import { useStore } from 'vuex';
 import AppMenuItem from './AppMenuItem.vue';
 const store = useStore();
 const appVersion = computed(() => store.getters.appVersion);
+const props = defineProps({
+    model: {
+        type: Array,
+        default: () => []
+    }
+});
 
 menu: [
     {
@@ -63,11 +69,15 @@ const model = ref([
         ]
     }
 ])
+
+const effectiveModel = computed(() => {
+    return props.model && props.model.length > 0 ? props.model : model.value;
+});
 </script>
 
 <template>
     <ul class="layout-menu">
-        <template v-for="(item, i) in model" :key="item">
+        <template v-for="(item, i) in effectiveModel" :key="item">
             <app-menu-item v-if="!item.separator" :item="item" :index="i"></app-menu-item>
             <li v-if="item.separator" class="menu-separator"></li>
         </template>

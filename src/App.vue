@@ -49,10 +49,25 @@ export default {
                         { label: 'Compliance', icon: 'pi pi-fw pi-check-circle', to: '/compliance' },
                         { label: 'PKI', icon: 'pi pi-fw pi-lock', to: '/pki' },
                         { label: 'Validators', icon: 'pi pi-fw pi-server', to: '/validators' },
-                        { label: 'Upgrades', icon: 'pi pi-fw pi-history', to: '/upgrades' },
+                        { label: 'Upgrades', icon: 'pi pi-fw pi-history', to: '/upgrades' }
+                    ]
+                },
+                {
+                    label: 'Firmware Security',
+                    icon: 'pi pi-fw pi-shield',
+                    items: [
+                        { label: 'Available Firmware', icon: 'pi pi-fw pi-box', to: '/firmware-security/available-firmware' },
+                        { label: 'Scan Queue', icon: 'pi pi-fw pi-clock', to: '/firmware-security/scan-queue' },
+                        { label: 'Scan Results', icon: 'pi pi-fw pi-chart-line', to: '/firmware-security/scan-results' }
+                    ]
+                },
+                {
+                    label: 'Tools and Documentation',
+                    icon: 'pi pi-fw pi-book',
+                    items: [
+                        { label: 'Transaction Blocks', icon: 'pi pi-fw pi-book', to: '/transactions/blocks' },
                         { label: 'Legacy Wallet', icon: 'pi pi-fw pi-wallet', to: '/legacy-wallet' },
                         { label: 'Keplr Wallet - Guide', icon: 'pi pi-fw pi-book', to: '/keplr-wallet' }
-
                     ]
                 }
             ]
@@ -207,4 +222,3 @@ input:read-only {
     color: #777;
 }
 </style>
-
