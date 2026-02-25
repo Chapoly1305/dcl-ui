@@ -197,8 +197,12 @@ export default {
             refresh: import.meta.env.VITE_APP_DCL_REFRESH
         });
 
-        // Then initialize all stores once
-        await storeInitializer.initializeAllStores(this.$store);
+        const bootstrapEnabled = String(import.meta.env.VITE_APP_DCL_BOOTSTRAP ?? 'true').toLowerCase() !== 'false';
+        if (bootstrapEnabled) {
+            await storeInitializer.initializeAllStores(this.$store);
+        } else {
+            console.log('Skipping legacy store bootstrap (VITE_APP_DCL_BOOTSTRAP=false)');
+        }
         this.initialized = true;
     }
 };

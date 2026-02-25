@@ -8,7 +8,7 @@ export default {
     console.log('Initializing all DCL stores...');
 
     // Dispatching all DCL Queries
-    await Promise.all([
+    const results = await Promise.allSettled([
       // Auth
       store.dispatch('zigbeealliance.distributedcomplianceledger.dclauth/QueryAccountAll', {
         options: { subscribe: true, all: true }
@@ -87,8 +87,15 @@ export default {
       })
     ]);
 
-    // Update certificate indexes for optimized lookups
-    await store.dispatch('pkiOptimized/updateCertificateIndexes');
+    const failed = results.filter((r) => r.status === 'rejected');
+    if (failed.length > 0) {
+      console.warn(`DCL store bootstrap completed with ${failed.length} failed query groups`);
+    }
+
+    // Update certificate indexes for optimized lookups when bootstrap largely succeeded.
+    if (failed.length === 0) {
+      await store.dispatch('pkiOptimized/updateCertificateIndexes');
+    }
 
     this.initialized = true;
     console.log('All DCL stores initialized');
