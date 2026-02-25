@@ -1,11 +1,22 @@
 <template>
-  <div class="p-3">
+  <div class="p-3 firmware-available-page">
     <div class="grid">
       <div class="col-12">
-        <Card>
-          <template #title>Available Firmware</template>
+        <Card class="overview-card">
+          <template #title>
+            <div class="flex align-items-center justify-content-between flex-wrap gap-2">
+              <span>Available Firmware</span>
+              <Button
+                icon="pi pi-refresh"
+                label="Refresh"
+                class="p-button-sm"
+                :loading="loading"
+                @click="refreshNow"
+              />
+            </div>
+          </template>
           <template #content>
-            <div class="flex align-items-center gap-2 flex-wrap">
+            <div class="flex align-items-center gap-2 flex-wrap status-tags">
               <Tag :value="`Network: ${network || 'unknown'}`" severity="info" />
               <Tag v-if="metadataSyncedAt" :value="`Synced: ${formatReleaseTime(metadataSyncedAt)}`" severity="success" />
               <Tag v-if="error" value="Metadata API Error" severity="danger" />
@@ -14,46 +25,133 @@
         </Card>
       </div>
 
-      <div class="col-12 md:col-4" v-for="stat in stats" :key="stat.label">
-        <div class="card mb-0">
-          <div class="text-500 text-sm">{{ stat.label }}</div>
-          <div class="text-900 text-2xl font-semibold mt-2">{{ stat.value }}</div>
+      <div class="col-6 md:col-4 lg:col-2" v-for="stat in stats" :key="stat.label">
+        <div class="card mb-0 stat-card">
+          <div class="stat-label">{{ stat.label }}</div>
+          <div class="stat-value">{{ stat.value }}</div>
         </div>
       </div>
 
       <div class="col-12">
-        <Card>
+        <Card class="filters-card">
+          <template #title>Filters</template>
+          <template #content>
+            <div class="grid">
+              <div class="col-12 md:col-3">
+                <label class="filter-label">VID</label>
+                <InputText v-model="filters.vid" class="w-full" placeholder="Contains..." />
+              </div>
+              <div class="col-12 md:col-3">
+                <label class="filter-label">PID</label>
+                <InputText v-model="filters.pid" class="w-full" placeholder="Contains..." />
+              </div>
+              <div class="col-12 md:col-3">
+                <label class="filter-label">Vendor Name</label>
+                <InputText v-model="filters.vendorName" class="w-full" placeholder="Contains..." />
+              </div>
+              <div class="col-12 md:col-3">
+                <label class="filter-label">Product Name</label>
+                <InputText v-model="filters.productName" class="w-full" placeholder="Contains..." />
+              </div>
+              <div class="col-12 md:col-3">
+                <label class="filter-label">Software Version</label>
+                <InputText v-model="filters.softwareVersion" class="w-full" placeholder="Contains..." />
+              </div>
+              <div class="col-12 md:col-3">
+                <label class="filter-label">Software Version String</label>
+                <InputText v-model="filters.softwareVersionString" class="w-full" placeholder="Contains..." />
+              </div>
+              <div class="col-12 md:col-3">
+                <label class="filter-label">Release Time</label>
+                <InputText v-model="filters.releaseTime" class="w-full" placeholder="Contains..." />
+              </div>
+              <div class="col-12 md:col-3">
+                <label class="filter-label">Block Height</label>
+                <InputText v-model="filters.blockHeight" class="w-full" placeholder="Contains..." />
+              </div>
+              <div class="col-12 md:col-3">
+                <label class="filter-label">TxHash (Last 8)</label>
+                <InputText v-model="filters.txHashLast8" class="w-full" placeholder="Contains..." />
+              </div>
+              <div class="col-12 md:col-3">
+                <label class="filter-label">Formality Conformance</label>
+                <Dropdown
+                  v-model="filters.formalityConformance"
+                  class="w-full"
+                  :options="conformanceFilterOptions"
+                  placeholder="Any"
+                  showClear
+                />
+              </div>
+              <div class="col-12 md:col-6 flex align-items-end justify-content-end gap-2">
+                <Button
+                  label="Clear"
+                  icon="pi pi-filter-slash"
+                  class="p-button-text"
+                  @click="clearFilters"
+                />
+                <Button
+                  label="Apply Filters"
+                  icon="pi pi-search"
+                  @click="applyFilters"
+                />
+              </div>
+            </div>
+          </template>
+        </Card>
+      </div>
+
+      <div class="col-12">
+        <Card class="table-card">
           <template #title>Latest Firmware</template>
           <template #content>
+            <div class="table-meta text-600 text-sm mb-2">
+              Showing {{ totalCount === 0 ? 0 : pageFirst + 1 }} - {{ Math.min(pageFirst + pageSize, totalCount) }} of {{ totalCount }} records
+            </div>
             <Message v-if="error" severity="error" :closable="false" class="mb-3">
               {{ error }}
             </Message>
             <Message v-else-if="warning" severity="warn" :closable="false" class="mb-3">
               {{ warning }}
             </Message>
-            <DataTable :value="rows" :loading="loading" responsiveLayout="scroll" class="p-datatable-sm">
-              <Column field="vid" header="VID"></Column>
-              <Column field="pid" header="PID"></Column>
-              <Column field="vendorName" header="Vendor Name"></Column>
-              <Column field="productName" header="Product Name"></Column>
-              <Column field="softwareVersion" header="Software Version"></Column>
-              <Column field="softwareVersionString" header="Software Version String"></Column>
-              <Column header="Release Time">
+            <DataTable
+              :value="rows"
+              :lazy="true"
+              :loading="loading"
+              paginator
+              :rows="pageSize"
+              :first="pageFirst"
+              :totalRecords="totalCount"
+              @page="onPage"
+              sortMode="single"
+              :sortField="uiSortField"
+              :sortOrder="sortOrder"
+              @sort="onSort"
+              responsiveLayout="scroll"
+              class="p-datatable-sm"
+            >
+              <Column field="vid" header="VID" sortable></Column>
+              <Column field="pid" header="PID" sortable></Column>
+              <Column field="vendorName" header="Vendor Name" sortable></Column>
+              <Column field="productName" header="Product Name" sortable></Column>
+              <Column field="softwareVersion" header="Software Version" sortable></Column>
+              <Column field="softwareVersionString" header="Software Version String" sortable></Column>
+              <Column field="releaseTime" header="Release Time" sortable>
                 <template #body="slotProps">
                   {{ displayValue(formatReleaseTime(slotProps.data.releaseTime)) }}
                 </template>
               </Column>
-              <Column header="Block Height">
+              <Column field="blockHeight" header="Block Height" sortable>
                 <template #body="slotProps">
                   {{ displayValue(slotProps.data.blockHeight) }}
                 </template>
               </Column>
-              <Column header="TxHash (Last 8)">
+              <Column field="txHash" header="TxHash (Last 8)">
                 <template #body="slotProps">
                   <code>{{ displayValue(txHashLast8(slotProps.data.txHash)) }}</code>
                 </template>
               </Column>
-              <Column field="formalityConformance">
+              <Column field="formalityConformance" sortable>
                 <template #header>
                   <span class="flex align-items-center gap-2">
                     Formality Conformance
@@ -65,11 +163,19 @@
                   </span>
                 </template>
                 <template #body="slotProps">
-                  <Tag :value="slotProps.data.formalityConformance" :severity="severityFor(slotProps.data.formalityConformance)" />
+                  <div class="flex align-items-center gap-2">
+                    <Tag :value="slotProps.data.formalityConformance" :severity="severityFor(slotProps.data.formalityConformance)" />
+                    <i
+                      v-if="slotProps.data.formalityConformance === 'Violation' && slotProps.data.formalityComment"
+                      class="pi pi-info-circle text-600"
+                      v-tooltip.top="formatViolationDetails(slotProps.data.formalityComment)"
+                      style="cursor: help;"
+                    />
+                  </div>
                 </template>
               </Column>
             </DataTable>
-            <div v-if="!loading && !error && rows.length === 0" class="text-600 mt-3">
+            <div v-if="!loading && !error && totalCount === 0" class="text-600 mt-3">
               No firmware metadata found for this network yet.
             </div>
           </template>
@@ -91,32 +197,137 @@ export default {
       rows: [],
       network: '',
       metadataSyncedAt: null,
-      warning: null
+      warning: null,
+      totalCount: 0,
+      datasetStats: {
+        trackedImages: 0,
+        uniqueVendors: 0,
+        uniqueDevices: 0,
+        conformancePass: 0,
+        conformanceViolation: 0,
+        conformancePassRatio: 0,
+        conformanceViolationRatio: 0,
+        newIn24h: 0
+      },
+      pageSize: 50,
+      pageFirst: 0,
+      uiSortField: 'releaseTime',
+      sortOrder: -1,
+      filters: this.defaultFilters(),
+      conformanceFilterOptions: ['pass', 'violation', 'pending', 'unknown']
     };
   },
   computed: {
     stats() {
-      const vendorSet = new Set(this.rows.map((row) => row.vendorName).filter(Boolean));
-      const now = Date.now();
-      const oneDayMs = 24 * 60 * 60 * 1000;
-      const newIn24h = this.rows.filter((row) => {
-        if (!row.releaseTime) return false;
-        const t = new Date(row.releaseTime).getTime();
-        return Number.isFinite(t) && now - t <= oneDayMs;
-      }).length;
       return [
-        { label: 'Tracked Images', value: this.rows.length },
-        { label: 'Unique Vendors', value: vendorSet.size },
-        { label: 'New in 24h', value: newIn24h }
+        { label: 'Tracked Images', value: this.datasetStats.trackedImages },
+        { label: 'Unique Vendors', value: this.datasetStats.uniqueVendors },
+        { label: 'Unique Devices (VID:PID)', value: this.datasetStats.uniqueDevices },
+        {
+          label: 'Conformance Pass',
+          value: `${this.datasetStats.conformancePass} (${this.formatPercent(this.datasetStats.conformancePassRatio)})`
+        },
+        {
+          label: 'Conformance Violation',
+          value: `${this.datasetStats.conformanceViolation} (${this.formatPercent(this.datasetStats.conformanceViolationRatio)})`
+        },
+        { label: 'New in 24h', value: this.datasetStats.newIn24h }
       ];
     }
   },
   methods: {
-    async loadAvailableFirmware() {
+    defaultFilters() {
+      return {
+        vid: '',
+        pid: '',
+        vendorName: '',
+        productName: '',
+        softwareVersion: '',
+        softwareVersionString: '',
+        releaseTime: '',
+        blockHeight: '',
+        txHashLast8: '',
+        formalityConformance: null
+      };
+    },
+    clearFilters() {
+      this.filters = this.defaultFilters();
+      this.pageFirst = 0;
+      this.loadAvailableFirmware();
+    },
+    applyFilters() {
+      this.pageFirst = 0;
+      this.loadAvailableFirmware();
+    },
+    onPage(event) {
+      this.pageFirst = event.first;
+      this.pageSize = event.rows;
+      this.loadAvailableFirmware();
+    },
+    onSort(event) {
+      this.uiSortField = event.sortField || 'releaseTime';
+      this.sortOrder = event.sortOrder || -1;
+      this.pageFirst = 0;
+      this.loadAvailableFirmware();
+    },
+    normalizeSortField(value) {
+      const key = String(value || '').trim();
+      const map = {
+        releaseTime: 'release_time',
+        release_time: 'release_time',
+        vid: 'vid',
+        pid: 'pid',
+        vendorName: 'vendor_name',
+        vendor_name: 'vendor_name',
+        productName: 'product_name',
+        product_name: 'product_name',
+        softwareVersion: 'software_version',
+        software_version: 'software_version',
+        softwareVersionString: 'software_version_string',
+        software_version_string: 'software_version_string',
+        blockHeight: 'block_height',
+        block_height: 'block_height',
+        formalityConformance: 'formality_conformance',
+        formality_conformance: 'formality_conformance'
+      };
+      return map[key] || 'release_time';
+    },
+    buildQueryString(refresh) {
+      const params = new URLSearchParams({
+        limit: String(this.pageSize),
+        offset: String(this.pageFirst),
+        refresh: refresh ? 'true' : 'false',
+        sort_by: this.normalizeSortField(this.uiSortField || 'releaseTime'),
+        sort_dir: this.sortOrder === 1 ? 'asc' : 'desc'
+      });
+      const filterMap = [
+        ['vid', this.filters.vid],
+        ['pid', this.filters.pid],
+        ['vendor_name', this.filters.vendorName],
+        ['product_name', this.filters.productName],
+        ['software_version', this.filters.softwareVersion],
+        ['software_version_string', this.filters.softwareVersionString],
+        ['release_time', this.filters.releaseTime],
+        ['block_height', this.filters.blockHeight],
+        ['tx_hash_last8', this.filters.txHashLast8],
+        ['formality_conformance', this.filters.formalityConformance]
+      ];
+      for (const [key, value] of filterMap) {
+        if (value !== null && value !== undefined && String(value).trim() !== '') {
+          params.set(key, String(value).trim());
+        }
+      }
+      return params.toString();
+    },
+    async refreshNow() {
+      this.pageFirst = 0;
+      await this.loadAvailableFirmware(true);
+    },
+    async loadAvailableFirmware(refresh = false) {
       this.loading = true;
       this.error = null;
       try {
-        const url = `${this.metadataApiBase}/api/v1/firmware/available?limit=200&refresh=false`;
+        const url = `${this.metadataApiBase}/api/v1/firmware/available?${this.buildQueryString(refresh)}`;
         const response = await fetch(url);
         if (!response.ok) {
           throw new Error(`Request failed (${response.status})`);
@@ -126,6 +337,19 @@ export default {
         this.network = payload.network || '';
         this.metadataSyncedAt = payload.metadata_synced_at || null;
         this.warning = payload.warning || null;
+        const apiTotal = Number(payload.total_count);
+        this.totalCount = Number.isFinite(apiTotal) && apiTotal >= 0 ? apiTotal : items.length;
+        const gs = payload.global_stats || {};
+        this.datasetStats = {
+          trackedImages: Number.isFinite(Number(gs.tracked_images)) ? Number(gs.tracked_images) : this.totalCount,
+          uniqueVendors: Number.isFinite(Number(gs.unique_vendors)) ? Number(gs.unique_vendors) : 0,
+          uniqueDevices: Number.isFinite(Number(gs.unique_devices)) ? Number(gs.unique_devices) : 0,
+          conformancePass: Number.isFinite(Number(gs.conformance_pass)) ? Number(gs.conformance_pass) : 0,
+          conformanceViolation: Number.isFinite(Number(gs.conformance_violation)) ? Number(gs.conformance_violation) : 0,
+          conformancePassRatio: Number.isFinite(Number(gs.conformance_pass_ratio)) ? Number(gs.conformance_pass_ratio) : 0,
+          conformanceViolationRatio: Number.isFinite(Number(gs.conformance_violation_ratio)) ? Number(gs.conformance_violation_ratio) : 0,
+          newIn24h: Number.isFinite(Number(gs.new_in_24h)) ? Number(gs.new_in_24h) : 0
+        };
         this.rows = items.map((item) => ({
           vid: item.vid,
           pid: item.pid,
@@ -136,11 +360,23 @@ export default {
           releaseTime: item.release_time || null,
           blockHeight: item.block_height,
           txHash: item.tx_hash_last8 || '',
-          formalityConformance: this.normalizeConformance(item.formality_conformance, item.formality_basis)
+          formalityConformance: this.normalizeConformance(item.formality_conformance, item.formality_basis),
+          formalityComment: item.formality_comment || ''
         }));
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Failed to load firmware metadata';
         this.rows = [];
+        this.totalCount = 0;
+        this.datasetStats = {
+          trackedImages: 0,
+          uniqueVendors: 0,
+          uniqueDevices: 0,
+          conformancePass: 0,
+          conformanceViolation: 0,
+          conformancePassRatio: 0,
+          conformanceViolationRatio: 0,
+          newIn24h: 0
+        };
         this.warning = null;
       } finally {
         this.loading = false;
@@ -166,11 +402,20 @@ export default {
       if (!txHash) return '';
       return String(txHash).slice(-8);
     },
+    formatPercent(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return '0.00%';
+      return `${n.toFixed(2)}%`;
+    },
     severityFor(status) {
       if (status.startsWith('Pass')) return 'success';
       if (status.startsWith('Violation')) return 'danger';
       if (status === 'Pending') return 'warning';
       return 'warning';
+    },
+    formatViolationDetails(value) {
+      if (!value) return 'No violation detail';
+      return String(value).split(';').join('; ');
     }
   },
   mounted() {
@@ -178,3 +423,47 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+.firmware-available-page .overview-card,
+.firmware-available-page .filters-card,
+.firmware-available-page .table-card {
+  border-radius: 12px;
+}
+
+.firmware-available-page .status-tags {
+  row-gap: 0.5rem;
+}
+
+.firmware-available-page .stat-card {
+  min-height: 78px;
+  padding: 0.7rem 0.85rem;
+}
+
+.firmware-available-page .stat-label {
+  color: #6b7280;
+  font-size: 0.76rem;
+  line-height: 1.1;
+}
+
+.firmware-available-page .stat-value {
+  color: #111827;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 0.4rem;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.firmware-available-page .filter-label {
+  display: block;
+  font-size: 0.82rem;
+  color: #6b7280;
+  margin-bottom: 0.35rem;
+}
+
+.firmware-available-page .table-meta {
+  display: flex;
+  justify-content: flex-end;
+}
+</style>
