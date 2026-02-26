@@ -111,9 +111,19 @@
               <Column field="analyzed_at" header="Analyzed At" sortable>
                 <template #body="slotProps">{{ formatTimestamp(slotProps.data.analyzed_at) }}</template>
               </Column>
-              <Column field="input_firmware_name" header="Firmware" />
-              <Column field="firmware_sha256" header="Firmware SHA">
-                <template #body="slotProps"><code>{{ shortSha(slotProps.data.firmware_sha256) }}</code></template>
+              <Column field="vid" header="VID" />
+              <Column field="pid" header="PID" />
+              <Column field="vendor_name" header="Vendor Name">
+                <template #body="slotProps">{{ displayValue(slotProps.data.vendor_name) }}</template>
+              </Column>
+              <Column field="product_name" header="Product Name">
+                <template #body="slotProps">{{ displayValue(slotProps.data.product_name) }}</template>
+              </Column>
+              <Column field="block_height" header="Block Height">
+                <template #body="slotProps">{{ displayValue(slotProps.data.block_height) }}</template>
+              </Column>
+              <Column field="tx_hash_last8" header="TxHash (Last 8)">
+                <template #body="slotProps"><code>{{ displayValue(slotProps.data.tx_hash_last8) }}</code></template>
               </Column>
               <Column field="status" header="Run Status" sortable>
                 <template #body="slotProps">
@@ -219,7 +229,7 @@
                     :class="{ 'is-active': attempt.result_id === selectedResultId }"
                     @click="selectAttempt(attempt.result_id)"
                   >
-                    <span class="attempt-label">#{{ idx + 1 }}</span>
+                    <span class="attempt-label">#{{ attempt.sequence || idx + 1 }}</span>
                     <span class="attempt-time">{{ formatTimestamp(attempt.analyzed_at) }}</span>
                     <Tag :value="attempt.status" :severity="runStatusSeverity(attempt.status)" />
                   </Button>
@@ -343,6 +353,7 @@ export default {
       verdictOptions: [
         { label: 'Pass', value: 'pass' },
         { label: 'Fail', value: 'fail' },
+        { label: 'Pending', value: 'pending' },
         { label: 'Warning', value: 'warning' },
         { label: 'Unknown', value: 'unknown' }
       ],
@@ -371,7 +382,9 @@ export default {
     },
     attempts() {
       const rows = Array.isArray(this.detailPayload?.attempts) ? this.detailPayload.attempts : [];
-      return [...rows].sort((a, b) => String(b.analyzed_at || '').localeCompare(String(a.analyzed_at || '')));
+      return [...rows]
+        .sort((a, b) => String(a.analyzed_at || '').localeCompare(String(b.analyzed_at || '')))
+        .map((attempt, idx) => ({ ...attempt, sequence: idx + 1 }));
     },
     sanitizedReport() {
       return this.selectedResult?.sanitized_report || {};
