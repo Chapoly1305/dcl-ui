@@ -104,12 +104,14 @@
                       <div class="col-6 md:col-3"><strong>Clusters:</strong> {{ capabilityClusters.length }}</div>
                       <div class="col-6 md:col-3"><strong>Attributes:</strong> {{ capabilityAttributeRows.length }}</div>
                       <div class="col-6 md:col-3"><strong>Defaults:</strong> {{ capabilityDefaultsCount }}</div>
+                      <div class="col-6 md:col-3"><strong>Global Attributes:</strong> {{ capabilityGlobalAttributeRows.length }}</div>
                     </div>
                     <div v-if="capabilityEndpoints.length === 0 && capabilityAttributeRows.length === 0" class="text-600">
                       No capability output available for this run.
                     </div>
                     <div v-else class="grid">
-                      <div class="col-12 lg:col-5">
+                      <div class="col-12">
+                        <div class="text-700 font-medium mb-2">Endpoints</div>
                         <DataTable :value="capabilityEndpoints" responsiveLayout="scroll" class="p-datatable-sm" :rows="8" :paginator="capabilityEndpoints.length > 8">
                           <Column field="endpoint" header="Endpoint">
                             <template #body="slotProps">{{ `#${slotProps.data.endpoint}` }}</template>
@@ -122,7 +124,8 @@
                           </Column>
                         </DataTable>
                       </div>
-                      <div class="col-12 lg:col-7">
+                      <div class="col-12">
+                        <div class="text-700 font-medium mb-2">Attributes</div>
                         <DataTable :value="capabilityAttributeRows" responsiveLayout="scroll" class="p-datatable-sm" :rows="12" :paginator="capabilityAttributeRows.length > 12">
                           <Column field="cluster" header="Cluster" />
                           <Column field="attribute" header="Attribute" />
@@ -133,9 +136,28 @@
                             <template #body="slotProps">{{ displayValue(slotProps.data.length) }}</template>
                           </Column>
                           <Column field="type_u8" header="Type">
-                            <template #body="slotProps">{{ displayValue(slotProps.data.type_u8) }}</template>
+                            <template #body="slotProps">{{ capabilityTypeName(slotProps.data) }}</template>
                           </Column>
                         </DataTable>
+                      </div>
+                      <div class="col-12">
+                        <div class="text-700 font-medium mb-2">Global Attributes</div>
+                        <DataTable :value="capabilityGlobalAttributeRows" responsiveLayout="scroll" class="p-datatable-sm" :rows="12" :paginator="capabilityGlobalAttributeRows.length > 12">
+                          <Column field="cluster" header="Cluster" />
+                          <Column field="attribute" header="Attribute" />
+                          <Column field="default_raw_u32" header="Default">
+                            <template #body="slotProps">{{ capabilityDefaultRaw(slotProps.data) }}</template>
+                          </Column>
+                          <Column field="length" header="Len">
+                            <template #body="slotProps">{{ displayValue(slotProps.data.length) }}</template>
+                          </Column>
+                          <Column field="type_u8" header="Type">
+                            <template #body="slotProps">{{ capabilityTypeName(slotProps.data) }}</template>
+                          </Column>
+                        </DataTable>
+                        <div v-if="capabilityGlobalAttributeRows.length === 0" class="text-600 mt-2">
+                          No global attributes recovered.
+                        </div>
                       </div>
                     </div>
                   </template>
@@ -210,6 +232,49 @@
 </template>
 
 <script>
+const ZCL_TYPE_NAME = {
+  0x08: 'data8',
+  0x09: 'data16',
+  0x0A: 'data24',
+  0x0B: 'data32',
+  0x10: 'bool',
+  0x18: 'bitmap8',
+  0x19: 'bitmap16',
+  0x1A: 'bitmap24',
+  0x1B: 'bitmap32',
+  0x1F: 'bitmap64',
+  0x20: 'uint8',
+  0x21: 'uint16',
+  0x22: 'uint24',
+  0x23: 'uint32',
+  0x27: 'uint64',
+  0x28: 'int8',
+  0x29: 'int16',
+  0x2A: 'int24',
+  0x2B: 'int32',
+  0x2F: 'int64',
+  0x30: 'enum8',
+  0x31: 'enum16',
+  0x38: 'float-semi',
+  0x39: 'float-single',
+  0x3A: 'float-double',
+  0x41: 'octstr',
+  0x42: 'string',
+  0x43: 'long-octstr',
+  0x44: 'long-string',
+  0x48: 'array',
+  0x4C: 'struct',
+  0xE0: 'time-of-day',
+  0xE1: 'date',
+  0xE2: 'utc',
+  0xE8: 'cluster-id',
+  0xE9: 'attribute-id',
+  0xEA: 'bacnet-oid',
+  0xF0: 'ieee-address',
+  0xF1: 'security-key'
+};
+const GLOBAL_ATTRIBUTE_IDS = new Set(['0xFFF8', '0xFFF9', '0xFFFA', '0xFFFB', '0xFFFC', '0xFFFD', '0xFFFE', '0xFFFF']);
+
 export default {
   name: 'FirmwareDetail',
   data() {
@@ -301,9 +366,54 @@ export default {
           type_u8: meta.type_u8
         };
       });
+    },
+    capabilityGlobalAttributeRows() {
+      const defaults = this.capabilityDetails?.attribute_defaults;
+      const defaultsMap = defaults && typeof defaults === 'object' ? defaults : {};
+      const rows = [];
+      for (const key of Object.keys(defaultsMap)) {
+        const [cluster = '', attribute = ''] = String(key).split('/');
+        const canonicalAttribute = this.canonicalAttributeId(attribute);
+        if (!GLOBAL_ATTRIBUTE_IDS.has(canonicalAttribute)) continue;
+        const meta = defaultsMap[key] && typeof defaultsMap[key] === 'object' ? defaultsMap[key] : {};
+        rows.push({
+          cluster,
+          attribute,
+          default_raw_u32: meta.default_raw_u32,
+          has_default: Object.prototype.hasOwnProperty.call(meta, 'default_raw_u32'),
+          length: meta.length,
+          type_u8: meta.type_u8
+        });
+      }
+      rows.sort((a, b) => {
+        const clusterA = this.parseHexOrDec(a.cluster);
+        const clusterB = this.parseHexOrDec(b.cluster);
+        if (clusterA !== null && clusterB !== null && clusterA !== clusterB) return clusterA - clusterB;
+        const attrA = this.parseHexOrDec(a.attribute);
+        const attrB = this.parseHexOrDec(b.attribute);
+        if (attrA !== null && attrB !== null && attrA !== attrB) return attrA - attrB;
+        const ca = String(a.cluster || '');
+        const cb = String(b.cluster || '');
+        if (ca !== cb) return ca.localeCompare(cb);
+        return String(a.attribute || '').localeCompare(String(b.attribute || ''));
+      });
+      return rows;
     }
   },
   methods: {
+    parseHexOrDec(raw) {
+      const text = String(raw ?? '').trim();
+      if (!text) return null;
+      if (/^0[xX][0-9a-fA-F]+$/.test(text)) return Number.parseInt(text.slice(2), 16);
+      if (/^\d+$/.test(text)) return Number.parseInt(text, 10);
+      if (/^[0-9a-fA-F]+$/.test(text)) return Number.parseInt(text, 16);
+      return null;
+    },
+    canonicalAttributeId(raw) {
+      const parsed = this.parseHexOrDec(raw);
+      if (parsed === null || !Number.isFinite(parsed) || parsed < 0) return String(raw ?? '').trim();
+      return `0x${parsed.toString(16).toUpperCase().padStart(4, '0')}`;
+    },
     async refreshAll() {
       await this.refreshDetail();
       if (this.activeTabIndex === 1 || this.activeTabIndex === 3) await this.refreshModules();
@@ -433,7 +543,20 @@ export default {
     },
     capabilityDefaultRaw(row) {
       if (!row || row.has_default !== true) return 'N/A';
+      const typeCode = Number(row.type_u8);
+      // Non-scalar ZCL/Matter attribute encodings store handles/pointers,
+      // not inline scalar defaults.
+      if ([0x41, 0x42, 0x43, 0x44, 0x48, 0x4c].includes(typeCode)) {
+        return 'N/A (non-scalar)';
+      }
       return String(row.default_raw_u32);
+    },
+    capabilityTypeName(row) {
+      const typeCode = Number(row?.type_u8);
+      if (!Number.isFinite(typeCode)) return 'N/A';
+      const name = ZCL_TYPE_NAME[typeCode];
+      if (name) return name;
+      return `unknown(0x${typeCode.toString(16).toUpperCase().padStart(2, '0')})`;
     }
   },
   mounted() {
@@ -488,4 +611,5 @@ export default {
   border-radius: 8px;
   font-size: 0.78rem;
 }
+
 </style>
