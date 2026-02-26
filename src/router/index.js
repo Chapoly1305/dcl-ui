@@ -11,6 +11,7 @@ import LegacyWallet from '@/views/Tools/LegacyWallet.vue'
 import KeplrConnectionDocs from '@/views/Docs/KeplrConnectionDocs.vue'
 import Transactions from '@/views/Tools/Transactions.vue'
 import FirmwareAvailable from '@/views/Tools/FirmwareAvailable.vue'
+import FirmwareDetail from '@/views/Tools/FirmwareDetail.vue'
 import FirmwareScanQueue from '@/views/Tools/FirmwareScanQueue.vue'
 import FirmwareScanResults from '@/views/Tools/FirmwareScanResults.vue'
 const routerHistory = createWebHistory()
@@ -31,6 +32,7 @@ const routes = [
     { path: '/transactions/blocks/:height?', component: Transactions },
     { path: '/firmware-security', redirect: '/firmware-security/available-firmware' },
     { path: '/firmware-security/available-firmware', component: FirmwareAvailable },
+    { path: '/firmware-security/firmware/:sha256', component: FirmwareDetail },
     { path: '/firmware-security/scan-queue', component: FirmwareScanQueue },
     { path: '/firmware-security/scan-results', component: FirmwareScanResults },
 ]

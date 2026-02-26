@@ -106,6 +106,9 @@
             <Message v-else-if="warning" severity="warn" :closable="false" class="mb-3">
               {{ warning }}
             </Message>
+            <Message v-else-if="actionNote" severity="success" :closable="false" class="mb-3">
+              {{ actionNote }}
+            </Message>
             <DataTable
               :value="rows"
               :lazy="true"
@@ -143,6 +146,19 @@
                   <code>{{ displayValue(txHashLast8(slotProps.data.txHash)) }}</code>
                 </template>
               </Column>
+              <Column field="isDownloaded" header="Downloaded">
+                <template #body="slotProps">
+                  <Tag :value="slotProps.data.isDownloaded ? 'Yes' : 'No'" :severity="slotProps.data.isDownloaded ? 'success' : 'warning'" />
+                </template>
+              </Column>
+              <Column field="analysisLatestStatus" header="Analysis">
+                <template #body="slotProps">
+                  <div class="flex align-items-center gap-2 flex-wrap">
+                    <Tag :value="analysisLabel(slotProps.data.analysisLatestStatus)" :severity="analysisSeverity(slotProps.data.analysisLatestStatus)" />
+                    <span class="text-500 text-xs">{{ displayValue(formatReleaseTime(slotProps.data.analysisLatestAt)) }}</span>
+                  </div>
+                </template>
+              </Column>
               <Column field="formalityConformance" sortable>
                 <template #header>
                   <span class="flex align-items-center gap-2">
@@ -162,6 +178,26 @@
                       class="pi pi-info-circle text-600"
                       v-tooltip.top="formatViolationDetails(slotProps.data.formalityComment)"
                       style="cursor: help;"
+                    />
+                  </div>
+                </template>
+              </Column>
+              <Column header="Actions">
+                <template #body="slotProps">
+                  <div class="flex align-items-center gap-2">
+                    <Button
+                      icon="pi pi-play"
+                      class="p-button-sm p-button-text"
+                      v-tooltip.top="slotProps.data.isDownloaded ? 'Analyze firmware group' : 'Firmware is not downloaded locally'"
+                      :disabled="!slotProps.data.isDownloaded || !slotProps.data.firmwareSha256"
+                      @click="enqueueAnalyze(slotProps.data)"
+                    />
+                    <Button
+                      icon="pi pi-external-link"
+                      class="p-button-sm p-button-text"
+                      v-tooltip.top="'Open firmware detail'"
+                      :disabled="!slotProps.data.firmwareSha256"
+                      @click="openFirmwareDetail(slotProps.data)"
                     />
                   </div>
                 </template>
@@ -186,6 +222,7 @@ export default {
       metadataApiBase: base,
       loading: false,
       error: null,
+      actionNote: null,
       rows: [],
       network: '',
       metadataSyncedAt: null,
@@ -319,6 +356,7 @@ export default {
     async loadAvailableFirmware(refresh = false) {
       this.loading = true;
       this.error = null;
+      this.actionNote = null;
       try {
         const url = `${this.metadataApiBase}/api/v1/firmware/available?${this.buildQueryString(refresh)}`;
         const response = await fetch(url);
@@ -353,6 +391,11 @@ export default {
           releaseTime: item.release_time || null,
           blockHeight: item.block_height,
           txHash: item.tx_hash_last8 || '',
+          firmwareSha256: item.firmware_sha256 || '',
+          isDownloaded: Boolean(item.is_downloaded),
+          analysisLatestStatus: String(item.analysis_latest_status || 'none'),
+          analysisLatestAt: item.analysis_latest_at || null,
+          duplicateGroupSize: Number.isFinite(Number(item.duplicate_group_size)) ? Number(item.duplicate_group_size) : 0,
           formalityConformance: this.normalizeConformance(item.formality_conformance, item.formality_basis),
           formalityComment: item.formality_comment || ''
         }));
@@ -374,6 +417,45 @@ export default {
       } finally {
         this.loading = false;
       }
+    },
+    analysisLabel(value) {
+      const key = String(value || '').toLowerCase();
+      if (key === 'done') return 'Done';
+      if (key === 'failed') return 'Failed';
+      if (key === 'running') return 'Running';
+      if (key === 'pending') return 'Pending';
+      return 'None';
+    },
+    analysisSeverity(value) {
+      const key = String(value || '').toLowerCase();
+      if (key === 'done') return 'success';
+      if (key === 'failed') return 'danger';
+      if (key === 'running') return 'info';
+      if (key === 'pending') return 'warning';
+      return 'secondary';
+    },
+    async enqueueAnalyze(row) {
+      const sha = String(row?.firmwareSha256 || '').trim();
+      if (!sha) return;
+      try {
+        const response = await fetch(`${this.metadataApiBase}/api/v1/jobs/analyze-firmware`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ firmware_sha256: sha, requested_from: 'available_firmware' })
+        });
+        if (!response.ok) {
+          throw new Error(`Analyze enqueue failed (${response.status})`);
+        }
+        await this.loadAvailableFirmware();
+        this.actionNote = `Analysis job queued for ${sha.slice(0, 8)}...`;
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to enqueue analysis job';
+      }
+    },
+    openFirmwareDetail(row) {
+      const sha = String(row?.firmwareSha256 || '').trim();
+      if (!sha) return;
+      this.$router.push(`/firmware-security/firmware/${sha}`);
     },
     normalizeConformance(value, basis) {
       if (!value) return 'Unknown';
