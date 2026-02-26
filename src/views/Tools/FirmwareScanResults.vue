@@ -1,7 +1,7 @@
 <template>
   <div class="p-3 scan-results-page">
     <div class="grid">
-      <div class="col-12 xl:col-8">
+      <div class="col-12">
         <Card class="results-card">
           <template #title>
             <div class="flex align-items-center justify-content-between gap-2 flex-wrap">
@@ -97,6 +97,7 @@
               :loading="loading"
               paginator
               :rows="pageSize"
+              :rowsPerPageOptions="[5, 10, 20, 50]"
               :first="pageFirst"
               :totalRecords="totalCount"
               @page="onPage"
@@ -105,42 +106,44 @@
               :sortOrder="sortOrder"
               @sort="onSort"
               @row-click="onRowClick"
+              scrollable
+              scrollHeight="34rem"
               responsiveLayout="scroll"
-              class="p-datatable-sm"
+              class="p-datatable-sm scan-results-table"
             >
-              <Column field="analyzed_at" header="Analyzed At" sortable>
+              <Column field="analyzed_at" header="Analyzed At" sortable headerClass="scan-col-analyzed" bodyClass="scan-col-analyzed">
                 <template #body="slotProps">{{ formatTimestamp(slotProps.data.analyzed_at) }}</template>
               </Column>
-              <Column field="vid" header="VID" />
-              <Column field="pid" header="PID" />
-              <Column field="vendor_name" header="Vendor Name">
+              <Column field="vid" header="VID" headerClass="scan-col-id" bodyClass="scan-col-id" />
+              <Column field="pid" header="PID" headerClass="scan-col-id" bodyClass="scan-col-id" />
+              <Column field="vendor_name" header="Vendor Name" headerClass="scan-col-name" bodyClass="scan-col-name">
                 <template #body="slotProps">{{ displayValue(slotProps.data.vendor_name) }}</template>
               </Column>
-              <Column field="product_name" header="Product Name">
+              <Column field="product_name" header="Product Name" headerClass="scan-col-name" bodyClass="scan-col-name">
                 <template #body="slotProps">{{ displayValue(slotProps.data.product_name) }}</template>
               </Column>
-              <Column field="block_height" header="Block Height">
+              <Column field="block_height" header="Block Height" headerClass="scan-col-height" bodyClass="scan-col-height">
                 <template #body="slotProps">{{ displayValue(slotProps.data.block_height) }}</template>
               </Column>
-              <Column field="tx_hash_last8" header="TxHash (Last 8)">
+              <Column field="tx_hash_last8" header="TxHash (Last 8)" headerClass="scan-col-hash" bodyClass="scan-col-hash">
                 <template #body="slotProps"><code>{{ displayValue(slotProps.data.tx_hash_last8) }}</code></template>
               </Column>
-              <Column field="status" header="Run Status" sortable>
+              <Column field="status" header="Run Status" sortable headerClass="scan-col-status" bodyClass="scan-col-status">
                 <template #body="slotProps">
                   <Tag :value="slotProps.data.status" :severity="runStatusSeverity(slotProps.data.status)" />
                 </template>
               </Column>
-              <Column field="verdict_integrity" header="Integrity" sortable>
+              <Column field="verdict_integrity" header="Integrity" sortable headerClass="scan-col-status" bodyClass="scan-col-status">
                 <template #body="slotProps">
                   <Tag :value="slotProps.data.verdict_integrity" :severity="verdictSeverity(slotProps.data.verdict_integrity)" />
                 </template>
               </Column>
-              <Column field="verdict_authenticity" header="Authenticity" sortable>
+              <Column field="verdict_authenticity" header="Authenticity" sortable headerClass="scan-col-status" bodyClass="scan-col-status">
                 <template #body="slotProps">
                   <Tag :value="slotProps.data.verdict_authenticity" :severity="verdictSeverity(slotProps.data.verdict_authenticity)" />
                 </template>
               </Column>
-              <Column field="chipset" header="Chipset" sortable>
+              <Column field="chipset" header="Chipset" sortable headerClass="scan-col-chipset" bodyClass="scan-col-chipset">
                 <template #body="slotProps">
                   <div class="flex flex-column gap-1">
                     <span>{{ displayValue(slotProps.data.chipset) }}</span>
@@ -148,10 +151,10 @@
                   </div>
                 </template>
               </Column>
-              <Column field="sdk_best_guess_base" header="SDK">
+              <Column field="sdk_best_guess_base" header="SDK" headerClass="scan-col-sdk" bodyClass="scan-col-sdk">
                 <template #body="slotProps">{{ displayValue(slotProps.data.sdk_best_guess_base) }}</template>
               </Column>
-              <Column field="attempt_count" header="Attempts" headerClass="text-center" bodyClass="text-center">
+              <Column field="attempt_count" header="Attempts" headerClass="text-center scan-col-attempts" bodyClass="text-center scan-col-attempts">
                 <template #body="slotProps">
                   <div class="flex align-items-center justify-content-center gap-1">
                     <Tag :value="String(slotProps.data.attempt_count || 1)" severity="secondary" />
@@ -163,8 +166,8 @@
                   </div>
                 </template>
               </Column>
-              <Column field="source_network" header="Network" />
-              <Column header="Actions">
+              <Column field="source_network" header="Network" headerClass="scan-col-network" bodyClass="scan-col-network" />
+              <Column header="Actions" headerClass="scan-col-actions" bodyClass="scan-col-actions">
                 <template #body="slotProps">
                   <div class="flex align-items-center gap-2">
                     <Button
@@ -190,7 +193,7 @@
         </Card>
       </div>
 
-      <div class="col-12 xl:col-4">
+      <div class="col-12">
         <Card class="report-card">
           <template #title>
             <div class="flex align-items-center justify-content-between gap-2 flex-wrap">
@@ -332,7 +335,7 @@ export default {
       error: null,
       rows: [],
       totalCount: 0,
-      pageSize: 50,
+      pageSize: 5,
       pageFirst: 0,
       scope: 'latest',
       scopeOptions: [
@@ -382,9 +385,13 @@ export default {
     },
     attempts() {
       const rows = Array.isArray(this.detailPayload?.attempts) ? this.detailPayload.attempts : [];
+      const total = rows.length;
       return [...rows]
-        .sort((a, b) => String(a.analyzed_at || '').localeCompare(String(b.analyzed_at || '')))
-        .map((attempt, idx) => ({ ...attempt, sequence: idx + 1 }));
+        .sort((a, b) => String(b.analyzed_at || '').localeCompare(String(a.analyzed_at || '')))
+        .map((attempt, idx) => ({
+          ...attempt,
+          sequence: Number.isFinite(Number(attempt?.attempt_index)) ? Number(attempt.attempt_index) : total - idx
+        }));
     },
     sanitizedReport() {
       return this.selectedResult?.sanitized_report || {};
@@ -692,7 +699,7 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  max-height: 180px;
+  max-height: calc(3 * 2.6rem + 2 * 0.35rem);
   overflow: auto;
 }
 
@@ -700,6 +707,9 @@ export default {
   justify-content: flex-start;
   gap: 0.5rem;
   border: 1px solid transparent;
+  min-height: 2.6rem;
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
 }
 
 .scan-results-page .attempt-btn.is-active {
@@ -715,5 +725,39 @@ export default {
 .scan-results-page .attempt-time {
   color: #4b5563;
   font-size: 0.83rem;
+}
+
+.scan-results-page :deep(.scan-results-table .p-datatable-table) {
+  min-width: 112rem;
+}
+
+.scan-results-page :deep(.scan-col-analyzed) {
+  white-space: nowrap;
+  min-width: 10.5rem;
+}
+
+.scan-results-page :deep(.scan-col-id),
+.scan-results-page :deep(.scan-col-height),
+.scan-results-page :deep(.scan-col-network) {
+  white-space: nowrap;
+  min-width: 5.25rem;
+}
+
+.scan-results-page :deep(.scan-col-hash),
+.scan-results-page :deep(.scan-col-sdk) {
+  white-space: nowrap;
+  min-width: 7.5rem;
+}
+
+.scan-results-page :deep(.scan-col-name),
+.scan-results-page :deep(.scan-col-chipset) {
+  min-width: 10rem;
+}
+
+.scan-results-page :deep(.scan-col-status),
+.scan-results-page :deep(.scan-col-attempts),
+.scan-results-page :deep(.scan-col-actions) {
+  white-space: nowrap;
+  min-width: 7rem;
 }
 </style>
