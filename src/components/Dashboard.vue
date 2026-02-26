@@ -97,12 +97,12 @@
                         <div class="text-900 font-medium text-lg mb-3">
                             <i class="pi pi-check-circle mr-1"></i>
                             <span>Active</span>
-                            <Badge :value="lastBlockParticipatingNodes.length || '0'" class="ml-2 p-badge-success"></Badge>
+                            <Badge :value="consensusParticipantCount || '0'" class="ml-2 p-badge-success"></Badge>
                         </div>
                         <div class="text-900 font-medium text-lg mb-3">
                             <i class="pi pi-times-circle mr-1 text-r"></i>
                             <span>Inactive</span>
-                            <Badge :value="validatorCount - jailedValidatorCount - lastBlockParticipatingNodes.length || '0'" class="ml-2 p-badge-danger"></Badge>
+                            <Badge :value="inactiveValidatorCount || '0'" class="ml-2 p-badge-danger"></Badge>
                         </div>
                     </div>
                     <div class="flex align-items-center justify-content-center bg-cyan-100 border-round" style="width: 2.5rem; height: 2.5rem">
@@ -184,7 +184,7 @@
                             <vue3-autocounter
                                 ref="counter"
                                 :startAmount="0"
-                                :endAmount="lastBlockParticipatingNodes == 0 ? 0 : (lastBlockParticipatingNodes.length / (validatorCount - jailedValidatorCount)) * 100"
+                                :endAmount="lastBlockConsensusPercent"
                                 :duration="1.2"
                                 prefix=""
                                 suffix=""
@@ -413,6 +413,25 @@ export default {
         certifiedModelCount() {
             const certifiedModelInfoArray = this.$store.getters['zigbeealliance.distributedcomplianceledger.compliance/getCertifiedModelAll']();
             return certifiedModelInfoArray?.certifiedModel?.length || 0;
+        },
+
+        eligibleValidatorCount() {
+            return Math.max(0, this.validatorCount - this.jailedValidatorCount);
+        },
+
+        consensusParticipantCount() {
+            if (this.eligibleValidatorCount === 0) return 0;
+            return Math.min(this.lastBlockParticipatingNodes.length, this.eligibleValidatorCount);
+        },
+
+        inactiveValidatorCount() {
+            if (this.eligibleValidatorCount === 0) return 0;
+            return Math.max(0, this.eligibleValidatorCount - this.consensusParticipantCount);
+        },
+
+        lastBlockConsensusPercent() {
+            if (this.eligibleValidatorCount === 0) return 0;
+            return (this.consensusParticipantCount / this.eligibleValidatorCount) * 100;
         },
 
         validatorCount() {

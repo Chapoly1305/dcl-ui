@@ -1,16 +1,16 @@
 // vite.config.js
 
 import { fileURLToPath, URL } from 'node:url';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfill';
 import NodePolyfills from 'rollup-plugin-polyfill-node';
 
-const useLocal = false; // set to false to use the test-net
-const apiTarget = useLocal ? 'http://localhost:26640' : 'https://on.test-net.dcl.csa-iot.org';
-const rpcTarget = useLocal ? 'http://localhost:26657' : 'https://on.test-net.dcl.csa-iot.org:26657';
+export default defineConfig(({ mode }) => {
+    const env = loadEnv(mode, process.cwd(), '');
+    const apiTarget = (env.VITE_APP_DCL_PROXY_API_TARGET || 'https://on.test-net.dcl.csa-iot.org').replace(/\/$/, '');
+    const rpcTarget = (env.VITE_APP_DCL_PROXY_RPC_TARGET || `${apiTarget}:26657`).replace(/\/$/, '');
 
-export default defineConfig(() => {
     return {
         plugins: [
             vue(),
