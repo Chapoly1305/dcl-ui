@@ -1,11 +1,11 @@
 <template>
-  <div class="p-3 scan-results-page">
+  <div class="p-2 scan-results-page">
     <div class="grid">
       <div class="col-12">
         <Card class="results-card">
           <template #title>
-            <div class="flex align-items-center justify-content-between gap-2 flex-wrap">
-              <div class="flex align-items-center gap-2 flex-wrap">
+            <div class="flex align-items-center justify-content-between gap-1 flex-wrap">
+              <div class="flex align-items-center gap-1 flex-wrap">
                 <span>Scan Results</span>
                 <SelectButton
                   v-model="scope"
@@ -17,7 +17,7 @@
                 />
                 <Tag :value="`Total: ${totalCount}`" severity="info" />
               </div>
-              <div class="flex align-items-center gap-2">
+              <div class="flex align-items-center gap-1">
                 <span class="text-600 text-sm">Showing {{ totalCount === 0 ? 0 : pageFirst + 1 }} - {{ Math.min(pageFirst + pageSize, totalCount) }}</span>
                 <Button
                   icon="pi pi-filter"
@@ -36,7 +36,7 @@
             </div>
           </template>
           <template #content>
-            <div v-show="tableFiltersExpanded" class="grid filters mb-3">
+            <div v-show="tableFiltersExpanded" class="grid filters mb-2">
               <div class="col-12 md:col-3">
                 <label class="filter-label">Search</label>
                 <InputText v-model="filters.q" class="w-full p-inputtext-sm" placeholder="run/result/firmware..." />
@@ -77,13 +77,13 @@
                 <label class="filter-label">To</label>
                 <Calendar v-model="filters.toTime" class="w-full p-inputtext-sm" dateFormat="yy-mm-dd" showTime hourFormat="24" />
               </div>
-              <div class="col-12 md:col-12 flex align-items-end gap-2">
+              <div class="col-12 md:col-12 flex align-items-end gap-1">
                 <Button label="Clear" icon="pi pi-filter-slash" class="p-button-text p-button-sm" @click="clearFilters" />
                 <Button label="Apply Filters" icon="pi pi-search" class="p-button-sm" @click="applyFilters" />
               </div>
             </div>
 
-            <Message v-if="error" severity="error" :closable="false" class="mb-3">{{ error }}</Message>
+            <Message v-if="error" severity="error" :closable="false" class="mb-2">{{ error }}</Message>
 
             <DataTable
               :value="rows"
@@ -127,9 +127,14 @@
                   <Tag :value="slotProps.data.status" :severity="runStatusSeverity(slotProps.data.status)" />
                 </template>
               </Column>
-              <Column field="verdict_integrity" header="Integrity" sortable headerClass="scan-col-status" bodyClass="scan-col-status">
+              <Column field="verdict_integrity" header="Payload Hash" sortable headerClass="scan-col-status" bodyClass="scan-col-status">
                 <template #body="slotProps">
                   <Tag :value="slotProps.data.verdict_integrity" :severity="verdictSeverity(slotProps.data.verdict_integrity)" />
+                </template>
+              </Column>
+              <Column field="verdict_validation_path" header="Validation Path" sortable headerClass="scan-col-status" bodyClass="scan-col-status">
+                <template #body="slotProps">
+                  <Tag :value="slotProps.data.verdict_validation_path" :severity="verdictSeverity(slotProps.data.verdict_validation_path)" />
                 </template>
               </Column>
               <Column field="verdict_authenticity" header="Authenticity" sortable headerClass="scan-col-status" bodyClass="scan-col-status">
@@ -169,7 +174,7 @@
               </Column>
             </DataTable>
 
-            <div v-if="!loading && totalCount === 0" class="text-600 mt-3">No scan results found for current filters.</div>
+            <div v-if="!loading && totalCount === 0" class="text-600 mt-2">No scan results found for current filters.</div>
           </template>
         </Card>
       </div>
@@ -177,8 +182,8 @@
       <div class="col-12">
         <Card class="report-card">
           <template #title>
-            <div class="flex align-items-center justify-content-between gap-2 flex-wrap">
-              <div class="flex align-items-center gap-2 flex-wrap">
+            <div class="flex align-items-center justify-content-between gap-1 flex-wrap">
+              <div class="flex align-items-center gap-1 flex-wrap">
                 <span>Rendered Report</span>
                 <Tag v-if="selectedResult" :value="`Result: ${shortId(selectedResult.result_id)}`" severity="info" />
               </div>
@@ -193,7 +198,7 @@
             </div>
           </template>
           <template #content>
-            <Message v-if="detailError" severity="error" :closable="false" class="mb-3">{{ detailError }}</Message>
+            <Message v-if="detailError" severity="error" :closable="false" class="mb-2">{{ detailError }}</Message>
 
             <div v-if="!selectedResultId && !detailLoading" class="text-600">Select a row to read the report.</div>
 
@@ -210,7 +215,8 @@
                     <div class="col-6"><strong>Result ID:</strong> <code>{{ selectedResult.result_id }}</code></div>
                     <div class="col-6"><strong>Analyzed:</strong> {{ formatTimestamp(selectedResult.analyzed_at) }}</div>
                     <div class="col-6"><strong>Status:</strong> <Tag :value="selectedResult.status" :severity="runStatusSeverity(selectedResult.status)" /></div>
-                    <div class="col-6"><strong>Integrity:</strong> <Tag :value="selectedResult.verdict_integrity" :severity="verdictSeverity(selectedResult.verdict_integrity)" /></div>
+                    <div class="col-6"><strong>Payload Hash:</strong> <Tag :value="selectedResult.verdict_integrity" :severity="verdictSeverity(selectedResult.verdict_integrity)" /></div>
+                    <div class="col-6"><strong>Validation Path:</strong> <Tag :value="displayValue(selectedResult.verdict_validation_path)" :severity="verdictSeverity(selectedResult.verdict_validation_path)" /></div>
                     <div class="col-6"><strong>Authenticity:</strong> <Tag :value="selectedResult.verdict_authenticity" :severity="verdictSeverity(selectedResult.verdict_authenticity)" /></div>
                     <div class="col-6"><strong>Chipset:</strong> {{ displayValue(selectedResult.chipset) }}</div>
                     <div class="col-6"><strong>SDK Guess:</strong> {{ displayValue(selectedResult.sdk_best_guess_base) }}</div>
@@ -274,8 +280,8 @@
                   <div class="grid">
                     <div class="col-12"><strong>Source Network:</strong> {{ displayValue(selectedResult.source_network) }}</div>
                     <div class="col-12"><strong>Source Path:</strong> {{ displayValue(selectedResult.source_rel_path) }}</div>
-                    <div class="col-12"><strong>Firmware Store Path:</strong> {{ displayValue(selectedResult.firmware_store_path) }}</div>
-                    <div class="col-12"><strong>Report Path:</strong> {{ displayValue(selectedResult.report_path) }}</div>
+                    <div class="col-12"><strong>Firmware Store File:</strong> {{ displayPathTail(selectedResult.firmware_store_path) }}</div>
+                    <div class="col-12"><strong>Report File:</strong> {{ displayPathTail(selectedResult.report_path) }}</div>
                     <div class="col-12"><strong>Parent Run ID:</strong> {{ displayValue(selectedResult.parent_run_id) }}</div>
                   </div>
                 </TabPanel>
@@ -419,7 +425,7 @@ export default {
     },
     sortFieldApi(value) {
       const key = String(value || '').trim();
-      const allowed = new Set(['analyzed_at', 'chipset', 'status', 'verdict_integrity', 'verdict_authenticity']);
+      const allowed = new Set(['analyzed_at', 'chipset', 'status', 'verdict_integrity', 'verdict_validation_path', 'verdict_authenticity']);
       return allowed.has(key) ? key : 'analyzed_at';
     },
     buildQuery() {
@@ -608,9 +614,21 @@ export default {
     displayValue(value) {
       if (value === null || value === undefined || value === '') return '-';
       return value;
+    },
+    displayPathTail(value) {
+      const text = String(value || '').trim();
+      if (!text) return '-';
+      const parts = text.split(/[\\/]/).filter(Boolean);
+      if (parts.length === 0) return '-';
+      return parts[parts.length - 1];
     }
   },
   mounted() {
+    const initialQuery = String(this.$route?.query?.q || '').trim();
+    if (initialQuery) {
+      this.filters.q = initialQuery;
+      this.tableFiltersExpanded = true;
+    }
     this.loadResults();
   }
 };
@@ -622,8 +640,23 @@ export default {
   border-radius: 12px;
 }
 
+.scan-results-page :deep(.results-card .p-card-body),
+.scan-results-page :deep(.report-card .p-card-body) {
+  padding: 0.8rem;
+}
+
+.scan-results-page :deep(.results-card .p-card-title),
+.scan-results-page :deep(.report-card .p-card-title) {
+  margin-bottom: 0.35rem;
+}
+
+.scan-results-page :deep(.results-card .p-card-content),
+.scan-results-page :deep(.report-card .p-card-content) {
+  padding-top: 0.35rem;
+}
+
 .scan-results-page .filters {
-  padding: 0.75rem;
+  padding: 0.55rem;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: #f9fafb;
@@ -633,7 +666,15 @@ export default {
   display: block;
   font-size: 0.82rem;
   color: #6b7280;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.2rem;
+}
+
+.scan-results-page :deep(.p-tabview .p-tabview-nav li .p-tabview-nav-link) {
+  padding: 0.45rem 0.75rem;
+}
+
+.scan-results-page :deep(.p-tabview .p-tabview-panels) {
+  padding: 0.55rem 0.3rem;
 }
 
 .scan-results-page :deep(.scan-results-table .p-datatable-table) {

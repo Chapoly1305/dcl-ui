@@ -42,7 +42,7 @@
       </div>
 
       <div class="col-12">
-        <TabView>
+        <TabView v-model:activeIndex="activeTabIndex" @tab-change="onTabChange">
           <TabPanel header="Overview">
             <div class="grid">
               <div class="col-6 md:col-3" v-for="k in overviewKpis" :key="k.label">
@@ -181,7 +181,10 @@ export default {
         jobs: { pending: [], running: [], done: [], failed: [] }
       },
       jobsPayload: { jobs: { pending: [], running: [], done: [], failed: [] }, attempts: [] },
-      modulesPayload: { modules: [], run_id: null }
+      modulesPayload: { modules: [], run_id: null },
+      activeTabIndex: 0,
+      jobsLoaded: false,
+      modulesLoaded: false
     };
   },
   computed: {
@@ -211,27 +214,57 @@ export default {
   },
   methods: {
     async refreshAll() {
+      await this.refreshDetail();
+      if (this.activeTabIndex === 1) await this.refreshJobs();
+      if (this.activeTabIndex === 2) await this.refreshModules();
+    },
+    async refreshDetail() {
       this.loading = true;
       this.error = null;
       this.statusNote = null;
       try {
-        const [detailResp, jobsResp, modulesResp] = await Promise.all([
-          fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}`),
-          fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}/jobs`),
-          fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}/modules`)
-        ]);
+        const detailResp = await fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}`);
         if (!detailResp.ok) throw new Error(`Detail request failed (${detailResp.status})`);
-        if (!jobsResp.ok) throw new Error(`Jobs request failed (${jobsResp.status})`);
-        if (!modulesResp.ok) throw new Error(`Modules request failed (${modulesResp.status})`);
-
         this.detail = await detailResp.json();
-        this.jobsPayload = await jobsResp.json();
-        this.modulesPayload = await modulesResp.json();
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Failed to load firmware detail';
       } finally {
         this.loading = false;
       }
+    },
+    async refreshJobs() {
+      this.loading = true;
+      this.error = null;
+      try {
+        const jobsResp = await fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}/jobs`);
+        if (!jobsResp.ok) throw new Error(`Jobs request failed (${jobsResp.status})`);
+        this.jobsPayload = await jobsResp.json();
+        this.jobsLoaded = true;
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to load job history';
+      } finally {
+        this.loading = false;
+      }
+    },
+    async refreshModules() {
+      this.loading = true;
+      this.error = null;
+      try {
+        const modulesResp = await fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}/modules`);
+        if (!modulesResp.ok) throw new Error(`Modules request failed (${modulesResp.status})`);
+        this.modulesPayload = await modulesResp.json();
+        this.modulesLoaded = true;
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to load module outputs';
+      } finally {
+        this.loading = false;
+      }
+    },
+    async onTabChange(event) {
+      const idx = Number(event?.index ?? this.activeTabIndex);
+      this.activeTabIndex = Number.isFinite(idx) ? idx : 0;
+      if (this.activeTabIndex === 1 && !this.jobsLoaded) await this.refreshJobs();
+      if (this.activeTabIndex === 2 && !this.modulesLoaded) await this.refreshModules();
     },
     async enqueueAnalyze() {
       this.enqueueLoading = true;

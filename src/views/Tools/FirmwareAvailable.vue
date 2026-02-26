@@ -230,8 +230,8 @@
                     <Button
                       icon="pi pi-external-link"
                       class="p-button-sm p-button-text"
-                      v-tooltip.top="slotProps.data.firmwareSha256 ? 'Open firmware detail' : 'Run Analyze first to create firmware group'"
-                      :disabled="!slotProps.data.firmwareSha256"
+                      v-tooltip.top="slotProps.data.firmwareSha256 ? 'Open firmware detail' : 'Open matching scan results'"
+                      :disabled="!slotProps.data.firmwareSha256 && !slotProps.data.isDownloaded"
                       @click="openFirmwareDetail(slotProps.data)"
                     />
                   </div>
@@ -547,11 +547,25 @@ export default {
     },
     openFirmwareDetail(row) {
       const sha = String(row?.firmwareSha256 || '').trim();
-      if (!sha) {
-        this.error = 'No firmware group yet. Click Analyze first.';
+      if (sha) {
+        this.$router.push(`/firmware-security/firmware/${sha}`);
         return;
       }
-      this.$router.push(`/firmware-security/firmware/${sha}`);
+      const vid = String(row?.vid || '').trim();
+      const pid = String(row?.pid || '').trim();
+      const blockHeight = String(row?.blockHeight || '').trim();
+      const txHashLast8 = String(row?.txHashLast8 || '').trim();
+      let queryToken = '';
+      if (vid && pid && blockHeight) {
+        queryToken = `otaT_${vid}_${pid}_${blockHeight}_`;
+      } else if (txHashLast8) {
+        queryToken = txHashLast8;
+      }
+      if (!queryToken) {
+        this.error = 'No firmware group yet and no identity fields to locate scan results.';
+        return;
+      }
+      this.$router.push({ path: '/firmware-security/scan-results', query: { q: queryToken } });
     },
     normalizeConformance(value, basis) {
       if (!value) return 'Unknown';
