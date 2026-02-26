@@ -67,7 +67,15 @@
             >
               <Column field="job_id" header="Job ID">
                 <template #body="slotProps">
-                  <code>{{ slotProps.data.job_id.slice(0, 8) }}</code>
+                  <div class="flex align-items-center gap-2">
+                    <code>{{ slotProps.data.job_id.slice(0, 8) }}</code>
+                    <Button
+                      icon="pi pi-chart-line"
+                      class="p-button-sm p-button-text"
+                      v-tooltip.top="'Open job progress'"
+                      @click="openJobProgress(slotProps.data.job_id)"
+                    />
+                  </div>
                 </template>
               </Column>
               <Column field="job_type" header="Type">
@@ -114,7 +122,15 @@
             >
               <Column field="job_id" header="Job ID">
                 <template #body="slotProps">
-                  <code>{{ slotProps.data.job_id.slice(0, 8) }}</code>
+                  <div class="flex align-items-center gap-2">
+                    <code>{{ slotProps.data.job_id.slice(0, 8) }}</code>
+                    <Button
+                      icon="pi pi-chart-line"
+                      class="p-button-sm p-button-text"
+                      v-tooltip.top="'Open job progress'"
+                      @click="openJobProgress(slotProps.data.job_id)"
+                    />
+                  </div>
                 </template>
               </Column>
               <Column field="job_type" header="Type">
@@ -156,7 +172,15 @@
             >
               <Column field="job_id" header="Job ID">
                 <template #body="slotProps">
-                  <code>{{ slotProps.data.job_id.slice(0, 8) }}</code>
+                  <div class="flex align-items-center gap-2">
+                    <code>{{ slotProps.data.job_id.slice(0, 8) }}</code>
+                    <Button
+                      icon="pi pi-chart-line"
+                      class="p-button-sm p-button-text"
+                      v-tooltip.top="'Open job progress'"
+                      @click="openJobProgress(slotProps.data.job_id)"
+                    />
+                  </div>
                 </template>
               </Column>
               <Column field="status" header="Status">
@@ -190,12 +214,23 @@
         </Card>
       </div>
     </div>
+    <FirmwareJobProgressModal
+      :visible="progressDialogVisible"
+      :job-id="progressJobId"
+      :api-base="apiBase"
+      @update:visible="progressDialogVisible = $event"
+    />
   </div>
 </template>
 
 <script>
+import FirmwareJobProgressModal from '@/components/FirmwareJobProgressModal.vue';
+
 export default {
   name: 'FirmwareScanQueue',
+  components: {
+    FirmwareJobProgressModal
+  },
   data() {
     const base = (import.meta.env.VITE_APP_MATTEROVERWATCH_API_BASE || 'http://127.0.0.1:8080').replace(/\/$/, '');
     return {
@@ -213,7 +248,9 @@ export default {
       actionLoading: {
         poll: false,
         validate: false
-      }
+      },
+      progressDialogVisible: false,
+      progressJobId: ''
     };
   },
   computed: {
@@ -327,6 +364,12 @@ export default {
       const key = String(jobType || '').toLowerCase();
       if (key === 'validate_conformance') return 'validate';
       return key || 'unknown';
+    },
+    openJobProgress(jobId) {
+      const id = String(jobId || '').trim();
+      if (!id) return;
+      this.progressJobId = id;
+      this.progressDialogVisible = true;
     }
   },
   mounted() {

@@ -217,13 +217,20 @@
                       icon="pi pi-play"
                       class="p-button-sm p-button-text"
                       v-tooltip.top="slotProps.data.isDownloaded ? 'Analyze firmware group' : 'Firmware is not downloaded locally'"
-                      :disabled="!slotProps.data.isDownloaded || !slotProps.data.firmwareSha256"
+                      :disabled="!slotProps.data.isDownloaded"
                       @click="enqueueAnalyze(slotProps.data)"
+                    />
+                    <Button
+                      icon="pi pi-chart-line"
+                      class="p-button-sm p-button-text"
+                      v-tooltip.top="slotProps.data.analysisLatestJobId ? 'Open job progress' : 'No analysis job yet'"
+                      :disabled="!slotProps.data.analysisLatestJobId"
+                      @click="openJobProgress(slotProps.data.analysisLatestJobId)"
                     />
                     <Button
                       icon="pi pi-external-link"
                       class="p-button-sm p-button-text"
-                      v-tooltip.top="'Open firmware detail'"
+                      v-tooltip.top="slotProps.data.firmwareSha256 ? 'Open firmware detail' : 'Run Analyze first to create firmware group'"
                       :disabled="!slotProps.data.firmwareSha256"
                       @click="openFirmwareDetail(slotProps.data)"
                     />
@@ -238,12 +245,23 @@
         </Card>
       </div>
     </div>
+    <FirmwareJobProgressModal
+      :visible="progressDialogVisible"
+      :job-id="progressJobId"
+      :api-base="metadataApiBase"
+      @update:visible="progressDialogVisible = $event"
+    />
   </div>
 </template>
 
 <script>
+import FirmwareJobProgressModal from '@/components/FirmwareJobProgressModal.vue';
+
 export default {
   name: 'FirmwareAvailable',
+  components: {
+    FirmwareJobProgressModal
+  },
   data() {
     const base = (import.meta.env.VITE_APP_MATTEROVERWATCH_API_BASE || 'http://127.0.0.1:8080').replace(/\/$/, '');
     return {
@@ -283,7 +301,9 @@ export default {
         { label: 'Running', value: 'running' },
         { label: 'Pending', value: 'pending' },
         { label: 'None', value: 'none' }
-      ]
+      ],
+      progressDialogVisible: false,
+      progressJobId: ''
     };
   },
   computed: {
@@ -438,6 +458,7 @@ export default {
           isDownloaded: Boolean(item.is_downloaded),
           analysisLatestStatus: this.normalizeAnalysisStatus(item.analysis_latest_status),
           analysisLatestAt: item.analysis_latest_at || null,
+          analysisLatestJobId: item.analysis_latest_job_id || '',
           duplicateGroupSize: Number.isFinite(Number(item.duplicate_group_size)) ? Number(item.duplicate_group_size) : 0,
           formalityConformance: this.normalizeConformance(item.formality_conformance, item.formality_basis),
           formalityComment: item.formality_comment || ''
@@ -483,26 +504,53 @@ export default {
       return 'none';
     },
     async enqueueAnalyze(row) {
-      const sha = String(row?.firmwareSha256 || '').trim();
-      if (!sha) return;
       try {
+        const sha = String(row?.firmwareSha256 || '').trim();
+        const payload = {
+          firmware_sha256: sha || null,
+          requested_from: 'available_firmware',
+          network: this.network || null,
+          vid: row?.vid ?? null,
+          pid: row?.pid ?? null,
+          software_version: row?.softwareVersion ?? null,
+          block_height: row?.blockHeight ?? null,
+          tx_hash_last8: this.txHashLast8(row?.txHash)
+        };
         const response = await fetch(`${this.metadataApiBase}/api/v1/jobs/analyze-firmware`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ firmware_sha256: sha, requested_from: 'available_firmware' })
+          body: JSON.stringify(payload)
         });
         if (!response.ok) {
           throw new Error(`Analyze enqueue failed (${response.status})`);
         }
+        const result = await response.json();
         await this.loadAvailableFirmware();
-        this.actionNote = `Analysis job queued for ${sha.slice(0, 8)}...`;
+        const queuedJobId = String(result?.job?.job_id || '').trim();
+        if (queuedJobId) {
+          this.openJobProgress(queuedJobId);
+        }
+        const queuedSha = String(result?.firmware_sha256 || sha || '').trim();
+        this.actionNote = queuedSha ? `Analysis job queued for ${queuedSha.slice(0, 8)}...` : 'Analysis job queued.';
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Failed to enqueue analysis job';
       }
     },
+    openJobProgress(jobId) {
+      const id = String(jobId || '').trim();
+      if (!id) {
+        this.error = 'No analysis job found for this row.';
+        return;
+      }
+      this.progressJobId = id;
+      this.progressDialogVisible = true;
+    },
     openFirmwareDetail(row) {
       const sha = String(row?.firmwareSha256 || '').trim();
-      if (!sha) return;
+      if (!sha) {
+        this.error = 'No firmware group yet. Click Analyze first.';
+        return;
+      }
       this.$router.push(`/firmware-security/firmware/${sha}`);
     },
     normalizeConformance(value, basis) {
