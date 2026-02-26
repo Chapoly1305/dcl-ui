@@ -85,7 +85,31 @@
                   showClear
                 />
               </div>
-              <div class="col-12 md:col-4 lg:col-2 flex align-items-end justify-content-end gap-2">
+              <div class="col-12 md:col-2">
+                <label class="filter-label">Downloaded</label>
+                <Dropdown
+                  v-model="filters.isDownloaded"
+                  class="w-full p-inputtext-sm"
+                  :options="downloadedFilterOptions"
+                  optionLabel="label"
+                  optionValue="value"
+                  placeholder="Any"
+                  showClear
+                />
+              </div>
+              <div class="col-12 md:col-2">
+                <label class="filter-label">Analysis</label>
+                <Dropdown
+                  v-model="filters.analysisStatus"
+                  class="w-full p-inputtext-sm"
+                  :options="analysisFilterOptions"
+                  optionLabel="label"
+                  optionValue="value"
+                  placeholder="Any"
+                  showClear
+                />
+              </div>
+              <div class="col-12 md:col-4 lg:col-4 flex align-items-end justify-content-start gap-2">
                 <Button
                   label="Clear"
                   icon="pi pi-filter-slash"
@@ -146,22 +170,26 @@
                   <code>{{ displayValue(txHashLast8(slotProps.data.txHash)) }}</code>
                 </template>
               </Column>
-              <Column field="isDownloaded" header="Downloaded">
+              <Column field="isDownloaded" header="Downloaded" headerClass="text-center" bodyClass="text-center">
                 <template #body="slotProps">
-                  <Tag :value="slotProps.data.isDownloaded ? 'Yes' : 'No'" :severity="slotProps.data.isDownloaded ? 'success' : 'warning'" />
-                </template>
-              </Column>
-              <Column field="analysisLatestStatus" header="Analysis">
-                <template #body="slotProps">
-                  <div class="flex align-items-center gap-2 flex-wrap">
-                    <Tag :value="analysisLabel(slotProps.data.analysisLatestStatus)" :severity="analysisSeverity(slotProps.data.analysisLatestStatus)" />
-                    <span class="text-500 text-xs">{{ displayValue(formatReleaseTime(slotProps.data.analysisLatestAt)) }}</span>
+                  <div class="cell-center">
+                    <Tag :value="slotProps.data.isDownloaded ? 'Yes' : 'No'" :severity="slotProps.data.isDownloaded ? 'success' : 'warning'" />
                   </div>
                 </template>
               </Column>
-              <Column field="formalityConformance" sortable>
+              <Column field="analysisLatestStatus" header="Analysis" headerClass="text-center" bodyClass="text-center">
+                <template #body="slotProps">
+                  <div class="analysis-cell cell-center flex flex-column gap-1">
+                    <Tag :value="analysisLabel(slotProps.data.analysisLatestStatus)" :severity="analysisSeverity(slotProps.data.analysisLatestStatus)" />
+                    <span v-if="slotProps.data.analysisLatestAt" class="text-500 text-xs">
+                      {{ formatReleaseTime(slotProps.data.analysisLatestAt) }}
+                    </span>
+                  </div>
+                </template>
+              </Column>
+              <Column field="formalityConformance" sortable headerClass="text-center" bodyClass="text-center">
                 <template #header>
-                  <span class="flex align-items-center gap-2">
+                  <span class="cell-center gap-2">
                     Formality Conformance
                     <i
                       class="pi pi-info-circle text-500"
@@ -171,7 +199,7 @@
                   </span>
                 </template>
                 <template #body="slotProps">
-                  <div class="flex align-items-center gap-2">
+                  <div class="cell-center gap-2">
                     <Tag :value="slotProps.data.formalityConformance" :severity="severityFor(slotProps.data.formalityConformance)" />
                     <i
                       v-if="slotProps.data.formalityConformance === 'Violation' && slotProps.data.formalityComment"
@@ -244,7 +272,18 @@ export default {
       sortOrder: -1,
       tableFiltersExpanded: false,
       filters: this.defaultFilters(),
-      conformanceFilterOptions: ['pass', 'violation', 'pending', 'unknown']
+      conformanceFilterOptions: ['pass', 'violation', 'pending', 'unknown'],
+      downloadedFilterOptions: [
+        { label: 'Downloaded', value: 'true' },
+        { label: 'Not Downloaded', value: 'false' }
+      ],
+      analysisFilterOptions: [
+        { label: 'Done', value: 'done' },
+        { label: 'Failed', value: 'failed' },
+        { label: 'Running', value: 'running' },
+        { label: 'Pending', value: 'pending' },
+        { label: 'None', value: 'none' }
+      ]
     };
   },
   computed: {
@@ -277,7 +316,9 @@ export default {
         releaseTime: '',
         blockHeight: '',
         txHashLast8: '',
-        formalityConformance: null
+        formalityConformance: null,
+        isDownloaded: null,
+        analysisStatus: null
       };
     },
     clearFilters() {
@@ -340,7 +381,9 @@ export default {
         ['release_time', this.filters.releaseTime],
         ['block_height', this.filters.blockHeight],
         ['tx_hash_last8', this.filters.txHashLast8],
-        ['formality_conformance', this.filters.formalityConformance]
+        ['formality_conformance', this.filters.formalityConformance],
+        ['is_downloaded', this.filters.isDownloaded],
+        ['analysis_status', this.filters.analysisStatus]
       ];
       for (const [key, value] of filterMap) {
         if (value !== null && value !== undefined && String(value).trim() !== '') {
@@ -393,7 +436,7 @@ export default {
           txHash: item.tx_hash_last8 || '',
           firmwareSha256: item.firmware_sha256 || '',
           isDownloaded: Boolean(item.is_downloaded),
-          analysisLatestStatus: String(item.analysis_latest_status || 'none'),
+          analysisLatestStatus: this.normalizeAnalysisStatus(item.analysis_latest_status),
           analysisLatestAt: item.analysis_latest_at || null,
           duplicateGroupSize: Number.isFinite(Number(item.duplicate_group_size)) ? Number(item.duplicate_group_size) : 0,
           formalityConformance: this.normalizeConformance(item.formality_conformance, item.formality_basis),
@@ -419,7 +462,7 @@ export default {
       }
     },
     analysisLabel(value) {
-      const key = String(value || '').toLowerCase();
+      const key = this.normalizeAnalysisStatus(value);
       if (key === 'done') return 'Done';
       if (key === 'failed') return 'Failed';
       if (key === 'running') return 'Running';
@@ -427,12 +470,17 @@ export default {
       return 'None';
     },
     analysisSeverity(value) {
-      const key = String(value || '').toLowerCase();
+      const key = this.normalizeAnalysisStatus(value);
       if (key === 'done') return 'success';
       if (key === 'failed') return 'danger';
       if (key === 'running') return 'info';
       if (key === 'pending') return 'warning';
       return 'secondary';
+    },
+    normalizeAnalysisStatus(value) {
+      const key = String(value || '').trim().toLowerCase();
+      if (key === 'done' || key === 'failed' || key === 'running' || key === 'pending') return key;
+      return 'none';
     },
     async enqueueAnalyze(row) {
       const sha = String(row?.firmwareSha256 || '').trim();
@@ -540,5 +588,11 @@ export default {
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: #f9fafb;
+}
+
+.firmware-available-page .cell-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>
