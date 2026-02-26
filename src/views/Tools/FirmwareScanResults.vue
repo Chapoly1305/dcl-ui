@@ -20,6 +20,12 @@
               <div class="flex align-items-center gap-2">
                 <span class="text-600 text-sm">Showing {{ totalCount === 0 ? 0 : pageFirst + 1 }} - {{ Math.min(pageFirst + pageSize, totalCount) }}</span>
                 <Button
+                  icon="pi pi-filter"
+                  class="p-button-text p-button-sm p-button-rounded"
+                  v-tooltip.top="'Show/Hide Filters'"
+                  @click="tableFiltersExpanded = !tableFiltersExpanded"
+                />
+                <Button
                   icon="pi pi-refresh"
                   class="p-button-text p-button-sm p-button-rounded"
                   :loading="loading"
@@ -30,7 +36,7 @@
             </div>
           </template>
           <template #content>
-            <div class="grid filters mb-3">
+            <div v-show="tableFiltersExpanded" class="grid filters mb-3">
               <div class="col-12 md:col-3">
                 <label class="filter-label">Search</label>
                 <InputText v-model="filters.q" class="w-full p-inputtext-sm" placeholder="run/result/firmware..." />
@@ -62,18 +68,6 @@
               <div class="col-6 md:col-2">
                 <label class="filter-label">Chipset</label>
                 <InputText v-model="filters.chipset" class="w-full p-inputtext-sm" placeholder="e.g. siliconlabs" />
-              </div>
-              <div class="col-6 md:col-1">
-                <label class="filter-label">Network</label>
-                <Dropdown
-                  v-model="filters.network"
-                  class="w-full p-inputtext-sm"
-                  :options="networkOptions"
-                  optionLabel="label"
-                  optionValue="value"
-                  placeholder="Any"
-                  showClear
-                />
               </div>
               <div class="col-6 md:col-1">
                 <label class="filter-label">From</label>
@@ -154,19 +148,6 @@
               <Column field="sdk_best_guess_base" header="SDK" headerClass="scan-col-sdk" bodyClass="scan-col-sdk">
                 <template #body="slotProps">{{ displayValue(slotProps.data.sdk_best_guess_base) }}</template>
               </Column>
-              <Column field="attempt_count" header="Attempts" headerClass="text-center scan-col-attempts" bodyClass="text-center scan-col-attempts">
-                <template #body="slotProps">
-                  <div class="flex align-items-center justify-content-center gap-1">
-                    <Tag :value="String(slotProps.data.attempt_count || 1)" severity="secondary" />
-                    <Tag
-                      v-if="scope === 'all'"
-                      :value="`#${slotProps.data.attempt_index}`"
-                      :severity="slotProps.data.latest_in_group ? 'success' : 'warning'"
-                    />
-                  </div>
-                </template>
-              </Column>
-              <Column field="source_network" header="Network" headerClass="scan-col-network" bodyClass="scan-col-network" />
               <Column header="Actions" headerClass="scan-col-actions" bodyClass="scan-col-actions">
                 <template #body="slotProps">
                   <div class="flex align-items-center gap-2">
@@ -222,23 +203,6 @@
             </div>
 
             <div v-else-if="selectedResult">
-              <div class="mb-3 attempt-strip">
-                <div class="text-700 text-sm mb-2">Attempt Timeline</div>
-                <div class="attempt-list">
-                  <Button
-                    v-for="(attempt, idx) in attempts"
-                    :key="attempt.result_id"
-                    class="p-button-text p-button-sm attempt-btn"
-                    :class="{ 'is-active': attempt.result_id === selectedResultId }"
-                    @click="selectAttempt(attempt.result_id)"
-                  >
-                    <span class="attempt-label">#{{ attempt.sequence || idx + 1 }}</span>
-                    <span class="attempt-time">{{ formatTimestamp(attempt.analyzed_at) }}</span>
-                    <Tag :value="attempt.status" :severity="runStatusSeverity(attempt.status)" />
-                  </Button>
-                </div>
-              </div>
-
               <TabView v-model:activeIndex="detailTabIndex">
                 <TabPanel header="Summary">
                   <div class="grid">
@@ -349,7 +313,6 @@ export default {
         verdict: null,
         status: null,
         chipset: '',
-        network: null,
         fromTime: null,
         toTime: null
       },
@@ -365,10 +328,6 @@ export default {
         { label: 'Partial', value: 'partial' },
         { label: 'Failed', value: 'failed' }
       ],
-      networkOptions: [
-        { label: 'Testnet', value: 'testnet' },
-        { label: 'Mainnet', value: 'mainnet' }
-      ],
       selectedResultId: '',
       detailLoading: false,
       detailError: null,
@@ -376,22 +335,13 @@ export default {
         result: null,
         attempts: []
       },
+      tableFiltersExpanded: false,
       detailTabIndex: 0
     };
   },
   computed: {
     selectedResult() {
       return this.detailPayload?.result || null;
-    },
-    attempts() {
-      const rows = Array.isArray(this.detailPayload?.attempts) ? this.detailPayload.attempts : [];
-      const total = rows.length;
-      return [...rows]
-        .sort((a, b) => String(b.analyzed_at || '').localeCompare(String(a.analyzed_at || '')))
-        .map((attempt, idx) => ({
-          ...attempt,
-          sequence: Number.isFinite(Number(attempt?.attempt_index)) ? Number(attempt.attempt_index) : total - idx
-        }));
     },
     sanitizedReport() {
       return this.selectedResult?.sanitized_report || {};
@@ -484,8 +434,7 @@ export default {
         ['q', this.filters.q],
         ['verdict', this.filters.verdict],
         ['status', this.filters.status],
-        ['chipset', this.filters.chipset],
-        ['network', this.filters.network]
+        ['chipset', this.filters.chipset]
       ];
       for (const [k, v] of map) {
         if (v !== null && v !== undefined && String(v).trim() !== '') {
@@ -534,7 +483,6 @@ export default {
         verdict: null,
         status: null,
         chipset: '',
-        network: null,
         fromTime: null,
         toTime: null
       };
@@ -688,45 +636,6 @@ export default {
   margin-bottom: 0.35rem;
 }
 
-.scan-results-page .attempt-strip {
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 0.6rem;
-  background: #fafafa;
-}
-
-.scan-results-page .attempt-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  max-height: calc(3 * 2.6rem + 2 * 0.35rem);
-  overflow: auto;
-}
-
-.scan-results-page .attempt-btn {
-  justify-content: flex-start;
-  gap: 0.5rem;
-  border: 1px solid transparent;
-  min-height: 2.6rem;
-  padding-top: 0.35rem;
-  padding-bottom: 0.35rem;
-}
-
-.scan-results-page .attempt-btn.is-active {
-  border-color: #93c5fd;
-  background: #eff6ff;
-}
-
-.scan-results-page .attempt-label {
-  font-weight: 600;
-  min-width: 2.1rem;
-}
-
-.scan-results-page .attempt-time {
-  color: #4b5563;
-  font-size: 0.83rem;
-}
-
 .scan-results-page :deep(.scan-results-table .p-datatable-table) {
   min-width: 112rem;
 }
@@ -737,8 +646,7 @@ export default {
 }
 
 .scan-results-page :deep(.scan-col-id),
-.scan-results-page :deep(.scan-col-height),
-.scan-results-page :deep(.scan-col-network) {
+.scan-results-page :deep(.scan-col-height) {
   white-space: nowrap;
   min-width: 5.25rem;
 }
@@ -755,7 +663,6 @@ export default {
 }
 
 .scan-results-page :deep(.scan-col-status),
-.scan-results-page :deep(.scan-col-attempts),
 .scan-results-page :deep(.scan-col-actions) {
   white-space: nowrap;
   min-width: 7rem;
