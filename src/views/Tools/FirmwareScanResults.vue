@@ -609,6 +609,7 @@ export default {
         '20_chipset_identify': '20 Chipset Identify',
         '30_extract_executable': '30 Extract Executable',
         '40_ida_headless': '40 IDA Headless',
+        '45_secure_boot_authenticity': '45 Secure Boot',
         '50_capability_recovery': '50 Capability Recovery',
         '60_sdk_version': '60 SDK Version',
         '90_finalize': '90 Finalize'
