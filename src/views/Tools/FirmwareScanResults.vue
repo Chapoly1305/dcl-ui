@@ -146,7 +146,7 @@
                 <template #body="slotProps">
                   <div class="flex flex-column gap-1">
                     <span>{{ displayValue(slotProps.data.chipset) }}</span>
-                    <span class="text-500 text-xs">conf {{ formatConfidence(slotProps.data.chipset_confidence) }}</span>
+                    <span class="text-500 text-xs">det score {{ formatConfidence(slotProps.data.chipset_confidence) }}</span>
                   </div>
                 </template>
               </Column>

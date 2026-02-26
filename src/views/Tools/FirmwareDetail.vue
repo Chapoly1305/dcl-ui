@@ -93,6 +93,57 @@
             </div>
           </TabPanel>
 
+          <TabPanel header="Capabilities">
+            <div class="grid">
+              <div class="col-12">
+                <Card class="detail-card">
+                  <template #title>Endpoints / Clusters / Attributes</template>
+                  <template #content>
+                    <div class="grid mb-2">
+                      <div class="col-6 md:col-3"><strong>Endpoints:</strong> {{ capabilityEndpoints.length }}</div>
+                      <div class="col-6 md:col-3"><strong>Clusters:</strong> {{ capabilityClusters.length }}</div>
+                      <div class="col-6 md:col-3"><strong>Attributes:</strong> {{ capabilityAttributeRows.length }}</div>
+                      <div class="col-6 md:col-3"><strong>Defaults:</strong> {{ capabilityDefaultsCount }}</div>
+                    </div>
+                    <div v-if="capabilityEndpoints.length === 0 && capabilityAttributeRows.length === 0" class="text-600">
+                      No capability output available for this run.
+                    </div>
+                    <div v-else class="grid">
+                      <div class="col-12 lg:col-5">
+                        <DataTable :value="capabilityEndpoints" responsiveLayout="scroll" class="p-datatable-sm" :rows="8" :paginator="capabilityEndpoints.length > 8">
+                          <Column field="endpoint" header="Endpoint">
+                            <template #body="slotProps">{{ `#${slotProps.data.endpoint}` }}</template>
+                          </Column>
+                          <Column field="cluster_count" header="Clusters" />
+                          <Column field="clusters" header="Cluster IDs">
+                            <template #body="slotProps">
+                              <span class="text-sm">{{ (slotProps.data.clusters || []).join(', ') || '-' }}</span>
+                            </template>
+                          </Column>
+                        </DataTable>
+                      </div>
+                      <div class="col-12 lg:col-7">
+                        <DataTable :value="capabilityAttributeRows" responsiveLayout="scroll" class="p-datatable-sm" :rows="12" :paginator="capabilityAttributeRows.length > 12">
+                          <Column field="cluster" header="Cluster" />
+                          <Column field="attribute" header="Attribute" />
+                          <Column field="default_raw_u32" header="Default">
+                            <template #body="slotProps">{{ capabilityDefaultRaw(slotProps.data) }}</template>
+                          </Column>
+                          <Column field="length" header="Len">
+                            <template #body="slotProps">{{ displayValue(slotProps.data.length) }}</template>
+                          </Column>
+                          <Column field="type_u8" header="Type">
+                            <template #body="slotProps">{{ displayValue(slotProps.data.type_u8) }}</template>
+                          </Column>
+                        </DataTable>
+                      </div>
+                    </div>
+                  </template>
+                </Card>
+              </div>
+            </div>
+          </TabPanel>
+
           <TabPanel header="Jobs">
             <Card class="detail-card">
               <template #title>Job History</template>
@@ -209,14 +260,54 @@ export default {
       return out.sort((a, b) => String(b.finished_at || b.started_at || b.requested_at || '').localeCompare(String(a.finished_at || a.started_at || a.requested_at || '')));
     },
     modules() {
-      return Array.isArray(this.modulesPayload.modules) ? this.modulesPayload.modules : [];
+      const rows = Array.isArray(this.modulesPayload.modules) ? this.modulesPayload.modules : [];
+      return rows.filter((m) => String(m?.module_id || '') !== 'matter_capabilities');
+    },
+    capabilityModule() {
+      const rows = Array.isArray(this.modulesPayload.modules) ? this.modulesPayload.modules : [];
+      return rows.find((m) => String(m?.module_id || '') === 'matter_capabilities') || null;
+    },
+    capabilityDetails() {
+      const details = this.capabilityModule?.details || {};
+      return details && typeof details === 'object' ? details : {};
+    },
+    capabilityEndpoints() {
+      return Array.isArray(this.capabilityDetails?.endpoints) ? this.capabilityDetails.endpoints : [];
+    },
+    capabilityClusters() {
+      return Array.isArray(this.capabilityDetails?.clusters) ? this.capabilityDetails.clusters : [];
+    },
+    capabilityDefaultsCount() {
+      const n = Number(this.capabilityDetails?.defaults_count);
+      if (Number.isFinite(n) && n >= 0) return n;
+      const map = this.capabilityDetails?.attribute_defaults;
+      return map && typeof map === 'object' ? Object.keys(map).length : 0;
+    },
+    capabilityAttributeRows() {
+      const attrs = Array.isArray(this.capabilityDetails?.attributes) ? this.capabilityDetails.attributes : [];
+      const defaults = this.capabilityDetails?.attribute_defaults;
+      const defaultsMap = defaults && typeof defaults === 'object' ? defaults : {};
+      return attrs.map((entry) => {
+        const text = String(entry || '');
+        const [cluster = '', attribute = ''] = text.split('/');
+        const meta = defaultsMap[text] && typeof defaultsMap[text] === 'object' ? defaultsMap[text] : {};
+        const hasDefault = Object.prototype.hasOwnProperty.call(meta, 'default_raw_u32');
+        return {
+          cluster,
+          attribute,
+          default_raw_u32: meta.default_raw_u32,
+          has_default: hasDefault,
+          length: meta.length,
+          type_u8: meta.type_u8
+        };
+      });
     }
   },
   methods: {
     async refreshAll() {
       await this.refreshDetail();
-      if (this.activeTabIndex === 1) await this.refreshJobs();
-      if (this.activeTabIndex === 2) await this.refreshModules();
+      if (this.activeTabIndex === 1 || this.activeTabIndex === 3) await this.refreshModules();
+      if (this.activeTabIndex === 2) await this.refreshJobs();
     },
     async refreshDetail() {
       this.loading = true;
@@ -263,8 +354,9 @@ export default {
     async onTabChange(event) {
       const idx = Number(event?.index ?? this.activeTabIndex);
       this.activeTabIndex = Number.isFinite(idx) ? idx : 0;
-      if (this.activeTabIndex === 1 && !this.jobsLoaded) await this.refreshJobs();
-      if (this.activeTabIndex === 2 && !this.modulesLoaded) await this.refreshModules();
+      if (this.activeTabIndex === 1 && !this.modulesLoaded) await this.refreshModules();
+      if (this.activeTabIndex === 2 && !this.jobsLoaded) await this.refreshJobs();
+      if (this.activeTabIndex === 3 && !this.modulesLoaded) await this.refreshModules();
     },
     async enqueueAnalyze() {
       this.enqueueLoading = true;
@@ -338,6 +430,10 @@ export default {
     displayValue(value) {
       if (value === null || value === undefined || value === '') return '-';
       return value;
+    },
+    capabilityDefaultRaw(row) {
+      if (!row || row.has_default !== true) return 'N/A';
+      return String(row.default_raw_u32);
     }
   },
   mounted() {
