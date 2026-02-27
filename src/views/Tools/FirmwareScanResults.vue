@@ -150,8 +150,11 @@
                   </div>
                 </template>
               </Column>
-              <Column field="sdk_best_guess_base" header="SDK" headerClass="scan-col-sdk" bodyClass="scan-col-sdk">
-                <template #body="slotProps">{{ displayValue(slotProps.data.sdk_best_guess_base) }}</template>
+              <Column field="sdk_decoded_version" header="SDK Decoded" headerClass="scan-col-sdk" bodyClass="scan-col-sdk">
+                <template #body="slotProps">{{ sdkDisplayValue(slotProps.data.sdk_decoded_version) }}</template>
+              </Column>
+              <Column field="sdk_inferred_version" header="SDK Inferred" headerClass="scan-col-sdk" bodyClass="scan-col-sdk">
+                <template #body="slotProps">{{ sdkDisplayValue(slotProps.data.sdk_inferred_version) }}</template>
               </Column>
               <Column header="Actions" headerClass="scan-col-actions" bodyClass="scan-col-actions">
                 <template #body="slotProps">
@@ -219,7 +222,10 @@
                     <div class="col-6"><strong>Validation Path:</strong> <Tag :value="displayValue(selectedResult.verdict_validation_path)" :severity="verdictSeverity(selectedResult.verdict_validation_path)" /></div>
                     <div class="col-6"><strong>Authenticity:</strong> <Tag :value="selectedResult.verdict_authenticity" :severity="verdictSeverity(selectedResult.verdict_authenticity)" /></div>
                     <div class="col-6"><strong>Chipset:</strong> {{ displayValue(selectedResult.chipset) }}</div>
-                    <div class="col-6"><strong>SDK Guess:</strong> {{ displayValue(selectedResult.sdk_best_guess_base) }}</div>
+                    <div class="col-6"><strong>SDK Decoded:</strong> {{ sdkDisplayValue(selectedResult.sdk_decoded_version) }}</div>
+                    <div class="col-6"><strong>SDK Inferred:</strong> {{ sdkDisplayValue(selectedResult.sdk_inferred_version) }}</div>
+                    <div class="col-6"><strong>SDK Primary:</strong> {{ sdkDisplayValue(selectedResult.sdk_primary_version || selectedResult.sdk_best_guess_base) }}</div>
+                    <div class="col-6"><strong>SDK Consistency:</strong> {{ sdkDisplayValue(selectedResult.sdk_version_consistency) }}</div>
                     <div class="col-12"><strong>Input Firmware:</strong> {{ displayValue(selectedResult.input_firmware_name) }}</div>
                   </div>
                 </TabPanel>
@@ -233,7 +239,11 @@
                 </TabPanel>
 
                 <TabPanel header="SDK Evidence">
-                  <div class="mb-2"><strong>Best Guess:</strong> {{ displayValue(sdkBestGuess) }}</div>
+                  <div class="mb-2"><strong>Decoded:</strong> {{ sdkDisplayValue(sdkDecodedVersion) }}</div>
+                  <div class="mb-2"><strong>Inferred:</strong> {{ sdkDisplayValue(sdkInferredVersion) }}</div>
+                  <div class="mb-2"><strong>Primary:</strong> {{ sdkDisplayValue(sdkBestGuess) }}</div>
+                  <div class="mb-2"><strong>Consistency:</strong> {{ sdkDisplayValue(sdkConsistency) }}</div>
+                  <div class="mb-2"><strong>Inferred Source:</strong> {{ sdkDisplayValue(sdkInferredSource) }}</div>
                   <div class="mb-2">
                     <strong>Possible Versions:</strong>
                     <span v-if="sdkPossible.length === 0" class="text-600"> - </span>
@@ -379,7 +389,20 @@ export default {
       return this.reportOutputs?.sdk_result || {};
     },
     sdkBestGuess() {
-      return this.sdkResult?.best_guess_base || this.selectedResult?.sdk_best_guess_base || null;
+      return this.sdkResult?.best_guess_base || this.selectedResult?.sdk_primary_version || this.selectedResult?.sdk_best_guess_base || null;
+    },
+    sdkDecodedVersion() {
+      const decoded = this.sdkResult?.decoded_specification_version?.decoded || null;
+      return decoded?.version_4tuple || this.selectedResult?.sdk_decoded_version || null;
+    },
+    sdkInferredVersion() {
+      return this.sdkResult?.inferred_best_guess_base || this.selectedResult?.sdk_inferred_version || null;
+    },
+    sdkConsistency() {
+      return this.sdkResult?.decoded_inferred_consistency || this.selectedResult?.sdk_version_consistency || null;
+    },
+    sdkInferredSource() {
+      return this.sdkResult?.inferred_source || null;
     },
     sdkPossible() {
       return Array.isArray(this.sdkResult?.possible_versions) ? this.sdkResult.possible_versions : [];
@@ -614,6 +637,10 @@ export default {
     displayValue(value) {
       if (value === null || value === undefined || value === '') return '-';
       return value;
+    },
+    sdkDisplayValue(value) {
+      if (value === null || value === undefined || String(value).trim() === '') return 'N/A';
+      return String(value);
     },
     displayPathTail(value) {
       const text = String(value || '').trim();

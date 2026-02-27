@@ -84,7 +84,10 @@
                       <div class="col-12 md:col-6"><strong>Integrity:</strong> {{ detail.latest_result.verdict_integrity }}</div>
                       <div class="col-12 md:col-6"><strong>Authenticity:</strong> {{ detail.latest_result.verdict_authenticity }}</div>
                       <div class="col-12 md:col-6"><strong>Chipset:</strong> {{ detail.latest_result.chipset }}</div>
-                      <div class="col-12 md:col-6"><strong>SDK:</strong> {{ displayValue(detail.latest_result.sdk_best_guess_base) }}</div>
+                      <div class="col-12 md:col-6"><strong>SDK Decoded:</strong> {{ sdkDisplayValue(detail.latest_result.sdk_decoded_version) }}</div>
+                      <div class="col-12 md:col-6"><strong>SDK Inferred:</strong> {{ sdkDisplayValue(detail.latest_result.sdk_inferred_version) }}</div>
+                      <div class="col-12 md:col-6"><strong>SDK Primary:</strong> {{ sdkDisplayValue(detail.latest_result.sdk_primary_version || detail.latest_result.sdk_best_guess_base) }}</div>
+                      <div class="col-12 md:col-6"><strong>SDK Consistency:</strong> {{ sdkDisplayValue(detail.latest_result.sdk_version_consistency) }}</div>
                     </div>
                     <div v-else class="text-600">No completed analysis yet for this firmware group.</div>
                   </template>
@@ -540,6 +543,10 @@ export default {
     displayValue(value) {
       if (value === null || value === undefined || value === '') return '-';
       return value;
+    },
+    sdkDisplayValue(value) {
+      if (value === null || value === undefined || String(value).trim() === '') return 'N/A';
+      return String(value);
     },
     capabilityDefaultRaw(row) {
       if (!row || row.has_default !== true) return 'N/A';
