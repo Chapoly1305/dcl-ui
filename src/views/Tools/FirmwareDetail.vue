@@ -88,6 +88,8 @@
                       <div class="col-12 md:col-6"><strong>SDK Inferred:</strong> {{ sdkDisplayValue(detail.latest_result.sdk_inferred_version) }}</div>
                       <div class="col-12 md:col-6"><strong>SDK Primary:</strong> {{ sdkDisplayValue(detail.latest_result.sdk_primary_version || detail.latest_result.sdk_best_guess_base) }}</div>
                       <div class="col-12 md:col-6"><strong>SDK Consistency:</strong> {{ sdkDisplayValue(detail.latest_result.sdk_version_consistency) }}</div>
+                      <div class="col-12 md:col-6"><strong>Container Entropy:</strong> {{ entropyDisplay(latestMatterHeader.container_entropy_bits_per_byte) }}</div>
+                      <div class="col-12 md:col-6"><strong>Payload Entropy:</strong> {{ entropyDisplay(latestMatterHeader.payload_entropy_bits_per_byte) }}</div>
                     </div>
                     <div v-else class="text-600">No completed analysis yet for this firmware group.</div>
                   </template>
@@ -109,6 +111,9 @@
                       <div class="col-6 md:col-3"><strong>Defaults:</strong> {{ capabilityDefaultsCount }}</div>
                       <div class="col-6 md:col-3"><strong>Global Attributes:</strong> {{ capabilityGlobalAttributeRows.length }}</div>
                     </div>
+                    <Message v-if="capabilityMissingReasonLabel" severity="warn" :closable="false" class="mb-3">
+                      {{ capabilityMissingReasonLabel }}
+                    </Message>
                     <div v-if="capabilityEndpoints.length === 0 && capabilityAttributeRows.length === 0" class="text-600">
                       No capability output available for this run.
                     </div>
@@ -310,6 +315,14 @@ export default {
     firmwareSha256() {
       return String(this.$route.params.sha256 || '').toLowerCase();
     },
+    latestMatterHeader() {
+      const summary = this.detail?.latest_result?.summary_json;
+      if (!summary || typeof summary !== 'object') return {};
+      const matter = summary.matter_ota;
+      if (!matter || typeof matter !== 'object') return {};
+      const header = matter.header;
+      return header && typeof header === 'object' ? header : {};
+    },
     overviewKpis() {
       return [
         { label: 'Duplicate Records', value: this.detail.duplicate_group_size || 0 },
@@ -338,6 +351,19 @@ export default {
     capabilityDetails() {
       const details = this.capabilityModule?.details || {};
       return details && typeof details === 'object' ? details : {};
+    },
+    capabilityMissingReason() {
+      const reason = this.capabilityDetails?._artifact_reason;
+      return typeof reason === 'string' ? reason : '';
+    },
+    capabilityMissingReasonLabel() {
+      if (this.capabilityMissingReason === 'run_artifacts_not_found') {
+        return 'Capability artifacts for this historical run are unavailable on this host. Re-run Analyze to regenerate capability data.';
+      }
+      if (this.capabilityMissingReason === 'capability_artifact_missing') {
+        return 'Capability stage artifacts are missing for this run. Re-run Analyze to regenerate capability data.';
+      }
+      return '';
     },
     capabilityEndpoints() {
       return Array.isArray(this.capabilityDetails?.endpoints) ? this.capabilityDetails.endpoints : [];
@@ -547,6 +573,11 @@ export default {
     sdkDisplayValue(value) {
       if (value === null || value === undefined || String(value).trim() === '') return 'N/A';
       return String(value);
+    },
+    entropyDisplay(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return 'N/A';
+      return `${n.toFixed(6)} bits/byte`;
     },
     capabilityDefaultRaw(row) {
       if (!row || row.has_default !== true) return 'N/A';
