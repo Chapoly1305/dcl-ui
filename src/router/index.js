@@ -14,6 +14,7 @@ import FirmwareAvailable from '@/views/Tools/FirmwareAvailable.vue'
 import FirmwareDetail from '@/views/Tools/FirmwareDetail.vue'
 import FirmwareScanQueue from '@/views/Tools/FirmwareScanQueue.vue'
 import FirmwareScanResults from '@/views/Tools/FirmwareScanResults.vue'
+import FirmwareWebhookSettings from '@/views/Tools/FirmwareWebhookSettings.vue'
 const routerHistory = createWebHistory()
 const routes = [
     {
@@ -35,6 +36,7 @@ const routes = [
     { path: '/firmware-security/firmware/:sha256', component: FirmwareDetail },
     { path: '/firmware-security/scan-queue', component: FirmwareScanQueue },
     { path: '/firmware-security/scan-results', component: FirmwareScanResults },
+    { path: '/firmware-security/webhook-settings', component: FirmwareWebhookSettings },
 ]
 
 const router = createRouter({

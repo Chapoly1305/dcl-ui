@@ -58,7 +58,8 @@ export default {
                     items: [
                         { label: 'Available Firmware', icon: 'pi pi-fw pi-box', to: '/firmware-security/available-firmware' },
                         { label: 'Scan Queue', icon: 'pi pi-fw pi-clock', to: '/firmware-security/scan-queue' },
-                        { label: 'Scan Results', icon: 'pi pi-fw pi-chart-line', to: '/firmware-security/scan-results' }
+                        { label: 'Scan Results', icon: 'pi pi-fw pi-chart-line', to: '/firmware-security/scan-results' },
+                        { label: 'Webhook Settings', icon: 'pi pi-fw pi-bell', to: '/firmware-security/webhook-settings' }
                     ]
                 },
                 {
