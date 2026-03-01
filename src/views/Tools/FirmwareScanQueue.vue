@@ -241,6 +241,7 @@
 
 <script>
 import FirmwareJobProgressModal from '@/components/FirmwareJobProgressModal.vue';
+import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
 
 export default {
   name: 'FirmwareScanQueue',
@@ -248,9 +249,9 @@ export default {
     FirmwareJobProgressModal
   },
   data() {
-    const base = (import.meta.env.VITE_APP_MATTEROVERWATCH_API_BASE || 'http://127.0.0.1:8080').replace(/\/$/, '');
+    const { requestBase } = resolveMatteroverwatchApiBase();
     return {
-      apiBase: base,
+      apiBase: requestBase,
       loading: false,
       error: null,
       statusNote: null,
@@ -297,6 +298,11 @@ export default {
     async refreshQueue() {
       this.loading = true;
       this.error = null;
+      if (!this.apiBase) {
+        this.error = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
+        this.loading = false;
+        return;
+      }
       try {
         const response = await fetch(`${this.apiBase}/api/v1/jobs`);
         if (!response.ok) {
@@ -320,6 +326,11 @@ export default {
       this.actionLoading.poll = true;
       this.error = null;
       this.statusNote = null;
+      if (!this.apiBase) {
+        this.error = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
+        this.actionLoading.poll = false;
+        return;
+      }
       try {
         const response = await fetch(`${this.apiBase}/api/v1/jobs/poll-now`, { method: 'POST' });
         if (!response.ok) {
@@ -337,6 +348,11 @@ export default {
       this.actionLoading.validate = true;
       this.error = null;
       this.statusNote = null;
+      if (!this.apiBase) {
+        this.error = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
+        this.actionLoading.validate = false;
+        return;
+      }
       try {
         const response = await fetch(`${this.apiBase}/api/v1/jobs/validate-conformance`, { method: 'POST' });
         if (!response.ok) {

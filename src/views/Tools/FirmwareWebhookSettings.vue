@@ -8,6 +8,7 @@
               <div class="flex align-items-center gap-2 flex-wrap">
                 <span>Webhook Notification Settings</span>
                 <Tag :value="`Active Network: ${activeNetwork || 'unknown'}`" severity="info" />
+                <Tag :value="`API: ${apiDisplayBase || apiBase || 'unset'}`" severity="contrast" />
               </div>
               <Button
                 icon="pi pi-refresh"
@@ -111,12 +112,15 @@
 </template>
 
 <script>
+import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
+
 export default {
   name: 'FirmwareWebhookSettings',
   data() {
-    const apiBase = (import.meta.env.VITE_APP_MATTEROVERWATCH_API_BASE || '').replace(/\/$/, '');
+    const { requestBase, displayBase } = resolveMatteroverwatchApiBase();
     return {
-      apiBase,
+      apiBase: requestBase,
+      apiDisplayBase: displayBase,
       loading: false,
       saving: false,
       error: null,
@@ -152,13 +156,16 @@ export default {
       this.error = null;
       this.statusNote = null;
       if (!this.apiBase) {
-        this.error = 'Missing VITE_APP_MATTEROVERWATCH_API_BASE. Set it before starting dcl-ui.';
+        this.error = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
         this.activeNetwork = 'unknown';
         this.loading = false;
         return;
       }
       try {
-        const response = await fetch(`${this.apiBase}/api/v1/settings/webhook`);
+        const response = await fetch(`${this.apiBase}/api/v1/settings/webhook?_=${Date.now()}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
+        });
         if (!response.ok) {
           throw new Error(`Failed to load webhook settings (HTTP ${response.status})`);
         }
@@ -166,7 +173,7 @@ export default {
         this.applyPayload(payload);
       } catch (err) {
         console.error('Webhook settings fetch error:', err);
-        this.error = `Failed to connect to API at ${this.apiBase}. Ensure the MatterOverwatch service is running.`;
+        this.error = `Failed to connect to API at ${this.apiDisplayBase || this.apiBase}. Ensure the MatterOverwatch service is running.`;
         this.activeNetwork = 'unknown';
       } finally {
         this.loading = false;
@@ -177,7 +184,7 @@ export default {
       this.error = null;
       this.statusNote = null;
       if (!this.apiBase) {
-        this.error = 'Missing VITE_APP_MATTEROVERWATCH_API_BASE. Set it before starting dcl-ui.';
+        this.error = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
         this.saving = false;
         return;
       }

@@ -10,6 +10,11 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
     const apiTarget = (env.VITE_APP_DCL_PROXY_API_TARGET || 'https://on.test-net.dcl.csa-iot.org').replace(/\/$/, '');
     const rpcTarget = (env.VITE_APP_DCL_PROXY_RPC_TARGET || `${apiTarget}:26657`).replace(/\/$/, '');
+    const matteroverwatchTarget = (
+        env.VITE_APP_MATTEROVERWATCH_PROXY_TARGET ||
+        env.VITE_APP_MATTEROVERWATCH_API_BASE ||
+        'http://127.0.0.1:8080'
+    ).replace(/\/$/, '');
 
     return {
         plugins: [
@@ -58,6 +63,11 @@ export default defineConfig(({ mode }) => {
                     target: apiTarget,
                     changeOrigin: true,
                     rewrite: (path) => path.replace(/^\/api/, '')
+                },
+                '/mwapi': {
+                    target: matteroverwatchTarget,
+                    changeOrigin: true,
+                    rewrite: (path) => path.replace(/^\/mwapi/, '')
                 },
                 '/rpc': {
                     target: rpcTarget,

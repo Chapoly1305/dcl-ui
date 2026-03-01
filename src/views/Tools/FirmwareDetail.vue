@@ -256,6 +256,7 @@
 <script>
 import VueJsonPretty from 'vue-json-pretty';
 import 'vue-json-pretty/lib/styles.css';
+import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
 
 const ZCL_TYPE_NAME = {
   0x08: 'data8',
@@ -306,9 +307,9 @@ export default {
     VueJsonPretty
   },
   data() {
-    const base = (import.meta.env.VITE_APP_MATTEROVERWATCH_API_BASE || 'http://127.0.0.1:8080').replace(/\/$/, '');
+    const { requestBase } = resolveMatteroverwatchApiBase();
     return {
-      apiBase: base,
+      apiBase: requestBase,
       loading: false,
       enqueueLoading: false,
       error: null,
@@ -472,6 +473,11 @@ export default {
       this.loading = true;
       this.error = null;
       this.statusNote = null;
+      if (!this.apiBase) {
+        this.error = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
+        this.loading = false;
+        return;
+      }
       try {
         const detailResp = await fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}`);
         if (!detailResp.ok) throw new Error(`Detail request failed (${detailResp.status})`);
@@ -485,6 +491,11 @@ export default {
     async refreshJobs() {
       this.loading = true;
       this.error = null;
+      if (!this.apiBase) {
+        this.error = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
+        this.loading = false;
+        return;
+      }
       try {
         const jobsResp = await fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}/jobs`);
         if (!jobsResp.ok) throw new Error(`Jobs request failed (${jobsResp.status})`);
@@ -499,6 +510,11 @@ export default {
     async refreshModules() {
       this.loading = true;
       this.error = null;
+      if (!this.apiBase) {
+        this.error = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
+        this.loading = false;
+        return;
+      }
       try {
         const modulesResp = await fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}/modules`);
         if (!modulesResp.ok) throw new Error(`Modules request failed (${modulesResp.status})`);
@@ -521,6 +537,11 @@ export default {
       this.enqueueLoading = true;
       this.error = null;
       this.statusNote = null;
+      if (!this.apiBase) {
+        this.error = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
+        this.enqueueLoading = false;
+        return;
+      }
       try {
         const response = await fetch(`${this.apiBase}/api/v1/jobs/analyze-firmware`, {
           method: 'POST',

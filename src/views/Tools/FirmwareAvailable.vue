@@ -263,6 +263,7 @@
 
 <script>
 import FirmwareJobProgressModal from '@/components/FirmwareJobProgressModal.vue';
+import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
 
 export default {
   name: 'FirmwareAvailable',
@@ -270,9 +271,9 @@ export default {
     FirmwareJobProgressModal
   },
   data() {
-    const base = (import.meta.env.VITE_APP_MATTEROVERWATCH_API_BASE || 'http://127.0.0.1:8080').replace(/\/$/, '');
+    const { requestBase } = resolveMatteroverwatchApiBase();
     return {
-      metadataApiBase: base,
+      metadataApiBase: requestBase,
       loading: false,
       error: null,
       actionNote: null,
@@ -427,6 +428,15 @@ export default {
       this.loading = true;
       this.error = null;
       this.actionNote = null;
+      if (!this.metadataApiBase) {
+        this.error = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
+        this.rows = [];
+        this.totalCount = 0;
+        this.network = '';
+        this.warning = null;
+        this.loading = false;
+        return;
+      }
       try {
         const url = `${this.metadataApiBase}/api/v1/firmware/available?${this.buildQueryString(refresh)}`;
         const response = await fetch(url);
@@ -511,6 +521,10 @@ export default {
       return 'none';
     },
     async enqueueAnalyze(row) {
+      if (!this.metadataApiBase) {
+        this.error = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
+        return;
+      }
       try {
         const sha = String(row?.firmwareSha256 || '').trim();
         const payload = {

@@ -306,12 +306,14 @@
 </template>
 
 <script>
+import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
+
 export default {
   name: 'FirmwareScanResults',
   data() {
-    const base = (import.meta.env.VITE_APP_MATTEROVERWATCH_API_BASE || 'http://127.0.0.1:8080').replace(/\/$/, '');
+    const { requestBase } = resolveMatteroverwatchApiBase();
     return {
-      apiBase: base,
+      apiBase: requestBase,
       loading: false,
       error: null,
       rows: [],
@@ -482,6 +484,13 @@ export default {
     async loadResults() {
       this.loading = true;
       this.error = null;
+      if (!this.apiBase) {
+        this.error = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
+        this.rows = [];
+        this.totalCount = 0;
+        this.loading = false;
+        return;
+      }
       try {
         const response = await fetch(`${this.apiBase}/api/v1/results?${this.buildQuery()}`);
         if (!response.ok) throw new Error(`Results request failed (${response.status})`);
@@ -550,6 +559,11 @@ export default {
     async loadResultDetail(resultId) {
       this.detailLoading = true;
       this.detailError = null;
+      if (!this.apiBase) {
+        this.detailError = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
+        this.detailLoading = false;
+        return;
+      }
       try {
         const response = await fetch(`${this.apiBase}/api/v1/results/${encodeURIComponent(resultId)}`);
         if (!response.ok) throw new Error(`Result detail request failed (${response.status})`);
