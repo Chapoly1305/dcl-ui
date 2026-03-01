@@ -244,8 +244,9 @@
                 </template>
               </Column>
             </DataTable>
-            <div v-if="!loading && !error && totalCount === 0" class="text-600 mt-3">
-              No firmware metadata found for this network yet.
+            <div v-if="!loading && !error && totalCount === 0" class="flex flex-column align-items-center justify-content-center p-5 text-500">
+              <i class="pi pi-inbox text-4xl mb-3"></i>
+              <span class="text-lg">No firmware metadata found for this network yet.</span>
             </div>
           </template>
         </Card>

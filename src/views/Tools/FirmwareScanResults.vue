@@ -177,130 +177,131 @@
               </Column>
             </DataTable>
 
-            <div v-if="!loading && totalCount === 0" class="text-600 mt-2">No scan results found for current filters.</div>
-          </template>
-        </Card>
-      </div>
-
-      <div class="col-12">
-        <Card class="report-card">
-          <template #title>
-            <div class="flex align-items-center justify-content-between gap-1 flex-wrap">
-              <div class="flex align-items-center gap-1 flex-wrap">
-                <span>Rendered Report</span>
-                <Tag v-if="selectedResult" :value="`Result: ${shortId(selectedResult.result_id)}`" severity="info" />
-              </div>
-              <Button
-                icon="pi pi-refresh"
-                class="p-button-text p-button-sm p-button-rounded"
-                :loading="detailLoading"
-                v-tooltip.top="'Refresh selected report'"
-                :disabled="!selectedResultId"
-                @click="reloadSelectedDetail"
-              />
-            </div>
-          </template>
-          <template #content>
-            <Message v-if="detailError" severity="error" :closable="false" class="mb-2">{{ detailError }}</Message>
-
-            <div v-if="!selectedResultId && !detailLoading" class="text-600">Select a row to read the report.</div>
-
-            <div v-else-if="detailLoading" class="flex align-items-center gap-2 text-600">
-              <ProgressSpinner style="width: 1.5rem; height: 1.5rem" strokeWidth="6" />
-              Loading report...
-            </div>
-
-            <div v-else-if="selectedResult">
-              <TabView v-model:activeIndex="detailTabIndex">
-                <TabPanel header="Summary">
-                  <div class="grid">
-                    <div class="col-6"><strong>Run ID:</strong> <code>{{ selectedResult.run_id }}</code></div>
-                    <div class="col-6"><strong>Result ID:</strong> <code>{{ selectedResult.result_id }}</code></div>
-                    <div class="col-6"><strong>Analyzed:</strong> {{ formatTimestamp(selectedResult.analyzed_at) }}</div>
-                    <div class="col-6"><strong>Status:</strong> <Tag :value="selectedResult.status" :severity="runStatusSeverity(selectedResult.status)" /></div>
-                    <div class="col-6"><strong>Payload Hash:</strong> <Tag :value="selectedResult.verdict_integrity" :severity="verdictSeverity(selectedResult.verdict_integrity)" /></div>
-                    <div class="col-6"><strong>Validation Path:</strong> <Tag :value="displayValue(selectedResult.verdict_validation_path)" :severity="verdictSeverity(selectedResult.verdict_validation_path)" /></div>
-                    <div class="col-6"><strong>Authenticity:</strong> <Tag :value="selectedResult.verdict_authenticity" :severity="verdictSeverity(selectedResult.verdict_authenticity)" /></div>
-                    <div class="col-6"><strong>Chipset:</strong> {{ displayValue(selectedResult.chipset) }}</div>
-                    <div class="col-6"><strong>SDK Decoded:</strong> {{ sdkDisplayValue(selectedResult.sdk_decoded_version) }}</div>
-                    <div class="col-6"><strong>SDK Inferred:</strong> {{ sdkDisplayValue(selectedResult.sdk_inferred_version) }}</div>
-                    <div class="col-6"><strong>SDK Primary:</strong> {{ sdkDisplayValue(selectedResult.sdk_primary_version || selectedResult.sdk_best_guess_base) }}</div>
-                    <div class="col-6"><strong>SDK Consistency:</strong> {{ sdkDisplayValue(selectedResult.sdk_version_consistency) }}</div>
-                    <div class="col-12"><strong>Input Firmware:</strong> {{ displayValue(selectedResult.input_firmware_name) }}</div>
-                  </div>
-                </TabPanel>
-
-                <TabPanel header="OTA/Header">
-                  <DataTable :value="otaRows" responsiveLayout="scroll" class="p-datatable-sm">
-                    <Column field="label" header="Field" />
-                    <Column field="value" header="Value" />
-                  </DataTable>
-                  <div v-if="otaRows.length === 0" class="text-600 mt-2">No OTA header data available.</div>
-                </TabPanel>
-
-                <TabPanel header="SDK Evidence">
-                  <div class="mb-2"><strong>Decoded:</strong> {{ sdkDisplayValue(sdkDecodedVersion) }}</div>
-                  <div class="mb-2"><strong>Inferred:</strong> {{ sdkDisplayValue(sdkInferredVersion) }}</div>
-                  <div class="mb-2"><strong>Primary:</strong> {{ sdkDisplayValue(sdkBestGuess) }}</div>
-                  <div class="mb-2"><strong>Consistency:</strong> {{ sdkDisplayValue(sdkConsistency) }}</div>
-                  <div class="mb-2"><strong>Inferred Source:</strong> {{ sdkDisplayValue(sdkInferredSource) }}</div>
-                  <div class="mb-2">
-                    <strong>Possible Versions:</strong>
-                    <span v-if="sdkPossible.length === 0" class="text-600"> - </span>
-                    <Tag v-for="v in sdkPossible" :key="`possible-${v}`" :value="v" severity="success" class="mr-2 mb-2" />
-                  </div>
-                  <div class="mb-2">
-                    <strong>Impossible Versions:</strong>
-                    <span v-if="sdkImpossible.length === 0" class="text-600"> - </span>
-                    <Tag v-for="v in sdkImpossible" :key="`impossible-${v}`" :value="v" severity="danger" class="mr-2 mb-2" />
-                  </div>
-                  <div class="mb-2">
-                    <strong>Warnings:</strong>
-                    <span v-if="sdkWarnings.length === 0" class="text-600"> - </span>
-                    <Tag v-for="(v, idx) in sdkWarnings" :key="`warn-${idx}`" :value="v" severity="warning" class="mr-2 mb-2" />
-                  </div>
-                </TabPanel>
-
-                <TabPanel header="Stages">
-                  <DataTable :value="stageRows" responsiveLayout="scroll" class="p-datatable-sm">
-                    <Column field="name" header="Stage">
-                      <template #body="slotProps">{{ stageLabel(slotProps.data.name) }}</template>
-                    </Column>
-                    <Column field="status" header="Status">
-                      <template #body="slotProps">
-                        <Tag :value="slotProps.data.status" :severity="stageSeverity(slotProps.data.status)" />
-                      </template>
-                    </Column>
-                    <Column field="started_at" header="Started">
-                      <template #body="slotProps">{{ displayValue(formatTimestamp(slotProps.data.started_at)) }}</template>
-                    </Column>
-                    <Column field="ended_at" header="Ended">
-                      <template #body="slotProps">{{ displayValue(formatTimestamp(slotProps.data.ended_at)) }}</template>
-                    </Column>
-                    <Column field="duration" header="Duration">
-                      <template #body="slotProps">{{ slotProps.data.duration }}</template>
-                    </Column>
-                    <Column field="error" header="Error">
-                      <template #body="slotProps">{{ displayValue(slotProps.data.error) }}</template>
-                    </Column>
-                  </DataTable>
-                </TabPanel>
-
-                <TabPanel header="Provenance">
-                  <div class="grid">
-                    <div class="col-12"><strong>Source Network:</strong> {{ displayValue(selectedResult.source_network) }}</div>
-                    <div class="col-12"><strong>Source Path:</strong> {{ displayValue(selectedResult.source_rel_path) }}</div>
-                    <div class="col-12"><strong>Firmware Store File:</strong> {{ displayPathTail(selectedResult.firmware_store_path) }}</div>
-                    <div class="col-12"><strong>Report File:</strong> {{ displayPathTail(selectedResult.report_path) }}</div>
-                    <div class="col-12"><strong>Parent Run ID:</strong> {{ displayValue(selectedResult.parent_run_id) }}</div>
-                  </div>
-                </TabPanel>
-              </TabView>
+            <div v-if="!loading && totalCount === 0" class="flex flex-column align-items-center justify-content-center p-5 text-500">
+              <i class="pi pi-filter-slash text-4xl mb-3"></i>
+              <span class="text-lg">No scan results found for current filters.</span>
             </div>
           </template>
         </Card>
       </div>
     </div>
+
+    <Sidebar v-model:visible="reportSidebarVisible" position="right" class="w-full md:w-30rem lg:w-40rem">
+      <template #header>
+        <div class="flex align-items-center gap-3 w-full">
+          <span class="text-xl font-bold">Rendered Report</span>
+          <Tag v-if="selectedResult" :value="`Result: ${shortId(selectedResult.result_id)}`" severity="info" />
+          <Button
+            icon="pi pi-refresh"
+            class="p-button-text p-button-sm p-button-rounded ml-auto mr-2"
+            :loading="detailLoading"
+            v-tooltip.top="'Refresh selected report'"
+            :disabled="!selectedResultId"
+            @click="reloadSelectedDetail"
+          />
+        </div>
+      </template>
+
+      <Message v-if="detailError" severity="error" :closable="false" class="mb-2">{{ detailError }}</Message>
+
+      <div v-if="!selectedResultId && !detailLoading" class="flex flex-column align-items-center justify-content-center p-5 text-400">
+        <i class="pi pi-file text-4xl mb-3"></i>
+        <span class="text-lg">Select a row to read the report.</span>
+      </div>
+
+      <div v-else-if="detailLoading" class="flex align-items-center justify-content-center p-5 text-500 gap-3">
+        <ProgressSpinner style="width: 2rem; height: 2rem" strokeWidth="6" />
+        <span class="text-lg">Loading report...</span>
+      </div>
+
+      <div v-else-if="selectedResult" class="mt-2">
+        <TabView v-model:activeIndex="detailTabIndex">
+          <TabPanel header="Summary">
+            <div class="grid">
+              <div class="col-6"><strong>Run ID:</strong> <code>{{ selectedResult.run_id }}</code></div>
+              <div class="col-6"><strong>Result ID:</strong> <code>{{ selectedResult.result_id }}</code></div>
+              <div class="col-6"><strong>Analyzed:</strong> {{ formatTimestamp(selectedResult.analyzed_at) }}</div>
+              <div class="col-6"><strong>Status:</strong> <Tag :value="selectedResult.status" :severity="runStatusSeverity(selectedResult.status)" /></div>
+              <div class="col-6"><strong>Payload Hash:</strong> <Tag :value="selectedResult.verdict_integrity" :severity="verdictSeverity(selectedResult.verdict_integrity)" /></div>
+              <div class="col-6"><strong>Validation Path:</strong> <Tag :value="displayValue(selectedResult.verdict_validation_path)" :severity="verdictSeverity(selectedResult.verdict_validation_path)" /></div>
+              <div class="col-6"><strong>Authenticity:</strong> <Tag :value="selectedResult.verdict_authenticity" :severity="verdictSeverity(selectedResult.verdict_authenticity)" /></div>
+              <div class="col-6"><strong>Chipset:</strong> {{ displayValue(selectedResult.chipset) }}</div>
+              <div class="col-6"><strong>SDK Decoded:</strong> {{ sdkDisplayValue(selectedResult.sdk_decoded_version) }}</div>
+              <div class="col-6"><strong>SDK Inferred:</strong> {{ sdkDisplayValue(selectedResult.sdk_inferred_version) }}</div>
+              <div class="col-6"><strong>SDK Primary:</strong> {{ sdkDisplayValue(selectedResult.sdk_primary_version || selectedResult.sdk_best_guess_base) }}</div>
+              <div class="col-6"><strong>SDK Consistency:</strong> {{ sdkDisplayValue(selectedResult.sdk_version_consistency) }}</div>
+              <div class="col-12"><strong>Input Firmware:</strong> {{ displayValue(selectedResult.input_firmware_name) }}</div>
+            </div>
+          </TabPanel>
+
+          <TabPanel header="OTA/Header">
+            <DataTable :value="otaRows" responsiveLayout="scroll" class="p-datatable-sm">
+              <Column field="label" header="Field" />
+              <Column field="value" header="Value" />
+            </DataTable>
+            <div v-if="otaRows.length === 0" class="text-600 mt-2">No OTA header data available.</div>
+          </TabPanel>
+
+          <TabPanel header="SDK Evidence">
+            <div class="mb-2"><strong>Decoded:</strong> {{ sdkDisplayValue(sdkDecodedVersion) }}</div>
+            <div class="mb-2"><strong>Inferred:</strong> {{ sdkDisplayValue(sdkInferredVersion) }}</div>
+            <div class="mb-2"><strong>Primary:</strong> {{ sdkDisplayValue(sdkBestGuess) }}</div>
+            <div class="mb-2"><strong>Consistency:</strong> {{ sdkDisplayValue(sdkConsistency) }}</div>
+            <div class="mb-2"><strong>Inferred Source:</strong> {{ sdkDisplayValue(sdkInferredSource) }}</div>
+            <div class="mb-2">
+              <strong>Possible Versions:</strong>
+              <span v-if="sdkPossible.length === 0" class="text-600"> - </span>
+              <Tag v-for="v in sdkPossible" :key="`possible-${v}`" :value="v" severity="success" class="mr-2 mb-2" />
+            </div>
+            <div class="mb-2">
+              <strong>Impossible Versions:</strong>
+              <span v-if="sdkImpossible.length === 0" class="text-600"> - </span>
+              <Tag v-for="v in sdkImpossible" :key="`impossible-${v}`" :value="v" severity="danger" class="mr-2 mb-2" />
+            </div>
+            <div class="mb-2">
+              <strong>Warnings:</strong>
+              <span v-if="sdkWarnings.length === 0" class="text-600"> - </span>
+              <Tag v-for="(v, idx) in sdkWarnings" :key="`warn-${idx}`" :value="v" severity="warning" class="mr-2 mb-2" />
+            </div>
+          </TabPanel>
+
+          <TabPanel header="Stages">
+            <DataTable :value="stageRows" responsiveLayout="scroll" class="p-datatable-sm">
+              <Column field="name" header="Stage">
+                <template #body="slotProps">{{ stageLabel(slotProps.data.name) }}</template>
+              </Column>
+              <Column field="status" header="Status">
+                <template #body="slotProps">
+                  <Tag :value="slotProps.data.status" :severity="stageSeverity(slotProps.data.status)" />
+                </template>
+              </Column>
+              <Column field="started_at" header="Started">
+                <template #body="slotProps">{{ displayValue(formatTimestamp(slotProps.data.started_at)) }}</template>
+              </Column>
+              <Column field="ended_at" header="Ended">
+                <template #body="slotProps">{{ displayValue(formatTimestamp(slotProps.data.ended_at)) }}</template>
+              </Column>
+              <Column field="duration" header="Duration">
+                <template #body="slotProps">{{ slotProps.data.duration }}</template>
+              </Column>
+              <Column field="error" header="Error">
+                <template #body="slotProps">{{ displayValue(slotProps.data.error) }}</template>
+              </Column>
+            </DataTable>
+          </TabPanel>
+
+          <TabPanel header="Provenance">
+            <div class="grid">
+              <div class="col-12"><strong>Source Network:</strong> {{ displayValue(selectedResult.source_network) }}</div>
+              <div class="col-12"><strong>Source Path:</strong> {{ displayValue(selectedResult.source_rel_path) }}</div>
+              <div class="col-12"><strong>Firmware Store File:</strong> {{ displayPathTail(selectedResult.firmware_store_path) }}</div>
+              <div class="col-12"><strong>Report File:</strong> {{ displayPathTail(selectedResult.report_path) }}</div>
+              <div class="col-12"><strong>Parent Run ID:</strong> {{ displayValue(selectedResult.parent_run_id) }}</div>
+            </div>
+          </TabPanel>
+        </TabView>
+      </div>
+    </Sidebar>
   </div>
 </template>
 
@@ -352,7 +353,8 @@ export default {
         attempts: []
       },
       tableFiltersExpanded: false,
-      detailTabIndex: 0
+      detailTabIndex: 0,
+      reportSidebarVisible: false
     };
   },
   computed: {
@@ -492,7 +494,9 @@ export default {
         if (!hasCurrent) {
           const first = this.rows[0];
           if (first?.result_id) {
-            await this.openReport(first);
+            this.selectedResultId = first.result_id;
+            this.detailTabIndex = 0;
+            await this.loadResultDetail(first.result_id);
           } else {
             this.selectedResultId = '';
             this.detailPayload = { result: null, attempts: [] };
@@ -530,6 +534,7 @@ export default {
       if (!resultId) return;
       this.selectedResultId = resultId;
       this.detailTabIndex = 0;
+      this.reportSidebarVisible = true;
       await this.loadResultDetail(resultId);
     },
     async reloadSelectedDetail() {
@@ -734,5 +739,12 @@ export default {
 .scan-results-page :deep(.scan-col-actions) {
   white-space: nowrap;
   min-width: 7rem;
+}
+
+:deep(.p-sidebar-header) {
+  padding: 1rem 1rem 0.5rem;
+}
+:deep(.p-sidebar-content) {
+  padding: 0.5rem 1rem 1rem;
 }
 </style>
