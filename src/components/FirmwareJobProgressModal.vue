@@ -9,13 +9,15 @@
     <template #header>
       <div class="flex align-items-center justify-content-between gap-2 flex-wrap w-full">
         <div class="flex align-items-center gap-2 flex-wrap">
-          <span>Job Progress</span>
+          <i class="pi pi-cog pi-spin text-primary" style="font-size: 1.2rem" v-if="job.status === 'running'"></i>
+          <i class="pi pi-check-circle text-success" style="font-size: 1.2rem" v-else-if="job.status === 'done'"></i>
+          <i class="pi pi-exclamation-circle text-danger" style="font-size: 1.2rem" v-else-if="job.status === 'failed'"></i>
+          <span class="text-xl font-bold">Analysis Progress</span>
           <Tag v-if="job.job_id" :value="`Job: ${shortId(job.job_id)}`" severity="info" />
           <Tag :value="stateLabel" :severity="stateSeverity(job.status)" />
-          <Tag v-if="pipeline.run_id" :value="`Run: ${pipeline.run_id}`" severity="secondary" />
         </div>
         <div class="flex align-items-center gap-2">
-          <span class="text-600 text-sm" v-if="lastUpdatedAt">Updated: {{ formatTimestamp(lastUpdatedAt) }}</span>
+          <span class="text-600 text-xs" v-if="lastUpdatedAt">Updated: {{ formatTimestamp(lastUpdatedAt) }}</span>
           <Button
             icon="pi pi-refresh"
             class="p-button-text p-button-sm p-button-rounded"
@@ -31,56 +33,65 @@
       <Message v-if="error" severity="error" :closable="false" class="mb-3">{{ error }}</Message>
 
       <div v-else>
-        <div class="grid mb-2">
-          <div class="col-12 lg:col-6">
-            <div class="summary-row"><strong>Job Type:</strong> {{ displayValue(job.job_type) }}</div>
-            <div class="summary-row"><strong>Queued:</strong> {{ displayValue(formatTimestamp(job.requested_at)) }}</div>
-            <div class="summary-row"><strong>Started:</strong> {{ displayValue(formatTimestamp(job.started_at)) }}</div>
-          </div>
-          <div class="col-12 lg:col-6">
-            <div class="summary-row"><strong>Finished:</strong> {{ displayValue(formatTimestamp(job.finished_at)) }}</div>
-            <div class="summary-row"><strong>Firmware SHA:</strong> <code>{{ shortSha(job.firmware_sha256) }}</code></div>
-            <div class="summary-row"><strong>Message:</strong> {{ displayValue(summary.message) }}</div>
+        <div class="surface-ground p-3 border-round mb-4">
+          <div class="grid text-sm">
+            <div class="col-12 md:col-4 border-right-1 surface-border">
+              <div class="text-500 font-medium mb-1">FIRMWARE SHA-256</div>
+              <code class="text-900">{{ shortSha(job.firmware_sha256) }}</code>
+            </div>
+            <div class="col-6 md:col-4 border-right-1 surface-border pl-2 md:pl-4">
+              <div class="text-500 font-medium mb-1">JOB TYPE</div>
+              <div class="text-900 font-bold uppercase">{{ displayValue(job.job_type) }}</div>
+            </div>
+            <div class="col-6 md:col-4 pl-2 md:pl-4">
+              <div class="text-500 font-medium mb-1">PIPELINE RUN</div>
+              <div class="text-900 font-bold">{{ pipeline.run_id || 'Generating...' }}</div>
+            </div>
           </div>
         </div>
 
-        <div class="mb-3">
+        <div class="mb-4 px-1">
           <div class="flex align-items-center justify-content-between mb-2">
-            <span class="text-700">Progress</span>
-            <span class="text-700">{{ pipeline.percent_complete }}%</span>
+            <span class="text-700 font-bold">Overall Progress</span>
+            <span class="text-primary font-bold text-lg">{{ pipeline.percent_complete }}%</span>
           </div>
-          <ProgressBar :value="pipeline.percent_complete" />
+          <ProgressBar :value="pipeline.percent_complete" :showValue="false" style="height: 10px" />
+          <div class="mt-2 text-600 text-sm italic" v-if="summary.message">
+            Current status: {{ summary.message }}
+          </div>
         </div>
 
-        <DataTable :value="stages" responsiveLayout="scroll" class="p-datatable-sm">
+        <div class="text-700 font-bold mb-2 ml-1">Pipeline Stages</div>
+        <DataTable :value="stages" responsiveLayout="scroll" class="p-datatable-sm custom-stages-table border-1 surface-border border-round">
           <Column field="name" header="Stage">
             <template #body="slotProps">
-              {{ stageLabel(slotProps.data.name) }}
+              <span class="font-medium">{{ stageLabel(slotProps.data.name) }}</span>
             </template>
           </Column>
-          <Column field="status" header="Status">
+          <Column field="status" header="Status" headerClass="text-center" bodyClass="text-center">
             <template #body="slotProps">
-              <Tag :value="statusLabel(slotProps.data.status)" :severity="statusSeverity(slotProps.data.status)" />
+              <Tag :value="statusLabel(slotProps.data.status)" :severity="statusSeverity(slotProps.data.status)" class="w-full" />
             </template>
           </Column>
           <Column field="started_at" header="Started">
             <template #body="slotProps">
-              {{ displayValue(formatTimestamp(slotProps.data.started_at)) }}
+              <span class="text-600">{{ displayValue(formatTimestamp(slotProps.data.started_at)) }}</span>
             </template>
           </Column>
           <Column field="ended_at" header="Ended">
             <template #body="slotProps">
-              {{ displayValue(formatTimestamp(slotProps.data.ended_at)) }}
+              <span class="text-600">{{ displayValue(formatTimestamp(slotProps.data.ended_at)) }}</span>
             </template>
           </Column>
-          <Column field="duration_ms" header="Duration">
+          <Column field="duration_ms" header="Duration" headerClass="text-right" bodyClass="text-right font-mono">
             <template #body="slotProps">
               {{ formatDuration(slotProps.data.duration_ms) }}
             </template>
           </Column>
-          <Column field="error" header="Error">
+          <Column field="error" header="Notes/Errors">
             <template #body="slotProps">
-              <span class="text-600">{{ displayValue(slotProps.data.error) }}</span>
+              <span class="text-red-500 font-medium" v-if="slotProps.data.error">{{ slotProps.data.error }}</span>
+              <span class="text-400" v-else>-</span>
             </template>
           </Column>
         </DataTable>
@@ -88,7 +99,12 @@
     </div>
 
     <template #footer>
-      <Button label="Close" icon="pi pi-times" class="p-button-text p-button-sm" @click="onVisibleChange(false)" />
+      <div class="flex justify-content-between align-items-center w-full">
+        <div class="text-500 text-xs">
+          Automatic polling every 2s
+        </div>
+        <Button label="Close Window" icon="pi pi-times" class="p-button-outlined p-button-sm" @click="onVisibleChange(false)" />
+      </div>
     </template>
   </Dialog>
 </template>
@@ -221,6 +237,7 @@ export default {
         '20_chipset_identify': '20 Chipset Identify',
         '30_extract_executable': '30 Extract Executable',
         '40_ida_headless': '40 IDA Headless',
+        '45_secure_boot_authenticity': '45 Secure Boot',
         '50_capability_recovery': '50 Capability Recovery',
         '60_sdk_version': '60 SDK Version',
         '90_finalize': '90 Finalize'
@@ -263,7 +280,7 @@ export default {
       const ms = Number(value);
       if (!Number.isFinite(ms) || ms < 0) return '-';
       if (ms < 1000) return `${ms} ms`;
-      return `${(ms / 1000).toFixed(2)} s`;
+      return `${(ms / 1000).toFixed(2)}s`;
     },
     displayValue(value) {
       if (value === null || value === undefined || value === '') return '-';
@@ -276,5 +293,8 @@ export default {
 <style scoped>
 .job-progress-content .summary-row {
   margin-bottom: 0.45rem;
+}
+.custom-stages-table :deep(.p-datatable-thead > tr > th) {
+  background: #f9fafb;
 }
 </style>

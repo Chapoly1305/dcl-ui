@@ -1,75 +1,107 @@
 <template>
   <div class="p-3 webhook-settings-page">
     <div class="grid">
-      <div class="col-12">
+      <div class="col-12 lg:col-8 lg:col-offset-2">
         <Card class="settings-card">
           <template #title>
             <div class="flex align-items-center justify-content-between gap-2 flex-wrap">
               <div class="flex align-items-center gap-2 flex-wrap">
-                <span>Webhook Settings</span>
+                <span>Webhook Notification Settings</span>
                 <Tag :value="`Active Network: ${activeNetwork || 'unknown'}`" severity="info" />
-                <Tag value="Active Network Only" severity="warning" />
               </div>
-              <div class="flex align-items-center gap-2">
-                <Button
-                  icon="pi pi-refresh"
-                  class="p-button-text p-button-sm p-button-rounded"
-                  :loading="loading"
-                  v-tooltip.top="'Reload settings'"
-                  @click="loadSettings"
-                />
-              </div>
+              <Button
+                icon="pi pi-refresh"
+                class="p-button-text p-button-sm p-button-rounded"
+                :loading="loading"
+                v-tooltip.top="'Reload settings'"
+                @click="loadSettings"
+              />
             </div>
           </template>
           <template #content>
             <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
             <Message v-else-if="statusNote" severity="success" :closable="false">{{ statusNote }}</Message>
-            <div class="text-600 text-sm mb-3">
-              Changes are persisted in MatterOverwatch internal state and read by worker automatically.
-            </div>
 
-            <div class="formgrid grid">
-              <div class="field col-12 md:col-4">
-                <label class="form-label" for="webhook-enabled">Webhook Enabled</label>
-                <div>
-                  <InputSwitch id="webhook-enabled" v-model="form.enabled" />
+            <div class="surface-ground p-3 border-round mb-4">
+              <div class="flex align-items-start gap-3">
+                <i class="pi pi-info-circle text-blue-500 mt-1" style="font-size: 1.2rem"></i>
+                <div class="text-sm line-height-3 text-700">
+                  Configure where MatterOverwatch sends notifications for new firmware discoveries and analysis updates.
+                  Changes are applied immediately to the background worker.
                 </div>
               </div>
-              <div class="field col-12 md:col-4">
-                <label class="form-label" for="webhook-timeout">Timeout (sec)</label>
-                <InputNumber id="webhook-timeout" v-model="form.timeout_sec" :min="2" :max="120" :useGrouping="false" />
+            </div>
+
+            <div class="section-title mb-3">General Configuration</div>
+            <div class="formgrid grid mb-4">
+              <div class="field col-12 md:col-6">
+                <label class="form-label" for="webhook-enabled">Notifications Master Control</label>
+                <div class="flex align-items-center gap-3 p-2 border-round surface-100" style="width: fit-content; min-width: 240px;">
+                  <InputSwitch id="webhook-enabled" v-model="form.enabled" />
+                  <span :class="form.enabled ? 'text-green-700 font-bold' : 'text-600 font-medium'" class="text-sm uppercase tracking-wider">
+                    {{ form.enabled ? 'Notifications Active' : 'Notifications Paused' }}
+                  </span>
+                </div>
+              </div>
+              <div class="field col-12 md:col-6">
+                <label class="form-label" for="webhook-timeout">HTTP Timeout (seconds)</label>
+                <div class="p-inputgroup">
+                  <span class="p-inputgroup-addon"><i class="pi pi-clock"></i></span>
+                  <InputNumber id="webhook-timeout" v-model="form.timeout_sec" :min="2" :max="120" :useGrouping="false" class="w-full" />
+                </div>
+                <small class="text-500">Wait time before giving up on a slow webhook server.</small>
               </div>
             </div>
 
-            <div class="formgrid grid">
+            <Divider />
+
+            <div class="section-title mb-3">Default Destination</div>
+            <div class="formgrid grid mb-4">
               <div class="field col-12">
-                <label class="form-label" for="default-url">Default Webhook URL (fallback)</label>
-                <InputText id="default-url" v-model="form.default_url" class="w-full" placeholder="https://discord.com/api/webhooks/..." />
+                <label class="form-label" for="default-url">Default Webhook URL</label>
+                <div class="p-inputgroup">
+                  <span class="p-inputgroup-addon"><i class="pi pi-link"></i></span>
+                  <InputText id="default-url" v-model="form.default_url" class="w-full" placeholder="https://discord.com/api/webhooks/..." />
+                </div>
+                <small class="text-500">Fallback URL used for all events if no specific override is defined below.</small>
               </div>
             </div>
 
-            <div class="formgrid grid">
-              <div class="field col-12 md:col-6">
-                <label class="form-label" for="new-fw-url">New Firmware Released URL</label>
-                <InputText id="new-fw-url" v-model="form.new_firmware_released_url" class="w-full" placeholder="Optional override" />
+            <div class="section-title mb-3">Event-Specific Overrides (Optional)</div>
+            <div class="grid">
+              <div class="col-12 md:col-6 mb-3">
+                <div class="p-3 border-1 surface-border border-round">
+                  <label class="form-label mb-2" for="new-fw-url">General Firmware Release</label>
+                  <InputText id="new-fw-url" v-model="form.new_firmware_released_url" class="w-full p-inputtext-sm mb-2" placeholder="Using default URL if empty" />
+                  <div class="text-xs text-500">Triggered when any new firmware entry is seen on DCL.</div>
+                </div>
               </div>
-              <div class="field col-12 md:col-6">
-                <label class="form-label" for="new-net-fw-url">New Test/Prod Firmware Released URL</label>
-                <InputText id="new-net-fw-url" v-model="form.new_network_firmware_released_url" class="w-full" placeholder="Optional override" />
+              <div class="col-12 md:col-6 mb-3">
+                <div class="p-3 border-1 surface-border border-round">
+                  <label class="form-label mb-2" for="new-net-fw-url">DCL Test/Prod Firmware</label>
+                  <InputText id="new-net-fw-url" v-model="form.new_network_firmware_released_url" class="w-full p-inputtext-sm mb-2" placeholder="Using default URL if empty" />
+                  <div class="text-xs text-500">Filtered for specifically Testnet or Mainnet networks.</div>
+                </div>
               </div>
-              <div class="field col-12 md:col-6">
-                <label class="form-label" for="new-dev-url">New Device Firmware Released URL</label>
-                <InputText id="new-dev-url" v-model="form.new_device_firmware_released_url" class="w-full" placeholder="Optional override" />
+              <div class="col-12 md:col-6 mb-3">
+                <div class="p-3 border-1 surface-border border-round">
+                  <label class="form-label mb-2" for="new-dev-url">New Device Discovery</label>
+                  <InputText id="new-dev-url" v-model="form.new_device_firmware_released_url" class="w-full p-inputtext-sm mb-2" placeholder="Using default URL if empty" />
+                  <div class="text-xs text-500">Triggered when a previously unseen VID:PID is discovered.</div>
+                </div>
               </div>
-              <div class="field col-12 md:col-6">
-                <label class="form-label" for="new-net-dev-url">New Test/Prod Device Firmware Released URL</label>
-                <InputText id="new-net-dev-url" v-model="form.new_network_device_firmware_released_url" class="w-full" placeholder="Optional override" />
+              <div class="col-12 md:col-6 mb-3">
+                <div class="p-3 border-1 surface-border border-round">
+                  <label class="form-label mb-2" for="new-net-dev-url">DCL Test/Prod New Device</label>
+                  <InputText id="new-net-dev-url" v-model="form.new_network_device_firmware_released_url" class="w-full p-inputtext-sm mb-2" placeholder="Using default URL if empty" />
+                  <div class="text-xs text-500">New VID:PID discovery filtered for specific networks.</div>
+                </div>
               </div>
             </div>
 
-            <div class="flex gap-2 mt-2">
-              <Button label="Save" icon="pi pi-save" class="p-button-sm" :loading="saving" @click="saveSettings" />
-              <Button label="Reset Form" icon="pi pi-undo" class="p-button-sm p-button-outlined" :disabled="saving" @click="loadSettings" />
+            <div class="flex align-items-center justify-content-end gap-2 mt-4">
+              <Button label="Reset to Current" icon="pi pi-undo" class="p-button-text p-button-sm" :disabled="saving" @click="loadSettings" />
+              <Button label="Save Changes" icon="pi pi-save" class="p-button-sm px-4" :loading="saving" @click="saveSettings" />
             </div>
           </template>
         </Card>
@@ -178,10 +210,17 @@ export default {
   border-radius: 12px;
 }
 
+.section-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
 .form-label {
   display: block;
   font-weight: 600;
-  margin-bottom: 0.35rem;
+  font-size: 0.95rem;
+  margin-bottom: 0.45rem;
   color: #374151;
 }
 </style>

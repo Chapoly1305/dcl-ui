@@ -4,30 +4,36 @@
       <div class="col-12">
         <Card class="detail-header-card">
           <template #title>
-            <div class="flex align-items-center justify-content-between gap-2 flex-wrap">
-              <div class="flex align-items-center gap-2 flex-wrap">
-                <Button icon="pi pi-arrow-left" class="p-button-text p-button-sm" @click="goBack" />
-                <span>Firmware Detail</span>
-                <Tag :value="`SHA: ${shortSha(firmwareSha256)}`" severity="info" />
+            <div class="flex flex-column gap-3">
+              <div class="flex align-items-center justify-content-between gap-2">
+                <div class="flex align-items-center gap-2">
+                  <Button icon="pi pi-arrow-left" class="p-button-text p-button-sm m-0 p-0 w-2rem h-2rem" @click="goBack" />
+                  <span class="text-xl font-bold">Firmware Detail</span>
+                </div>
+                <div class="flex align-items-center gap-2">
+                  <Button
+                    icon="pi pi-play"
+                    class="p-button-sm"
+                    label="Analyze"
+                    :disabled="!detail.is_downloaded"
+                    :loading="enqueueLoading"
+                    @click="enqueueAnalyze"
+                  />
+                  <Button
+                    icon="pi pi-refresh"
+                    class="p-button-text p-button-sm p-button-rounded"
+                    :loading="loading"
+                    v-tooltip.top="'Refresh detail'"
+                    @click="refreshAll"
+                  />
+                </div>
+              </div>
+              <div class="flex align-items-center gap-2 flex-wrap text-sm">
+                <span class="text-600">SHA-256:</span>
+                <code>{{ shortSha(firmwareSha256) }}</code>
+                <Divider layout="vertical" class="m-0 hidden md:block" />
                 <Tag :value="detail.is_downloaded ? 'Downloaded' : 'Not Downloaded'" :severity="detail.is_downloaded ? 'success' : 'warning'" />
                 <Tag :value="analysisLabel(detail.analysis_latest_status)" :severity="analysisSeverity(detail.analysis_latest_status)" />
-              </div>
-              <div class="flex align-items-center gap-2 flex-wrap">
-                <Button
-                  icon="pi pi-play"
-                  class="p-button-sm"
-                  label="Analyze"
-                  :disabled="!detail.is_downloaded"
-                  :loading="enqueueLoading"
-                  @click="enqueueAnalyze"
-                />
-                <Button
-                  icon="pi pi-refresh"
-                  class="p-button-text p-button-sm p-button-rounded"
-                  :loading="loading"
-                  v-tooltip.top="'Refresh detail'"
-                  @click="refreshAll"
-                />
               </div>
             </div>
           </template>
@@ -47,8 +53,15 @@
             <div class="grid">
               <div class="col-6 md:col-3" v-for="k in overviewKpis" :key="k.label">
                 <div class="card mb-0 stat-card">
-                  <div class="stat-label">{{ k.label }}</div>
-                  <div class="stat-value">{{ k.value }}</div>
+                  <div class="flex justify-content-between mb-2">
+                    <div>
+                      <span class="block text-500 font-medium mb-1 stat-label-text">{{ k.label }}</span>
+                      <div class="text-900 font-bold text-xl">{{ k.value }}</div>
+                    </div>
+                    <div class="flex align-items-center justify-content-center border-round" :class="k.iconBg" style="width:2.5rem;height:2.5rem">
+                      <i class="pi text-xl" :class="[k.icon, k.iconColor]"></i>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -73,23 +86,23 @@
               </div>
 
               <div class="col-12 lg:col-6">
-                <Card class="detail-card">
+                <Card class="detail-card h-full">
                   <template #title>Latest Outcome</template>
                   <template #content>
-                    <div v-if="detail.latest_result" class="grid">
-                      <div class="col-12 md:col-6"><strong>Result ID:</strong> <code>{{ detail.latest_result.result_id }}</code></div>
-                      <div class="col-12 md:col-6"><strong>Run ID:</strong> <code>{{ detail.latest_result.run_id }}</code></div>
-                      <div class="col-12 md:col-6"><strong>Status:</strong> {{ detail.latest_result.status }}</div>
-                      <div class="col-12 md:col-6"><strong>Analyzed At:</strong> {{ formatTimestamp(detail.latest_result.analyzed_at) }}</div>
-                      <div class="col-12 md:col-6"><strong>Integrity:</strong> {{ detail.latest_result.verdict_integrity }}</div>
-                      <div class="col-12 md:col-6"><strong>Authenticity:</strong> {{ detail.latest_result.verdict_authenticity }}</div>
-                      <div class="col-12 md:col-6"><strong>Chipset:</strong> {{ detail.latest_result.chipset }}</div>
-                      <div class="col-12 md:col-6"><strong>SDK Decoded:</strong> {{ sdkDisplayValue(detail.latest_result.sdk_decoded_version) }}</div>
-                      <div class="col-12 md:col-6"><strong>SDK Inferred:</strong> {{ sdkDisplayValue(detail.latest_result.sdk_inferred_version) }}</div>
-                      <div class="col-12 md:col-6"><strong>SDK Primary:</strong> {{ sdkDisplayValue(detail.latest_result.sdk_primary_version || detail.latest_result.sdk_best_guess_base) }}</div>
-                      <div class="col-12 md:col-6"><strong>SDK Consistency:</strong> {{ sdkDisplayValue(detail.latest_result.sdk_version_consistency) }}</div>
-                      <div class="col-12 md:col-6"><strong>Container Entropy:</strong> {{ entropyDisplay(latestMatterHeader.container_entropy_bits_per_byte) }}</div>
-                      <div class="col-12 md:col-6"><strong>Payload Entropy:</strong> {{ entropyDisplay(latestMatterHeader.payload_entropy_bits_per_byte) }}</div>
+                    <div v-if="detail.latest_result" class="outcome-grid">
+                      <div class="outcome-row"><span class="outcome-label">Result ID</span><code class="outcome-value">{{ detail.latest_result.result_id }}</code></div>
+                      <div class="outcome-row"><span class="outcome-label">Run ID</span><code class="outcome-value">{{ detail.latest_result.run_id }}</code></div>
+                      <div class="outcome-row"><span class="outcome-label">Status</span><span class="outcome-value">{{ detail.latest_result.status }}</span></div>
+                      <div class="outcome-row"><span class="outcome-label">Analyzed At</span><span class="outcome-value">{{ formatTimestamp(detail.latest_result.analyzed_at) }}</span></div>
+                      <div class="outcome-row"><span class="outcome-label">Integrity</span><span class="outcome-value">{{ detail.latest_result.verdict_integrity }}</span></div>
+                      <div class="outcome-row"><span class="outcome-label">Authenticity</span><span class="outcome-value">{{ detail.latest_result.verdict_authenticity }}</span></div>
+                      <div class="outcome-row"><span class="outcome-label">Chipset</span><span class="outcome-value">{{ detail.latest_result.chipset }}</span></div>
+                      <div class="outcome-row"><span class="outcome-label">SDK Decoded</span><span class="outcome-value">{{ sdkDisplayValue(detail.latest_result.sdk_decoded_version) }}</span></div>
+                      <div class="outcome-row"><span class="outcome-label">SDK Inferred</span><span class="outcome-value">{{ sdkDisplayValue(detail.latest_result.sdk_inferred_version) }}</span></div>
+                      <div class="outcome-row"><span class="outcome-label">SDK Primary</span><span class="outcome-value">{{ sdkDisplayValue(detail.latest_result.sdk_primary_version || detail.latest_result.sdk_best_guess_base) }}</span></div>
+                      <div class="outcome-row"><span class="outcome-label">SDK Consistency</span><span class="outcome-value">{{ sdkDisplayValue(detail.latest_result.sdk_version_consistency) }}</span></div>
+                      <div class="outcome-row"><span class="outcome-label">Container Entropy</span><span class="outcome-value">{{ entropyDisplay(latestMatterHeader.container_entropy_bits_per_byte) }}</span></div>
+                      <div class="outcome-row"><span class="outcome-label">Payload Entropy</span><span class="outcome-value">{{ entropyDisplay(latestMatterHeader.payload_entropy_bits_per_byte) }}</span></div>
                     </div>
                     <div v-else class="text-600">No completed analysis yet for this firmware group.</div>
                   </template>
@@ -97,6 +110,7 @@
               </div>
             </div>
           </TabPanel>
+
 
           <TabPanel header="Capabilities">
             <div class="grid">
@@ -331,10 +345,10 @@ export default {
     },
     overviewKpis() {
       return [
-        { label: 'Duplicate Records', value: this.detail.duplicate_group_size || 0 },
-        { label: 'Attempts', value: this.detail.attempt_count || 0 },
-        { label: 'Latest Status', value: this.analysisLabel(this.detail.analysis_latest_status) },
-        { label: 'Downloaded', value: this.detail.is_downloaded ? 'Yes' : 'No' }
+        { label: 'Duplicate Records', value: this.detail.duplicate_group_size || 0, icon: 'pi-clone', iconColor: 'text-blue-500', iconBg: 'bg-blue-100' },
+        { label: 'Attempts', value: this.detail.attempt_count || 0, icon: 'pi-history', iconColor: 'text-purple-500', iconBg: 'bg-purple-100' },
+        { label: 'Latest Status', value: this.analysisLabel(this.detail.analysis_latest_status), icon: 'pi-info-circle', iconColor: 'text-orange-500', iconBg: 'bg-orange-100' },
+        { label: 'Downloaded', value: this.detail.is_downloaded ? 'Yes' : 'No', icon: 'pi-download', iconColor: 'text-green-500', iconBg: 'bg-green-100' }
       ];
     },
     jobRows() {
@@ -620,18 +634,10 @@ export default {
   padding: 0.7rem 0.85rem;
 }
 
-.firmware-detail-page .stat-label {
-  color: #6b7280;
+.firmware-detail-page .stat-label-text {
   font-size: 0.72rem;
-  line-height: 1.1;
-}
-
-.firmware-detail-page .stat-value {
-  color: #111827;
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin-top: 0.3rem;
-  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .firmware-detail-page .module-summary {
@@ -656,4 +662,39 @@ export default {
   font-size: 0.78rem;
 }
 
+.firmware-detail-page .outcome-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  column-gap: 1.5rem;
+  row-gap: 0.65rem;
+}
+
+@media (max-width: 768px) {
+  .firmware-detail-page .outcome-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.firmware-detail-page .outcome-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px dashed #e5e7eb;
+  padding-bottom: 0.35rem;
+}
+
+.firmware-detail-page .outcome-label {
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding-right: 1rem;
+  white-space: nowrap;
+}
+
+.firmware-detail-page .outcome-value {
+  color: #111827;
+  font-size: 0.9rem;
+  text-align: right;
+  word-break: break-word;
+}
 </style>

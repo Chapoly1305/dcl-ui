@@ -44,13 +44,20 @@
 
       <div class="col-6 md:col-4 lg:col-2" v-for="item in queueStats" :key="item.label">
         <div class="card mb-0 stat-card">
-          <div class="stat-label">{{ item.label }}</div>
-          <div class="stat-value">{{ item.value }}</div>
+          <div class="flex justify-content-between mb-2">
+            <div>
+              <span class="block text-500 font-medium mb-1 text-xs uppercase">{{ item.label }}</span>
+              <div class="text-900 font-bold text-xl">{{ item.value }}</div>
+            </div>
+            <div class="flex align-items-center justify-content-center border-round" :class="item.iconBg" style="width:2.2rem;height:2.2rem">
+              <i class="pi text-lg" :class="[item.icon, item.iconColor]"></i>
+            </div>
+          </div>
         </div>
       </div>
 
       <div class="col-12 lg:col-6">
-        <Card class="jobs-card">
+        <Card class="jobs-card h-full">
           <template #title>
             <div class="flex align-items-center justify-content-between gap-2 flex-wrap">
               <span>Running Jobs</span>
@@ -99,13 +106,16 @@
                 </template>
               </Column>
             </DataTable>
-            <div v-if="!loading && jobs.running.length === 0" class="text-600 mt-2">No running jobs.</div>
+            <div v-if="!loading && jobs.running.length === 0" class="flex flex-column align-items-center justify-content-center p-5 text-400">
+              <i class="pi pi-play text-4xl mb-3"></i>
+              <span class="text-lg">No running jobs.</span>
+            </div>
           </template>
         </Card>
       </div>
 
       <div class="col-12 lg:col-6">
-        <Card class="jobs-card">
+        <Card class="jobs-card h-full">
           <template #title>
             <div class="flex align-items-center justify-content-between gap-2 flex-wrap">
               <span>Pending Queue</span>
@@ -149,7 +159,10 @@
                 </template>
               </Column>
             </DataTable>
-            <div v-if="!loading && jobs.pending.length === 0" class="text-600 mt-2">No pending jobs.</div>
+            <div v-if="!loading && jobs.pending.length === 0" class="flex flex-column align-items-center justify-content-center p-5 text-400">
+              <i class="pi pi-clock text-4xl mb-3"></i>
+              <span class="text-lg">No pending jobs.</span>
+            </div>
           </template>
         </Card>
       </div>
@@ -209,7 +222,10 @@
                 </template>
               </Column>
             </DataTable>
-            <div v-if="!loading && recentOutcomes.length === 0" class="text-600 mt-2">No completed jobs yet.</div>
+            <div v-if="!loading && recentOutcomes.length === 0" class="flex flex-column align-items-center justify-content-center p-5 text-400">
+              <i class="pi pi-history text-4xl mb-3"></i>
+              <span class="text-lg">No completed jobs yet.</span>
+            </div>
           </template>
         </Card>
       </div>
@@ -268,12 +284,12 @@ export default {
       const finished = done + failed;
       const successRate = finished > 0 ? ((done / finished) * 100).toFixed(1) : '0.0';
       return [
-        { label: 'Outstanding', value: outstanding },
-        { label: 'Running', value: running },
-        { label: 'Pending', value: pending },
-        { label: 'Completed', value: done },
-        { label: 'Failed', value: failed },
-        { label: 'Success Rate', value: `${successRate}%` }
+        { label: 'Outstanding', value: outstanding, icon: 'pi-list', iconColor: 'text-blue-500', iconBg: 'bg-blue-100' },
+        { label: 'Running', value: running, icon: 'pi-spin pi-spinner', iconColor: 'text-purple-500', iconBg: 'bg-purple-100' },
+        { label: 'Pending', value: pending, icon: 'pi-clock', iconColor: 'text-orange-500', iconBg: 'bg-orange-100' },
+        { label: 'Completed', value: done, icon: 'pi-check-circle', iconColor: 'text-green-500', iconBg: 'bg-green-100' },
+        { label: 'Failed', value: failed, icon: 'pi-times-circle', iconColor: 'text-red-500', iconBg: 'bg-red-100' },
+        { label: 'Success Rate', value: `${successRate}%`, icon: 'pi-chart-bar', iconColor: 'text-teal-500', iconBg: 'bg-teal-100' }
       ];
     }
   },
