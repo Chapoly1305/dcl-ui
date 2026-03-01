@@ -12,7 +12,7 @@
           <i class="pi pi-cog pi-spin text-primary" style="font-size: 1.2rem" v-if="job.status === 'running'"></i>
           <i class="pi pi-check-circle text-success" style="font-size: 1.2rem" v-else-if="job.status === 'done'"></i>
           <i class="pi pi-exclamation-circle text-danger" style="font-size: 1.2rem" v-else-if="job.status === 'failed'"></i>
-          <span class="text-xl font-bold">{{ isConformanceJob ? 'Conformance Validation' : 'Analysis Progress' }}</span>
+          <span class="text-xl font-bold">{{ modalTitle }}</span>
           <Tag v-if="job.job_id" :value="`Job: ${shortId(job.job_id)}`" severity="info" />
           <Tag :value="stateLabel" :severity="stateSeverity(job.status)" />
         </div>
@@ -35,19 +35,23 @@
       <div v-else>
         <div class="surface-ground p-3 border-round mb-4">
           <div class="grid text-sm">
-            <div class="col-12 md:col-4 border-right-1 surface-border" v-if="!isConformanceJob">
+            <div class="col-12 md:col-4 border-right-1 surface-border" v-if="!isConformanceJob && !isPollJob">
               <div class="text-500 font-medium mb-1">FIRMWARE SHA-256</div>
               <code class="text-900">{{ shortSha(job.firmware_sha256) }}</code>
             </div>
-            <div class="col-12 md:col-4 border-right-1 surface-border pl-2 md:pl-4" v-else>
+            <div class="col-12 md:col-4 border-right-1 surface-border pl-2 md:pl-4" v-else-if="isConformanceJob">
               <div class="text-500 font-medium mb-1">TARGET NETWORK</div>
               <div class="text-900 font-bold uppercase">{{ job.source_network || 'Default' }}</div>
+            </div>
+            <div class="col-12 md:col-4 border-right-1 surface-border pl-2 md:pl-4" v-else-if="isPollJob">
+              <div class="text-500 font-medium mb-1">SOURCE REPO</div>
+              <div class="text-900 font-bold">Matter DCL Firmware</div>
             </div>
             <div class="col-6 md:col-4 border-right-1 surface-border pl-2 md:pl-4">
               <div class="text-500 font-medium mb-1">JOB TYPE</div>
               <div class="text-900 font-bold uppercase">{{ displayValue(job.job_type) }}</div>
             </div>
-            <div class="col-6 md:col-4 pl-2 md:pl-4" v-if="!isConformanceJob">
+            <div class="col-6 md:col-4 pl-2 md:pl-4" v-if="!isConformanceJob && !isPollJob">
               <div class="text-500 font-medium mb-1">PIPELINE RUN</div>
               <div class="text-900 font-bold">{{ pipeline.run_id || 'Generating...' }}</div>
             </div>
@@ -99,7 +103,7 @@
           </div>
         </div>
 
-        <div v-if="!isConformanceJob">
+        <div v-if="!isConformanceJob && !isPollJob">
           <div class="text-700 font-bold mb-2 ml-1">Pipeline Stages</div>
           <DataTable :value="stages" responsiveLayout="scroll" class="p-datatable-sm custom-stages-table border-1 surface-border border-round">
             <Column field="name" header="Stage">
@@ -197,6 +201,14 @@ export default {
     },
     isConformanceJob() {
       return this.job.job_type === 'validate_conformance';
+    },
+    isPollJob() {
+      return this.job.job_type === 'poll';
+    },
+    modalTitle() {
+      if (this.isConformanceJob) return 'Conformance Validation';
+      if (this.isPollJob) return 'Source Polling';
+      return 'Analysis Progress';
     }
   },
   watch: {
