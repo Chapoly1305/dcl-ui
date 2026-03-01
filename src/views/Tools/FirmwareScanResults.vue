@@ -37,11 +37,12 @@
           </template>
           <template #content>
             <div v-show="tableFiltersExpanded" class="grid filters mb-2">
-              <div class="col-12 md:col-3">
+              <div class="col-12 pb-0 mb-1"><span class="text-600 font-medium text-sm uppercase tracking-wide">Search Filters</span></div>
+              <div class="col-12 md:col-3 pt-0">
                 <label class="filter-label">Search</label>
-                <InputText v-model="filters.q" class="w-full p-inputtext-sm" placeholder="run/result/firmware..." />
+                <InputText v-model="filters.q" class="w-full p-inputtext-sm" placeholder="run/result/firmware..." @keyup.enter="applyFilters" />
               </div>
-              <div class="col-6 md:col-2">
+              <div class="col-6 md:col-2 pt-0">
                 <label class="filter-label">Verdict</label>
                 <Dropdown
                   v-model="filters.verdict"
@@ -53,7 +54,7 @@
                   showClear
                 />
               </div>
-              <div class="col-6 md:col-2">
+              <div class="col-6 md:col-2 pt-0">
                 <label class="filter-label">Status</label>
                 <Dropdown
                   v-model="filters.status"
@@ -65,19 +66,18 @@
                   showClear
                 />
               </div>
-              <div class="col-6 md:col-2">
+              <div class="col-6 md:col-2 pt-0">
                 <label class="filter-label">Chipset</label>
-                <InputText v-model="filters.chipset" class="w-full p-inputtext-sm" placeholder="e.g. siliconlabs" />
+                <InputText v-model="filters.chipset" class="w-full p-inputtext-sm" placeholder="e.g. siliconlabs" @keyup.enter="applyFilters" />
               </div>
-              <div class="col-6 md:col-1">
-                <label class="filter-label">From</label>
-                <Calendar v-model="filters.fromTime" class="w-full p-inputtext-sm" dateFormat="yy-mm-dd" showTime hourFormat="24" />
+              <div class="col-6 md:col-3 pt-0">
+                <label class="filter-label">Date Range</label>
+                <div class="flex gap-2">
+                  <Calendar v-model="filters.fromTime" class="w-full p-inputtext-sm" placeholder="From" dateFormat="yy-mm-dd" showTime hourFormat="24" />
+                  <Calendar v-model="filters.toTime" class="w-full p-inputtext-sm" placeholder="To" dateFormat="yy-mm-dd" showTime hourFormat="24" />
+                </div>
               </div>
-              <div class="col-6 md:col-1">
-                <label class="filter-label">To</label>
-                <Calendar v-model="filters.toTime" class="w-full p-inputtext-sm" dateFormat="yy-mm-dd" showTime hourFormat="24" />
-              </div>
-              <div class="col-12 md:col-12 flex align-items-end gap-1">
+              <div class="col-12 md:col-12 flex align-items-center justify-content-end gap-2 mt-2">
                 <Button label="Clear" icon="pi pi-filter-slash" class="p-button-text p-button-sm" @click="clearFilters" />
                 <Button label="Apply Filters" icon="pi pi-search" class="p-button-sm" @click="applyFilters" />
               </div>

@@ -38,90 +38,96 @@
             </div>
           </template>
           <template #content>
-            <div v-show="tableFiltersExpanded" class="table-filters grid mb-3">
-              <div class="col-12 md:col-2">
-                <label class="filter-label">VID</label>
-                <InputText v-model="filters.vid" class="w-full p-inputtext-sm" placeholder="Contains..." />
-              </div>
-              <div class="col-12 md:col-2">
-                <label class="filter-label">PID</label>
-                <InputText v-model="filters.pid" class="w-full p-inputtext-sm" placeholder="Contains..." />
-              </div>
-              <div class="col-12 md:col-2">
-                <label class="filter-label">Vendor Name</label>
-                <InputText v-model="filters.vendorName" class="w-full p-inputtext-sm" placeholder="Contains..." />
-              </div>
-              <div class="col-12 md:col-2">
-                <label class="filter-label">Product Name</label>
-                <InputText v-model="filters.productName" class="w-full p-inputtext-sm" placeholder="Contains..." />
-              </div>
-              <div class="col-12 md:col-2">
-                <label class="filter-label">Software Version</label>
-                <InputText v-model="filters.softwareVersion" class="w-full p-inputtext-sm" placeholder="Contains..." />
-              </div>
-              <div class="col-12 md:col-2">
-                <label class="filter-label">Software Version String</label>
-                <InputText v-model="filters.softwareVersionString" class="w-full p-inputtext-sm" placeholder="Contains..." />
-              </div>
-              <div class="col-12 md:col-2">
-                <label class="filter-label">Release Time</label>
-                <InputText v-model="filters.releaseTime" class="w-full p-inputtext-sm" placeholder="Contains..." />
-              </div>
-              <div class="col-12 md:col-2">
-                <label class="filter-label">Block Height</label>
-                <InputText v-model="filters.blockHeight" class="w-full p-inputtext-sm" placeholder="Contains..." />
-              </div>
-              <div class="col-12 md:col-2">
-                <label class="filter-label">TxHash (Last 8)</label>
-                <InputText v-model="filters.txHashLast8" class="w-full p-inputtext-sm" placeholder="Contains..." />
-              </div>
-              <div class="col-12 md:col-2">
-                <label class="filter-label">Formality Conformance</label>
-                <Dropdown
-                  v-model="filters.formalityConformance"
-                  class="w-full p-inputtext-sm"
-                  :options="conformanceFilterOptions"
-                  placeholder="Any"
-                  showClear
-                />
-              </div>
-              <div class="col-12 md:col-2">
-                <label class="filter-label">Downloaded</label>
-                <Dropdown
-                  v-model="filters.isDownloaded"
-                  class="w-full p-inputtext-sm"
-                  :options="downloadedFilterOptions"
-                  optionLabel="label"
-                  optionValue="value"
-                  placeholder="Any"
-                  showClear
-                />
-              </div>
-              <div class="col-12 md:col-2">
-                <label class="filter-label">Analysis</label>
-                <Dropdown
-                  v-model="filters.analysisStatus"
-                  class="w-full p-inputtext-sm"
-                  :options="analysisFilterOptions"
-                  optionLabel="label"
-                  optionValue="value"
-                  placeholder="Any"
-                  showClear
-                />
-              </div>
-              <div class="col-12 md:col-4 lg:col-4 flex align-items-end justify-content-start gap-2">
-                <Button
-                  label="Clear"
-                  icon="pi pi-filter-slash"
-                  class="p-button-text p-button-sm"
-                  @click="clearFilters"
-                />
-                <Button
-                  label="Apply Filters"
-                  icon="pi pi-search"
-                  class="p-button-sm"
-                  @click="applyFilters"
-                />
+            <div v-show="tableFiltersExpanded" class="table-filters mb-3">
+              <div class="grid">
+                <div class="col-12 pb-0 mb-1"><span class="text-600 font-medium text-sm uppercase tracking-wide">Identifiers</span></div>
+                <div class="col-6 md:col-2 pt-0">
+                  <label class="filter-label">VID</label>
+                  <InputText v-model="filters.vid" class="w-full p-inputtext-sm" placeholder="Contains..." @keyup.enter="applyFilters" />
+                </div>
+                <div class="col-6 md:col-2 pt-0">
+                  <label class="filter-label">PID</label>
+                  <InputText v-model="filters.pid" class="w-full p-inputtext-sm" placeholder="Contains..." @keyup.enter="applyFilters" />
+                </div>
+                <div class="col-6 md:col-2 pt-0">
+                  <label class="filter-label">Vendor Name</label>
+                  <InputText v-model="filters.vendorName" class="w-full p-inputtext-sm" placeholder="Contains..." @keyup.enter="applyFilters" />
+                </div>
+                <div class="col-6 md:col-2 pt-0">
+                  <label class="filter-label">Product Name</label>
+                  <InputText v-model="filters.productName" class="w-full p-inputtext-sm" placeholder="Contains..." @keyup.enter="applyFilters" />
+                </div>
+                <div class="col-6 md:col-2 pt-0">
+                  <label class="filter-label">Software Version</label>
+                  <InputText v-model="filters.softwareVersion" class="w-full p-inputtext-sm" placeholder="Contains..." @keyup.enter="applyFilters" />
+                </div>
+                <div class="col-6 md:col-2 pt-0">
+                  <label class="filter-label">Version String</label>
+                  <InputText v-model="filters.softwareVersionString" class="w-full p-inputtext-sm" placeholder="Contains..." @keyup.enter="applyFilters" />
+                </div>
+
+                <div class="col-12 pb-0 mb-1 mt-2 border-top-1 surface-border pt-3"><span class="text-600 font-medium text-sm uppercase tracking-wide">Blockchain Data & Status</span></div>
+                <div class="col-6 md:col-2 pt-0">
+                  <label class="filter-label">Release Time</label>
+                  <InputText v-model="filters.releaseTime" class="w-full p-inputtext-sm" placeholder="Contains..." @keyup.enter="applyFilters" />
+                </div>
+                <div class="col-6 md:col-2 pt-0">
+                  <label class="filter-label">Block Height</label>
+                  <InputText v-model="filters.blockHeight" class="w-full p-inputtext-sm" placeholder="Contains..." @keyup.enter="applyFilters" />
+                </div>
+                <div class="col-6 md:col-2 pt-0">
+                  <label class="filter-label">TxHash (Last 8)</label>
+                  <InputText v-model="filters.txHashLast8" class="w-full p-inputtext-sm" placeholder="Contains..." @keyup.enter="applyFilters" />
+                </div>
+                <div class="col-6 md:col-2 pt-0">
+                  <label class="filter-label">Conformance</label>
+                  <Dropdown
+                    v-model="filters.formalityConformance"
+                    class="w-full p-inputtext-sm"
+                    :options="conformanceFilterOptions"
+                    placeholder="Any"
+                    showClear
+                  />
+                </div>
+                <div class="col-6 md:col-2 pt-0">
+                  <label class="filter-label">Downloaded</label>
+                  <Dropdown
+                    v-model="filters.isDownloaded"
+                    class="w-full p-inputtext-sm"
+                    :options="downloadedFilterOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    placeholder="Any"
+                    showClear
+                  />
+                </div>
+                <div class="col-6 md:col-2 pt-0">
+                  <label class="filter-label">Analysis</label>
+                  <Dropdown
+                    v-model="filters.analysisStatus"
+                    class="w-full p-inputtext-sm"
+                    :options="analysisFilterOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    placeholder="Any"
+                    showClear
+                  />
+                </div>
+
+                <div class="col-12 flex align-items-center justify-content-end gap-2 mt-2">
+                  <Button
+                    label="Clear"
+                    icon="pi pi-filter-slash"
+                    class="p-button-text p-button-sm"
+                    @click="clearFilters"
+                  />
+                  <Button
+                    label="Apply Filters"
+                    icon="pi pi-search"
+                    class="p-button-sm"
+                    @click="applyFilters"
+                  />
+                </div>
               </div>
             </div>
             <Message v-if="error" severity="error" :closable="false" class="mb-3">

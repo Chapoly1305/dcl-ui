@@ -223,7 +223,7 @@
                     <div class="mt-3">
                       <Accordion :activeIndex="[]">
                         <AccordionTab header="Details (raw)">
-                          <pre class="module-json">{{ prettyJson(m.details || {}) }}</pre>
+                          <vue-json-pretty :data="m.details || {}" :deep="1" class="module-json" />
                         </AccordionTab>
                       </Accordion>
                     </div>
@@ -240,6 +240,9 @@
 </template>
 
 <script>
+import VueJsonPretty from 'vue-json-pretty';
+import 'vue-json-pretty/lib/styles.css';
+
 const ZCL_TYPE_NAME = {
   0x08: 'data8',
   0x09: 'data16',
@@ -285,6 +288,9 @@ const GLOBAL_ATTRIBUTE_IDS = new Set(['0xFFF8', '0xFFF9', '0xFFFA', '0xFFFB', '0
 
 export default {
   name: 'FirmwareDetail',
+  components: {
+    VueJsonPretty
+  },
   data() {
     const base = (import.meta.env.VITE_APP_MATTEROVERWATCH_API_BASE || 'http://127.0.0.1:8080').replace(/\/$/, '');
     return {
