@@ -31,7 +31,7 @@
                   icon="pi pi-refresh"
                   class="p-button-text p-button-sm p-button-rounded"
                   :loading="loading"
-                  v-tooltip.top="'Refresh'"
+                  v-tooltip.top="'Reload cached data'"
                   @click="refreshNow"
                 />
               </div>
@@ -422,7 +422,7 @@ export default {
     },
     async refreshNow() {
       this.pageFirst = 0;
-      await this.loadAvailableFirmware(true);
+      await this.loadAvailableFirmware(false);
     },
     async loadAvailableFirmware(refresh = false) {
       this.loading = true;
