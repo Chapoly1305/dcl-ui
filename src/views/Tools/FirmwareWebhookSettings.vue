@@ -114,7 +114,7 @@
 export default {
   name: 'FirmwareWebhookSettings',
   data() {
-    const apiBase = (import.meta.env.VITE_APP_MATTEROVERWATCH_API_BASE || 'http://127.0.0.1:8080').replace(/\/$/, '');
+    const apiBase = (import.meta.env.VITE_APP_MATTEROVERWATCH_API_BASE || '').replace(/\/$/, '');
     return {
       apiBase,
       loading: false,
@@ -151,15 +151,23 @@ export default {
       this.loading = true;
       this.error = null;
       this.statusNote = null;
+      if (!this.apiBase) {
+        this.error = 'Missing VITE_APP_MATTEROVERWATCH_API_BASE. Set it before starting dcl-ui.';
+        this.activeNetwork = 'unknown';
+        this.loading = false;
+        return;
+      }
       try {
         const response = await fetch(`${this.apiBase}/api/v1/settings/webhook`);
         if (!response.ok) {
-          throw new Error(`Failed to load webhook settings (${response.status})`);
+          throw new Error(`Failed to load webhook settings (HTTP ${response.status})`);
         }
         const payload = await response.json();
         this.applyPayload(payload);
       } catch (err) {
-        this.error = err instanceof Error ? err.message : 'Failed to load webhook settings';
+        console.error('Webhook settings fetch error:', err);
+        this.error = `Failed to connect to API at ${this.apiBase}. Ensure the MatterOverwatch service is running.`;
+        this.activeNetwork = 'unknown';
       } finally {
         this.loading = false;
       }
@@ -168,6 +176,11 @@ export default {
       this.saving = true;
       this.error = null;
       this.statusNote = null;
+      if (!this.apiBase) {
+        this.error = 'Missing VITE_APP_MATTEROVERWATCH_API_BASE. Set it before starting dcl-ui.';
+        this.saving = false;
+        return;
+      }
       try {
         const body = {
           enabled: Boolean(this.form.enabled),
