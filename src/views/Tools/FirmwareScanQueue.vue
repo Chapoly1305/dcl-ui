@@ -40,7 +40,7 @@
             
             <div class="grid mt-2">
               <div class="col-12 md:col-4" v-for="stat in analysisStatCards" :key="stat.label">
-                <div class="card mb-3 stat-card surface-card border-1 surface-border">
+                <div class="card mb-3 stat-card surface-card border-1 surface-border shadow-1">
                   <div class="flex justify-content-between mb-2">
                     <div>
                       <span class="block text-500 font-medium mb-1 text-xs uppercase">{{ stat.label }}</span>
@@ -118,12 +118,12 @@
             <template #header>
               <i class="pi pi-shield mr-2"></i>
               <span>Conformance</span>
-              <Badge :value="'Active'" class="ml-2" severity="info" v-if="conformanceJobs.running.length > 0"></Badge>
+              <Badge :value="conformanceJobs.running.length + conformanceJobs.pending.length" class="ml-2" severity="info" v-if="conformanceJobs.running.length + conformanceJobs.pending.length > 0"></Badge>
             </template>
             
             <div class="grid mt-2">
               <div class="col-12 md:col-4" v-for="stat in conformanceStatCards" :key="stat.label">
-                <div class="card mb-3 stat-card surface-card border-1 surface-border">
+                <div class="card mb-3 stat-card surface-card border-1 surface-border shadow-1">
                   <div class="flex justify-content-between mb-2">
                     <div>
                       <span class="block text-500 font-medium mb-1 text-xs uppercase">{{ stat.label }}</span>
@@ -148,7 +148,51 @@
                 </div>
               </div>
 
-              <div class="col-12">
+              <div class="col-12 lg:col-6">
+                <Card class="jobs-card h-full border-1 surface-border shadow-1">
+                  <template #title><span class="text-lg font-bold">Active Validation</span></template>
+                  <template #content>
+                    <DataTable :value="conformanceJobs.running" responsiveLayout="scroll" class="p-datatable-sm" :rows="5">
+                      <Column field="job_id" header="ID">
+                        <template #body="slotProps">
+                          <code>{{ slotProps.data.job_id.slice(0, 8) }}</code>
+                        </template>
+                      </Column>
+                      <Column field="requested_by" header="Requested By" />
+                      <Column header="Actions" bodyClass="text-right">
+                        <template #body="slotProps">
+                          <Button icon="pi pi-chart-line" class="p-button-sm p-button-text p-button-rounded" v-tooltip.top="'View Statistics'" @click="openJobProgress(slotProps.data.job_id)" />
+                        </template>
+                      </Column>
+                    </DataTable>
+                    <div v-if="conformanceJobs.running.length === 0" class="p-5 text-center text-400 italic">No running validation.</div>
+                  </template>
+                </Card>
+              </div>
+
+              <div class="col-12 lg:col-6">
+                <Card class="jobs-card h-full border-1 surface-border shadow-1">
+                  <template #title><span class="text-lg font-bold">Queued Validation</span></template>
+                  <template #content>
+                    <DataTable :value="conformanceJobs.pending" responsiveLayout="scroll" class="p-datatable-sm" :rows="5">
+                      <Column field="job_id" header="ID">
+                        <template #body="slotProps">
+                          <code>{{ slotProps.data.job_id.slice(0, 8) }}</code>
+                        </template>
+                      </Column>
+                      <Column field="requested_by" header="Requested By" />
+                      <Column header="Actions" bodyClass="text-right">
+                        <template #body="slotProps">
+                          <Button icon="pi pi-chart-line" class="p-button-sm p-button-text p-button-rounded" v-tooltip.top="'View Statistics'" @click="openJobProgress(slotProps.data.job_id)" />
+                        </template>
+                      </Column>
+                    </DataTable>
+                    <div v-if="conformanceJobs.pending.length === 0" class="p-5 text-center text-400 italic">No queued validation.</div>
+                  </template>
+                </Card>
+              </div>
+
+              <div class="col-12 mt-3">
                 <Card class="jobs-card border-1 surface-border shadow-1">
                   <template #title><span class="text-lg font-bold">Conformance History</span></template>
                   <template #content>
@@ -195,6 +239,7 @@
             <template #header>
               <i class="pi pi-cloud-download mr-2"></i>
               <span>Polling</span>
+              <Badge :value="pollJobs.running.length + pollJobs.pending.length" class="ml-2" severity="info" v-if="pollJobs.running.length + pollJobs.pending.length > 0"></Badge>
             </template>
             
             <div class="grid mt-2">
@@ -214,9 +259,53 @@
                 </div>
               </div>
 
-              <div class="col-12">
+              <div class="col-12 lg:col-6">
+                <Card class="jobs-card h-full border-1 surface-border shadow-1">
+                  <template #title><span class="text-lg font-bold">Active Polling</span></template>
+                  <template #content>
+                    <DataTable :value="pollJobs.running" responsiveLayout="scroll" class="p-datatable-sm" :rows="5">
+                      <Column field="job_id" header="ID">
+                        <template #body="slotProps">
+                          <code>{{ slotProps.data.job_id.slice(0, 8) }}</code>
+                        </template>
+                      </Column>
+                      <Column field="requested_by" header="Source" />
+                      <Column header="Actions" bodyClass="text-right">
+                        <template #body="slotProps">
+                          <Button icon="pi pi-chart-line" class="p-button-sm p-button-text p-button-rounded" v-tooltip.top="'View Log'" @click="openJobProgress(slotProps.data.job_id)" />
+                        </template>
+                      </Column>
+                    </DataTable>
+                    <div v-if="pollJobs.running.length === 0" class="p-5 text-center text-400 italic">No running polls.</div>
+                  </template>
+                </Card>
+              </div>
+
+              <div class="col-12 lg:col-6">
+                <Card class="jobs-card h-full border-1 surface-border shadow-1">
+                  <template #title><span class="text-lg font-bold">Queued Polling</span></template>
+                  <template #content>
+                    <DataTable :value="pollJobs.pending" responsiveLayout="scroll" class="p-datatable-sm" :rows="5">
+                      <Column field="job_id" header="ID">
+                        <template #body="slotProps">
+                          <code>{{ slotProps.data.job_id.slice(0, 8) }}</code>
+                        </template>
+                      </Column>
+                      <Column field="requested_by" header="Source" />
+                      <Column header="Actions" bodyClass="text-right">
+                        <template #body="slotProps">
+                          <Button icon="pi pi-chart-line" class="p-button-sm p-button-text p-button-rounded" v-tooltip.top="'View Log'" @click="openJobProgress(slotProps.data.job_id)" />
+                        </template>
+                      </Column>
+                    </DataTable>
+                    <div v-if="pollJobs.pending.length === 0" class="p-5 text-center text-400 italic">No queued polls.</div>
+                  </template>
+                </Card>
+              </div>
+
+              <div class="col-12 mt-3">
                 <Card class="jobs-card border-1 surface-border shadow-1">
-                  <template #title><span class="text-lg font-bold">Polling Activity</span></template>
+                  <template #title><span class="text-lg font-bold">Polling History</span></template>
                   <template #content>
                     <DataTable :value="pollHistory" responsiveLayout="scroll" class="p-datatable-sm" :rows="10" paginator>
                       <Column field="job_id" header="Job ID">
@@ -325,7 +414,7 @@ export default {
         .sort((a, b) => String(b.finished_at || '').localeCompare(String(a.finished_at || '')));
     },
     pollHistory() {
-      return [...this.pollJobs.running, ...this.pollJobs.done, ...this.pollJobs.failed]
+      return [...this.pollJobs.done, ...this.pollJobs.failed]
         .sort((a, b) => {
           const ta = a.finished_at || a.started_at || a.requested_at || '';
           const tb = b.finished_at || b.started_at || b.requested_at || '';
