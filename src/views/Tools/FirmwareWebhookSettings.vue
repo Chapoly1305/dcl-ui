@@ -7,6 +7,7 @@
             <div class="flex align-items-center justify-content-between gap-2 flex-wrap">
               <div class="flex align-items-center gap-2 flex-wrap">
                 <span>Webhook Notification Settings</span>
+                <Tag :value="`Editing Network: ${scopeNetworkLabel}`" severity="warning" />
                 <Tag :value="`Active Network: ${activeNetwork || 'unknown'}`" severity="info" />
                 <Tag :value="`API: ${apiDisplayBase || apiBase || 'unset'}`" severity="contrast" />
               </div>
@@ -126,6 +127,7 @@ export default {
       error: null,
       statusNote: null,
       activeNetwork: '',
+      scopeNetwork: '',
       form: {
         enabled: false,
         timeout_sec: 10,
@@ -138,6 +140,31 @@ export default {
     };
   },
   methods: {
+    normalizeNetwork(value) {
+      const key = String(value || '').trim().toLowerCase();
+      return key === 'mainnet' || key === 'testnet' ? key : '';
+    },
+    resolveScopeNetwork() {
+      const selected = this.normalizeNetwork(this.selectedNetwork);
+      if (selected) {
+        return selected;
+      }
+      const scoped = this.normalizeNetwork(this.scopeNetwork);
+      if (scoped) {
+        return scoped;
+      }
+      const active = this.normalizeNetwork(this.activeNetwork);
+      return active || 'testnet';
+    },
+    networkLabel(value) {
+      const key = this.normalizeNetwork(value);
+      return key === 'mainnet' ? 'Mainnet' : 'Testnet';
+    },
+    settingsEndpoint() {
+      const network = this.resolveScopeNetwork();
+      const query = new URLSearchParams({ network });
+      return `${this.apiBase}/api/v1/settings/webhook?${query.toString()}`;
+    },
     normalizeUrl(value) {
       return String(value || '').trim();
     },
@@ -150,6 +177,7 @@ export default {
       this.form.new_device_firmware_released_url = String(payload.new_device_firmware_released_url || '');
       this.form.new_network_device_firmware_released_url = String(payload.new_network_device_firmware_released_url || '');
       this.activeNetwork = String(payload.active_network || '');
+      this.scopeNetwork = this.normalizeNetwork(payload.network) || this.resolveScopeNetwork();
     },
     async loadSettings() {
       this.loading = true;
@@ -162,7 +190,7 @@ export default {
         return;
       }
       try {
-        const response = await fetch(`${this.apiBase}/api/v1/settings/webhook?_=${Date.now()}`, {
+        const response = await fetch(`${this.settingsEndpoint()}&_=${Date.now()}`, {
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' }
         });
@@ -198,7 +226,7 @@ export default {
           new_device_firmware_released_url: this.normalizeUrl(this.form.new_device_firmware_released_url) || null,
           new_network_device_firmware_released_url: this.normalizeUrl(this.form.new_network_device_firmware_released_url) || null
         };
-        const response = await fetch(`${this.apiBase}/api/v1/settings/webhook`, {
+        const response = await fetch(this.settingsEndpoint(), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
@@ -209,14 +237,34 @@ export default {
         const payload = await response.json();
         this.applyPayload({
           ...(payload.settings || {}),
+          network: payload.network,
           active_network: payload.active_network
         });
-        this.statusNote = 'Webhook settings saved.';
+        this.statusNote = `Webhook settings saved for ${this.networkLabel(this.scopeNetwork)}.`;
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Failed to save webhook settings';
       } finally {
         this.saving = false;
       }
+    }
+  },
+  computed: {
+    selectedNetwork() {
+      return this.$store?.state?.network?.selectedNetwork || this.$store?.state?.network?.defaultNetwork || '';
+    },
+    scopeNetworkLabel() {
+      return this.networkLabel(this.scopeNetwork);
+    }
+  },
+  watch: {
+    selectedNetwork(next, prev) {
+      const a = this.normalizeNetwork(next);
+      const b = this.normalizeNetwork(prev);
+      if (!a || a === b) {
+        return;
+      }
+      this.scopeNetwork = a;
+      this.loadSettings();
     }
   },
   mounted() {

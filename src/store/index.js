@@ -1,9 +1,11 @@
 import { createStore } from 'vuex'
 import init from './config'
 import pkiOptimized from './pki-optimized'
+import network from './network'
 
 const store = createStore({
 	modules: {
+		network,
 		pkiOptimized
 	},
 	state() {

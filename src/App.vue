@@ -1,6 +1,6 @@
 <template>
     <div :class="containerClass" @click="onWrapperClick">
-        <AppTopBar @menu-toggle="onMenuToggle" />
+        <AppTopBar @menu-toggle="onMenuToggle" @network-change="onNetworkChange" />
         <div class="layout-sidebar" @click="onSidebarClick">
             <AppMenu :model="menu" @menuitem-click="onMenuItemClick" />
         </div>
@@ -142,6 +142,10 @@ export default {
         },
         changeTheme(event) {
             this.$emit('change-theme', event);
+        },
+        async onNetworkChange(network) {
+            await this.$store.dispatch('network/setSelectedNetwork', network);
+            this.$router.replace({ query: this.$route.query }).catch(() => undefined);
         }
     },
     computed: {
@@ -204,6 +208,7 @@ export default {
         } else {
             console.log('Skipping legacy store bootstrap (VITE_APP_DCL_BOOTSTRAP=false)');
         }
+        await this.$store.dispatch('network/initialize');
         this.initialized = true;
     }
 };

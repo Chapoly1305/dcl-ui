@@ -16,6 +16,22 @@
                 <AppWallet></AppWallet>
             </li>
             <li>
+                <Dropdown
+                    class="network-switch"
+                    v-model="selectedNetwork"
+                    :options="networkItems"
+                    optionLabel="label"
+                    optionValue="value"
+                    :disabled="!networkReady || networkItems.length <= 1"
+                    :placeholder="`Network: ${networkLabel}`"
+                    @change="onNetworkSelect"
+                >
+                    <template #value="slotProps">
+                        <span class="network-switch-value">{{ slotProps.value || networkLabel }}</span>
+                    </template>
+                </Dropdown>
+            </li>
+            <li>
                 <ThemeToggle />
             </li>
         </ul>
@@ -32,9 +48,31 @@ export default {
         },
         onTopbarMenuToggle(event) {
             this.$emit('topbar-menu-toggle', event);
+        },
+        onNetworkSelect(event) {
+            const value = event?.value;
+            if (!value) return;
+            this.$emit('network-change', value);
         }
     },
     computed: {
+        networkItems() {
+            return this.$store.getters['network/networkItems'] || [];
+        },
+        selectedNetwork: {
+            get() {
+                return this.$store.state.network.selectedNetwork || this.$store.state.network.defaultNetwork || 'testnet';
+            },
+            set(network) {
+                this.$store.dispatch('network/setSelectedNetwork', network);
+            }
+        },
+        networkReady() {
+            return this.$store.getters['network/isReady'];
+        },
+        networkLabel() {
+            return this.$store.getters['network/networkDisplayLabel'];
+        },
         darkTheme() {
             return this.$appState.darkTheme;
         }
@@ -50,5 +88,21 @@ export default {
 .layout-topbar .layout-topbar-logo img {
     height: 12rem;
     margin-right: 0.5rem;
+}
+
+.network-switch {
+    min-width: 118px;
+}
+
+.network-switch :deep(.p-dropdown-label) {
+    padding: 0.1rem 0.65rem;
+    font-size: 0.8rem;
+    min-height: 2rem;
+}
+
+.network-switch-value {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
 }
 </style>
