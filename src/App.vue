@@ -7,7 +7,11 @@
         <div class="layout-main-container">
             <div class="layout-main">
                 <Toast />
-                <router-view />
+                <router-view v-if="initialized" />
+                <div v-else class="surface-card border-round p-4">
+                    <div class="text-900 font-medium mb-2">Initializing DCL network...</div>
+                    <div class="text-600">Loading selected mainnet/testnet endpoints.</div>
+                </div>
             </div>
         </div>
     </div>
@@ -145,6 +149,12 @@ export default {
         },
         async onNetworkChange(network) {
             await this.$store.dispatch('network/setSelectedNetwork', network);
+            try {
+                await this.$store.dispatch('network/configureDclEnvironment');
+                await storeInitializer.initializeAllStores(this.$store);
+            } catch (error) {
+                console.error('Failed to reload DCL stores for selected network:', error);
+            }
             this.$router.replace({ query: this.$route.query }).catch(() => undefined);
         }
     },
@@ -183,32 +193,31 @@ export default {
     async created() {
         console.log('App created');
         console.log('Initializing DCL UI with values as below:');
-        console.log('API Node:', import.meta.env.VITE_APP_DCL_API_NODE);
-        console.log('RPC Node:', import.meta.env.VITE_APP_DCL_RPC_NODE);
-        console.log('WebSocket Node:', import.meta.env.VITE_APP_DCL_WEBSOCKET_NODE);
         console.log('Chain ID:', import.meta.env.VITE_APP_DCL_CHAIN_ID);
         console.log('Address Prefix:', import.meta.env.VITE_APP_DCL_ADDR_PREFIX);
         console.log('SDK Version:', import.meta.env.VITE_APP_DCL_SDK_VERSION);
         console.log('TX API:', import.meta.env.VITE_APP_DCL_TX_API);
         console.log('Refresh:', import.meta.env.VITE_APP_DCL_REFRESH);
-        await this.$store.dispatch('common/env/init', {
-            apiNode: import.meta.env.VITE_APP_DCL_API_NODE,
-            rpcNode: import.meta.env.VITE_APP_DCL_RPC_NODE,
-            wsNode: import.meta.env.VITE_APP_DCL_WEBSOCKET_NODE,
-            chainId: import.meta.env.VITE_APP_DCL_CHAIN_ID,
-            addrPrefix: import.meta.env.VITE_APP_DCL_ADDR_PREFIX,
-            sdkVersion: import.meta.env.VITE_APP_DCL_SDK_VERSION,
-            getTXApi: import.meta.env.VITE_APP_DCL_TX_API,
-            refresh: import.meta.env.VITE_APP_DCL_REFRESH
-        });
+        await this.$store.dispatch('network/initialize');
+        try {
+            await this.$store.dispatch('network/configureDclEnvironment');
+        } catch (error) {
+            console.error('Failed to configure selected DCL environment:', error);
+        }
+        console.log('API Node:', this.$store.getters['network/dclRestEndpoint']);
+        console.log('RPC Node:', this.$store.getters['network/dclRpcEndpoint']);
+        console.log('WebSocket Node:', this.$store.getters['network/dclWebsocketEndpoint']);
 
         const bootstrapEnabled = String(import.meta.env.VITE_APP_DCL_BOOTSTRAP ?? 'true').toLowerCase() !== 'false';
         if (bootstrapEnabled) {
-            await storeInitializer.initializeAllStores(this.$store);
+            try {
+                await storeInitializer.initializeAllStores(this.$store);
+            } catch (error) {
+                console.error('Failed to bootstrap legacy DCL stores:', error);
+            }
         } else {
             console.log('Skipping legacy store bootstrap (VITE_APP_DCL_BOOTSTRAP=false)');
         }
-        await this.$store.dispatch('network/initialize');
         this.initialized = true;
     }
 };

@@ -1,6 +1,7 @@
 <script>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useStore } from 'vuex'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import InputText from 'primevue/inputtext'
@@ -22,6 +23,7 @@ export default {
 
   setup() {
     const route = useRoute()
+    const store = useStore()
     const transactions = ref([])
     const loading = ref(true)
     const error = ref(null)
@@ -35,7 +37,8 @@ export default {
     const tableRef = ref(null)
     const searchText = ref('')
     const pageSize = 20
-    const restEndpoint = import.meta.env.VITE_APP_DCL_API_NODE || 'http://localhost:8080/api'
+    const restEndpoint = computed(() => store.getters['network/dclRestEndpoint'])
+    const selectedNetwork = computed(() => store.getters['network/network'])
 
     const filteredTransactions = computed(() => {
       if (!searchText.value) return transactions.value
@@ -59,7 +62,7 @@ export default {
     const fetchTransactionBlockHeights = async (endHeight, limit = pageSize) => {
       try {
         const response = await fetch(
-          `${restEndpoint}/cosmos/tx/v1beta1/txs?events=tx.height<=${endHeight}&order_by=2&limit=${limit}`
+          `${restEndpoint.value}/cosmos/tx/v1beta1/txs?events=tx.height<=${endHeight}&order_by=2&limit=${limit}`
         )
         if (!response.ok) throw new Error('Failed to fetch transaction blocks')
         const data = await response.json()
@@ -73,7 +76,7 @@ export default {
     const fetchLatestBlockHeight = async () => {
       try {
         const response = await fetch(
-          `${restEndpoint}/cosmos/base/tendermint/v1beta1/blocks/latest`
+          `${restEndpoint.value}/cosmos/base/tendermint/v1beta1/blocks/latest`
         )
         if (!response.ok) throw new Error('Failed to fetch latest block')
         const data = await response.json()
@@ -88,7 +91,7 @@ export default {
     const fetchLatestTxBlockHeight = async () => {
       try {
         const response = await fetch(
-          `${restEndpoint}/cosmos/tx/v1beta1/txs?events=tx.height<=${latestBlockHeight.value}&order_by=2&limit=1`
+          `${restEndpoint.value}/cosmos/tx/v1beta1/txs?events=tx.height<=${latestBlockHeight.value}&order_by=2&limit=1`
         )
         if (!response.ok) throw new Error('Failed to fetch latest transaction block')
         const data = await response.json()
@@ -111,7 +114,7 @@ export default {
         const lastHeight = lastTx ? parseInt(lastTx.height) - 1 : latestTxBlockHeight.value
 
         const response = await fetch(
-          `${restEndpoint}/cosmos/tx/v1beta1/txs?events=tx.height<=${lastHeight}&order_by=2&limit=${pageSize}`
+          `${restEndpoint.value}/cosmos/tx/v1beta1/txs?events=tx.height<=${lastHeight}&order_by=2&limit=${pageSize}`
         )
         if (!response.ok) throw new Error('Failed to fetch transactions')
         
@@ -175,7 +178,7 @@ export default {
           transactions.value = []
           
           const response = await fetch(
-            `${restEndpoint}/cosmos/tx/v1beta1/txs?events=tx.height<=${height}&order_by=2&limit=${pageSize}`
+            `${restEndpoint.value}/cosmos/tx/v1beta1/txs?events=tx.height<=${height}&order_by=2&limit=${pageSize}`
           )
           if (!response.ok) throw new Error('Failed to fetch transactions')
           const data = await response.json()
@@ -306,7 +309,7 @@ export default {
 
     const fetchUpgradeInfo = async () => {
       try {
-        const response = await fetch(`${restEndpoint}/dcl/dclupgrade/approved-upgrades`)
+        const response = await fetch(`${restEndpoint.value}/dcl/dclupgrade/approved-upgrades`)
         if (!response.ok) throw new Error('Failed to fetch upgrade info')
         const data = await response.json()
         upgradeInfo.value = data.approvedUpgrade.sort((a, b) => 
@@ -328,6 +331,12 @@ export default {
     const initialize = async () => {
       try {
         loading.value = true
+        error.value = null
+        transactions.value = []
+        latestBlockHeight.value = 0
+        latestTxBlockHeight.value = 0
+        upgradeInfo.value = []
+        hasMore.value = true
         await fetchUpgradeInfo()
         const height = await fetchLatestBlockHeight()
         if (height) {
@@ -335,7 +344,7 @@ export default {
           
           // Instead of using searchSpecificHeight, directly fetch initial transactions
           const response = await fetch(
-            `${restEndpoint}/cosmos/tx/v1beta1/txs?events=tx.height<=${latestTxBlockHeight.value}&order_by=2&limit=${pageSize}`
+            `${restEndpoint.value}/cosmos/tx/v1beta1/txs?events=tx.height<=${latestTxBlockHeight.value}&order_by=2&limit=${pageSize}`
           )
           if (!response.ok) throw new Error('Failed to fetch transactions')
           const data = await response.json()
@@ -396,6 +405,10 @@ export default {
       window.removeEventListener('scroll', handleScroll)
     })
 
+    watch(selectedNetwork, () => {
+      initialize()
+    })
+
     return {
       transactions,
       loading,
@@ -418,7 +431,8 @@ export default {
       getMessageContent,
       formatNumber,
       searchText,
-      filteredTransactions
+      filteredTransactions,
+      selectedNetwork
     }
   }
 }

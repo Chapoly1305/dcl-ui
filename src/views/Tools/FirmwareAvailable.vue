@@ -315,6 +315,11 @@ export default {
     };
   },
   computed: {
+    selectedNetwork() {
+      return this.normalizeNetwork(
+        this.$store?.state?.network?.selectedNetwork || this.$store?.state?.network?.defaultNetwork || 'testnet'
+      );
+    },
     stats() {
       return [
         { label: 'Tracked Images', value: this.datasetStats.trackedImages },
@@ -333,6 +338,10 @@ export default {
     }
   },
   methods: {
+    normalizeNetwork(value) {
+      const key = String(value || '').trim().toLowerCase();
+      return key === 'mainnet' || key === 'testnet' ? key : 'testnet';
+    },
     defaultFilters() {
       return {
         vid: '',
@@ -393,6 +402,7 @@ export default {
     },
     buildQueryString(refresh) {
       const params = new URLSearchParams({
+        network: this.selectedNetwork,
         limit: String(this.pageSize),
         offset: String(this.pageFirst),
         refresh: refresh ? 'true' : 'false',
@@ -530,7 +540,7 @@ export default {
         const payload = {
           firmware_sha256: sha || null,
           requested_from: 'available_firmware',
-          network: this.network || null,
+          network: this.selectedNetwork,
           vid: row?.vid ?? null,
           pid: row?.pid ?? null,
           software_version: row?.softwareVersion ?? null,
@@ -578,7 +588,8 @@ export default {
       const txHashLast8 = String(row?.txHashLast8 || '').trim();
       let queryToken = '';
       if (vid && pid && blockHeight) {
-        queryToken = `otaT_${vid}_${pid}_${blockHeight}_`;
+        const otaPrefix = this.selectedNetwork === 'mainnet' ? 'otaM' : 'otaT';
+        queryToken = `${otaPrefix}_${vid}_${pid}_${blockHeight}_`;
       } else if (txHashLast8) {
         queryToken = txHashLast8;
       }
@@ -622,6 +633,13 @@ export default {
     formatViolationDetails(value) {
       if (!value) return 'No violation detail';
       return String(value).split(';').join('; ');
+    }
+  },
+  watch: {
+    selectedNetwork(next, prev) {
+      if (next === prev) return;
+      this.pageFirst = 0;
+      this.loadAvailableFirmware();
     }
   },
   mounted() {

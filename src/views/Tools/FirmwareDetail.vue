@@ -32,6 +32,7 @@
                 <span class="text-600">SHA-256:</span>
                 <code>{{ shortSha(firmwareSha256) }}</code>
                 <Divider layout="vertical" class="m-0 hidden md:block" />
+                <Tag :value="`Network: ${selectedNetwork}`" severity="warning" />
                 <Tag :value="detail.is_downloaded ? 'Downloaded' : 'Not Downloaded'" :severity="detail.is_downloaded ? 'success' : 'warning'" />
                 <Tag :value="analysisLabel(detail.analysis_latest_status)" :severity="analysisSeverity(detail.analysis_latest_status)" />
               </div>
@@ -333,6 +334,11 @@ export default {
     };
   },
   computed: {
+    selectedNetwork() {
+      return this.normalizeNetwork(
+        this.$store?.state?.network?.selectedNetwork || this.$store?.state?.network?.defaultNetwork || 'testnet'
+      );
+    },
     firmwareSha256() {
       return String(this.$route.params.sha256 || '').toLowerCase();
     },
@@ -451,6 +457,10 @@ export default {
     }
   },
   methods: {
+    normalizeNetwork(value) {
+      const key = String(value || '').trim().toLowerCase();
+      return key === 'mainnet' || key === 'testnet' ? key : 'testnet';
+    },
     parseHexOrDec(raw) {
       const text = String(raw ?? '').trim();
       if (!text) return null;
@@ -479,7 +489,8 @@ export default {
         return;
       }
       try {
-        const detailResp = await fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}`);
+        const query = new URLSearchParams({ network: this.selectedNetwork });
+        const detailResp = await fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}?${query.toString()}`);
         if (!detailResp.ok) throw new Error(`Detail request failed (${detailResp.status})`);
         this.detail = await detailResp.json();
       } catch (err) {
@@ -497,7 +508,8 @@ export default {
         return;
       }
       try {
-        const jobsResp = await fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}/jobs`);
+        const query = new URLSearchParams({ network: this.selectedNetwork });
+        const jobsResp = await fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}/jobs?${query.toString()}`);
         if (!jobsResp.ok) throw new Error(`Jobs request failed (${jobsResp.status})`);
         this.jobsPayload = await jobsResp.json();
         this.jobsLoaded = true;
@@ -516,7 +528,8 @@ export default {
         return;
       }
       try {
-        const modulesResp = await fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}/modules`);
+        const query = new URLSearchParams({ network: this.selectedNetwork });
+        const modulesResp = await fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}/modules?${query.toString()}`);
         if (!modulesResp.ok) throw new Error(`Modules request failed (${modulesResp.status})`);
         this.modulesPayload = await modulesResp.json();
         this.modulesLoaded = true;
@@ -546,7 +559,11 @@ export default {
         const response = await fetch(`${this.apiBase}/api/v1/jobs/analyze-firmware`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ firmware_sha256: this.firmwareSha256, requested_from: 'firmware_detail' })
+          body: JSON.stringify({
+            firmware_sha256: this.firmwareSha256,
+            requested_from: 'firmware_detail',
+            network: this.selectedNetwork
+          })
         });
         if (!response.ok) {
           throw new Error(`Analyze enqueue failed (${response.status})`);
@@ -636,6 +653,16 @@ export default {
       const name = ZCL_TYPE_NAME[typeCode];
       if (name) return name;
       return `unknown(0x${typeCode.toString(16).toUpperCase().padStart(2, '0')})`;
+    }
+  },
+  watch: {
+    selectedNetwork(next, prev) {
+      if (next === prev) return;
+      this.modulesLoaded = false;
+      this.jobsLoaded = false;
+      this.modulesPayload = { modules: [] };
+      this.jobsPayload = { jobs: { pending: [], running: [], done: [], failed: [] }, attempts: [] };
+      this.refreshAll();
     }
   },
   mounted() {

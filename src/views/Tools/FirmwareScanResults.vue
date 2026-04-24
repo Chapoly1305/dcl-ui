@@ -16,6 +16,7 @@
                   @change="onScopeChange"
                 />
                 <Tag :value="`Total: ${totalCount}`" severity="info" />
+                <Tag :value="`Network: ${selectedNetwork}`" severity="warning" />
               </div>
               <div class="flex align-items-center gap-1">
                 <span class="text-600 text-sm">Showing {{ totalCount === 0 ? 0 : pageFirst + 1 }} - {{ Math.min(pageFirst + pageSize, totalCount) }}</span>
@@ -360,6 +361,11 @@ export default {
     };
   },
   computed: {
+    selectedNetwork() {
+      return this.normalizeNetwork(
+        this.$store?.state?.network?.selectedNetwork || this.$store?.state?.network?.defaultNetwork || 'testnet'
+      );
+    },
     selectedResult() {
       return this.detailPayload?.result || null;
     },
@@ -435,6 +441,10 @@ export default {
     }
   },
   methods: {
+    normalizeNetwork(value) {
+      const key = String(value || '').trim().toLowerCase();
+      return key === 'mainnet' || key === 'testnet' ? key : 'testnet';
+    },
     onScopeChange() {
       this.pageFirst = 0;
       this.loadResults();
@@ -457,6 +467,7 @@ export default {
     },
     buildQuery() {
       const params = new URLSearchParams({
+        network: this.selectedNetwork,
         scope: this.scope,
         limit: String(this.pageSize),
         offset: String(this.pageFirst),
@@ -565,7 +576,10 @@ export default {
         return;
       }
       try {
-        const response = await fetch(`${this.apiBase}/api/v1/results/${encodeURIComponent(resultId)}`);
+        const query = new URLSearchParams({ network: this.selectedNetwork });
+        const response = await fetch(
+          `${this.apiBase}/api/v1/results/${encodeURIComponent(resultId)}?${query.toString()}`
+        );
         if (!response.ok) throw new Error(`Result detail request failed (${response.status})`);
         const payload = await response.json();
         this.detailPayload = {
@@ -667,6 +681,13 @@ export default {
       const parts = text.split(/[\\/]/).filter(Boolean);
       if (parts.length === 0) return '-';
       return parts[parts.length - 1];
+    }
+  },
+  watch: {
+    selectedNetwork(next, prev) {
+      if (next === prev) return;
+      this.pageFirst = 0;
+      this.loadResults();
     }
   },
   mounted() {

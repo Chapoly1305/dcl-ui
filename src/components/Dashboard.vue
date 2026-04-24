@@ -324,35 +324,28 @@ export default {
             ]
         };
     },
-    watch: {},
+    watch: {
+        selectedNetwork(next, prev) {
+            if (next === prev) return;
+            this.loadNetworkData();
+            this.dispatchDashboardQueries();
+        }
+    },
 
     created() {
-        // Get the initial values
-        fetch(import.meta.env.VITE_APP_DCL_RPC_NODE + '/block')
-            .then((response) => response.json())
-            .then((data) => {
-                this.loadValues = data;
-            });
-        // Fetch node info
-        fetch(import.meta.env.VITE_APP_DCL_API_NODE + '/cosmos/base/tendermint/v1beta1/node_info')
-            .then((response) => response.json())
-            .then((data) => {
-                this.nodeInfo = data;
-            })
-            .catch((error) => {
-                console.error('Error fetching node info:', error);
-            });            
-
-        this.queries.forEach((query) => {
-            this.$store.dispatch(`${query.namespace}/${query.method}`, {
-                options: {
-                    subscribe: true,
-                    all: true
-                }
-            });
-        });
+        this.loadNetworkData();
+        this.dispatchDashboardQueries();
     },
     computed: {
+        selectedNetwork() {
+            return this.$store.getters['network/network'];
+        },
+        dclRestEndpoint() {
+            return this.$store.getters['network/dclRestEndpoint'];
+        },
+        dclRpcEndpoint() {
+            return this.$store.getters['network/dclRpcEndpoint'];
+        },
         isTestnetOrLocalhost() {
             const currentHref = window.location.href;
             return currentHref.includes('testnet.iotledger.io') || currentHref.includes('localhost');
@@ -403,6 +396,7 @@ export default {
             const modelInfoArray = this.$store.getters['zigbeealliance.distributedcomplianceledger.model/getModelAll']();
             return modelInfoArray?.model?.length || 0;
         },
+
 
         certificateCount() {
             const approvedCertificates = this.$store.getters['zigbeealliance.distributedcomplianceledger.pki/getApprovedCertificatesAll']();
@@ -548,6 +542,36 @@ export default {
         }
     },
     methods: {
+        loadNetworkData() {
+            this.loadValues = {};
+            this.nodeInfo = {};
+            fetch(`${this.dclRpcEndpoint}/block`)
+                .then((response) => response.json())
+                .then((data) => {
+                    this.loadValues = data;
+                })
+                .catch((error) => {
+                    console.error('Error fetching block:', error);
+                });
+            fetch(`${this.dclRestEndpoint}/cosmos/base/tendermint/v1beta1/node_info`)
+                .then((response) => response.json())
+                .then((data) => {
+                    this.nodeInfo = data;
+                })
+                .catch((error) => {
+                    console.error('Error fetching node info:', error);
+                });
+        },
+        dispatchDashboardQueries() {
+            this.queries.forEach((query) => {
+                this.$store.dispatch(`${query.namespace}/${query.method}`, {
+                    options: {
+                        subscribe: true,
+                        all: true
+                    }
+                });
+            });
+        },
         theFormat(number) {
             return number.toFixed(0);
         },

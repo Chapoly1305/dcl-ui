@@ -7,6 +7,7 @@
             <div class="flex align-items-center justify-content-between gap-2 flex-wrap">
               <div class="flex align-items-center gap-2 flex-wrap">
                 <span>Execution Pipelines</span>
+                <Tag :value="`Network: ${selectedNetwork}`" severity="warning" />
                 <Tag :value="`Updated: ${lastUpdated ? formatTimestamp(lastUpdated) : 'never'}`" severity="info" />
                 <Tag v-if="loading" value="Refreshing" severity="warning" />
               </div>
@@ -382,6 +383,11 @@ export default {
     };
   },
   computed: {
+    selectedNetwork() {
+      return this.normalizeNetwork(
+        this.$store?.state?.network?.selectedNetwork || this.$store?.state?.network?.defaultNetwork || 'testnet'
+      );
+    },
     analysisJobs() {
       const filterFn = j => j.job_type === 'analyze' || j.job_type === 'rerun';
       return {
@@ -448,11 +454,16 @@ export default {
     }
   },
   methods: {
+    normalizeNetwork(value) {
+      const key = String(value || '').trim().toLowerCase();
+      return key === 'mainnet' || key === 'testnet' ? key : 'testnet';
+    },
     async refreshQueue() {
       this.loading = true;
       this.error = null;
       try {
-        const response = await fetch(`${this.apiBase}/api/v1/jobs`);
+        const query = new URLSearchParams({ network: this.selectedNetwork });
+        const response = await fetch(`${this.apiBase}/api/v1/jobs?${query.toString()}`);
         if (!response.ok) throw new Error(`Queue request failed (${response.status})`);
         const payload = await response.json();
         this.jobs = {
@@ -472,7 +483,11 @@ export default {
       this.actionLoading.poll = true;
       this.statusNote = null;
       try {
-        const response = await fetch(`${this.apiBase}/api/v1/jobs/poll-now`, { method: 'POST' });
+        const response = await fetch(`${this.apiBase}/api/v1/jobs/poll-now`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ network: this.selectedNetwork })
+        });
         if (!response.ok) throw new Error(`Poll enqueue failed (${response.status})`);
         this.statusNote = 'Source polling job queued.';
         await this.refreshQueue();
@@ -486,7 +501,11 @@ export default {
       this.actionLoading.validate = true;
       this.statusNote = null;
       try {
-        const response = await fetch(`${this.apiBase}/api/v1/jobs/validate-conformance`, { method: 'POST' });
+        const response = await fetch(`${this.apiBase}/api/v1/jobs/validate-conformance`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ network: this.selectedNetwork })
+        });
         if (!response.ok) throw new Error(`Validate enqueue failed (${response.status})`);
         this.statusNote = 'Conformance validation job queued.';
         await this.refreshQueue();
@@ -516,6 +535,12 @@ export default {
       if (!jobId) return;
       this.progressJobId = jobId;
       this.progressDialogVisible = true;
+    }
+  },
+  watch: {
+    selectedNetwork(next, prev) {
+      if (next === prev) return;
+      this.refreshQueue();
     }
   },
   mounted() {

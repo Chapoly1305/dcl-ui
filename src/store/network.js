@@ -46,6 +46,10 @@ function dedupe(values) {
 	return result;
 }
 
+function trimTrailingSlash(value) {
+	return String(value || '').replace(/\/$/, '');
+}
+
 export default {
 	namespaced: true,
 	state: () => ({
@@ -55,6 +59,7 @@ export default {
 		requestBase: '',
 		defaultNetwork: '',
 		enabledNetworks: [],
+		options: [],
 		selectedNetwork: '',
 	}),
 	getters: {
@@ -70,6 +75,29 @@ export default {
 		networkDisplayLabel(state) {
 			const value = String(state.selectedNetwork || state.defaultNetwork || '').trim();
 			return value === 'mainnet' ? 'Mainnet' : 'Testnet';
+		},
+		selectedOption(state, getters) {
+			const network = getters.network;
+			return (state.options || []).find((row) => normalizeNetwork(row?.network) === network) || {};
+		},
+		dclRestEndpoint(state, getters) {
+			const option = getters.selectedOption || {};
+			const proxyBase = String(option.dcl_rest_proxy_base || '').trim();
+			if (state.requestBase && proxyBase) {
+				return `${trimTrailingSlash(state.requestBase)}${proxyBase}`;
+			}
+			return trimTrailingSlash(import.meta.env.VITE_APP_DCL_API_NODE || 'http://localhost:8080/api');
+		},
+		dclRpcEndpoint(state, getters) {
+			const option = getters.selectedOption || {};
+			const proxyBase = String(option.dcl_rpc_proxy_base || '').trim();
+			if (state.requestBase && proxyBase) {
+				return `${trimTrailingSlash(state.requestBase)}${proxyBase}`;
+			}
+			return trimTrailingSlash(import.meta.env.VITE_APP_DCL_RPC_NODE || 'http://localhost:8080/rpc');
+		},
+		dclWebsocketEndpoint() {
+			return String(import.meta.env.VITE_APP_DCL_WEBSOCKET_NODE || 'ws://localhost:8080/websocket').replace(/\/$/, '');
 		},
 		isReady(state) {
 			return state.initialized && Boolean(state.defaultNetwork);
@@ -95,6 +123,7 @@ export default {
 			}
 			state.defaultNetwork = defaultNetwork || deduped[0] || 'testnet';
 			state.enabledNetworks = deduped;
+			state.options = Array.isArray(payload?.networks) ? payload.networks : [];
 		},
 		setSelectedNetwork(state, value) {
 			state.selectedNetwork = normalizeNetwork(value);
@@ -161,6 +190,25 @@ export default {
 			const safe = allowed.includes(value) ? value : (allowed[0] || context.state.defaultNetwork || 'testnet');
 			context.commit('setSelectedNetwork', safe);
 			persistNetwork(safe);
+		},
+		async configureDclEnvironment(context) {
+			const restEndpoint = context.getters.dclRestEndpoint;
+			const rpcEndpoint = context.getters.dclRpcEndpoint;
+			const websocketEndpoint = context.getters.dclWebsocketEndpoint;
+			await context.dispatch(
+				'common/env/init',
+				{
+					apiNode: restEndpoint,
+					rpcNode: rpcEndpoint,
+					wsNode: websocketEndpoint,
+					chainId: import.meta.env.VITE_APP_DCL_CHAIN_ID,
+					addrPrefix: import.meta.env.VITE_APP_DCL_ADDR_PREFIX,
+					sdkVersion: import.meta.env.VITE_APP_DCL_SDK_VERSION,
+					getTXApi: `${rpcEndpoint}/tx?hash=0x`,
+					refresh: import.meta.env.VITE_APP_DCL_REFRESH,
+				},
+				{ root: true }
+			);
 		},
 		clearError(context) {
 			context.commit('setError', '');
