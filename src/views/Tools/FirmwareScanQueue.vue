@@ -2,7 +2,7 @@
   <div class="p-3 firmware-queue-page">
     <div class="grid">
       <div class="col-12">
-        <Card class="queue-header-card mb-3">
+        <Card class="queue-header-card mb-0">
           <template #title>
             <div class="flex align-items-center justify-content-between gap-2 flex-wrap">
               <div class="flex align-items-center gap-2 flex-wrap">
@@ -22,9 +22,9 @@
               </div>
             </div>
           </template>
-          <template #content>
+          <template #content v-if="error || statusNote">
             <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
-            <Message v-else-if="statusNote" severity="success" :closable="false">{{ statusNote }}</Message>
+            <Message v-else severity="success" :closable="false">{{ statusNote }}</Message>
           </template>
         </Card>
       </div>
@@ -39,10 +39,10 @@
               <Badge :value="analysisStats.outstanding" class="ml-2" severity="warning" v-if="analysisStats.outstanding > 0"></Badge>
             </template>
             
-            <div class="grid mt-2">
+            <div class="grid">
               <div class="col-12 md:col-4" v-for="stat in analysisStatCards" :key="stat.label">
-                <div class="card mb-3 stat-card surface-card border-1 surface-border shadow-1">
-                  <div class="flex justify-content-between mb-2">
+                <div class="card mb-0 stat-card surface-card border-1 surface-border shadow-1">
+                  <div class="flex justify-content-between mb-1">
                     <div>
                       <span class="block text-500 font-medium mb-1 text-xs uppercase">{{ stat.label }}</span>
                       <div class="text-900 font-bold text-xl">{{ stat.value }}</div>
@@ -75,7 +75,7 @@
                         </template>
                       </Column>
                     </DataTable>
-                    <div v-if="analysisJobs.running.length === 0" class="p-5 text-center text-400 italic flex flex-column align-items-center">
+                    <div v-if="analysisJobs.running.length === 0" class="p-3 text-center text-400 italic flex flex-column align-items-center">
                       <i class="pi pi-play text-2xl mb-2"></i>
                       <span>No running analysis.</span>
                     </div>
@@ -104,7 +104,7 @@
                         </template>
                       </Column>
                     </DataTable>
-                    <div v-if="analysisJobs.pending.length === 0" class="p-5 text-center text-400 italic flex flex-column align-items-center">
+                    <div v-if="analysisJobs.pending.length === 0" class="p-3 text-center text-400 italic flex flex-column align-items-center">
                       <i class="pi pi-clock text-2xl mb-2"></i>
                       <span>No queued analysis.</span>
                     </div>
@@ -122,10 +122,10 @@
               <Badge :value="conformanceJobs.running.length + conformanceJobs.pending.length" class="ml-2" severity="info" v-if="conformanceJobs.running.length + conformanceJobs.pending.length > 0"></Badge>
             </template>
             
-            <div class="grid mt-2">
+            <div class="grid">
               <div class="col-12 md:col-4" v-for="stat in conformanceStatCards" :key="stat.label">
-                <div class="card mb-3 stat-card surface-card border-1 surface-border shadow-1">
-                  <div class="flex justify-content-between mb-2">
+                <div class="card mb-0 stat-card surface-card border-1 surface-border shadow-1">
+                  <div class="flex justify-content-between mb-1">
                     <div>
                       <span class="block text-500 font-medium mb-1 text-xs uppercase">{{ stat.label }}</span>
                       <div class="text-900 font-bold text-xl">{{ stat.value }}</div>
@@ -138,7 +138,7 @@
               </div>
 
               <div class="col-12">
-                <div class="flex justify-content-end mb-3">
+                <div class="flex justify-content-end mb-1">
                   <Button 
                     label="Enqueue Conformance Validation" 
                     icon="pi pi-shield" 
@@ -166,7 +166,7 @@
                         </template>
                       </Column>
                     </DataTable>
-                    <div v-if="conformanceJobs.running.length === 0" class="p-5 text-center text-400 italic">No running validation.</div>
+                    <div v-if="conformanceJobs.running.length === 0" class="p-3 text-center text-400 italic">No running validation.</div>
                   </template>
                 </Card>
               </div>
@@ -188,12 +188,12 @@
                         </template>
                       </Column>
                     </DataTable>
-                    <div v-if="conformanceJobs.pending.length === 0" class="p-5 text-center text-400 italic">No queued validation.</div>
+                    <div v-if="conformanceJobs.pending.length === 0" class="p-3 text-center text-400 italic">No queued validation.</div>
                   </template>
                 </Card>
               </div>
 
-              <div class="col-12 mt-3">
+              <div class="col-12 mt-1">
                 <Card class="jobs-card border-1 surface-border shadow-1">
                   <template #title><span class="text-lg font-bold">Conformance History</span></template>
                   <template #content>
@@ -228,7 +228,7 @@
                         </template>
                       </Column>
                     </DataTable>
-                    <div v-if="conformanceHistory.length === 0" class="p-5 text-center text-400 italic">No conformance history.</div>
+                    <div v-if="conformanceHistory.length === 0" class="p-3 text-center text-400 italic">No conformance history.</div>
                   </template>
                 </Card>
               </div>
@@ -243,9 +243,9 @@
               <Badge :value="pollJobs.running.length + pollJobs.pending.length" class="ml-2" severity="info" v-if="pollJobs.running.length + pollJobs.pending.length > 0"></Badge>
             </template>
             
-            <div class="grid mt-2">
+            <div class="grid">
               <div class="col-12">
-                <div class="flex justify-content-between align-items-center mb-3 px-2">
+                <div class="flex justify-content-between align-items-center mb-1 px-2">
                   <div class="text-600">
                     <i class="pi pi-info-circle mr-1"></i>
                     Synchronize local store with DCL firmware repository. Pulls new data without triggering automatic scans.
@@ -277,7 +277,7 @@
                         </template>
                       </Column>
                     </DataTable>
-                    <div v-if="pollJobs.running.length === 0" class="p-5 text-center text-400 italic">No running polls.</div>
+                    <div v-if="pollJobs.running.length === 0" class="p-3 text-center text-400 italic">No running polls.</div>
                   </template>
                 </Card>
               </div>
@@ -299,12 +299,12 @@
                         </template>
                       </Column>
                     </DataTable>
-                    <div v-if="pollJobs.pending.length === 0" class="p-5 text-center text-400 italic">No queued polls.</div>
+                    <div v-if="pollJobs.pending.length === 0" class="p-3 text-center text-400 italic">No queued polls.</div>
                   </template>
                 </Card>
               </div>
 
-              <div class="col-12 mt-3">
+              <div class="col-12 mt-1">
                 <Card class="jobs-card border-1 surface-border shadow-1">
                   <template #title><span class="text-lg font-bold">Polling History</span></template>
                   <template #content>
@@ -331,7 +331,7 @@
                         </template>
                       </Column>
                     </DataTable>
-                    <div v-if="pollHistory.length === 0" class="p-5 text-center text-400 italic">No polling activity.</div>
+                    <div v-if="pollHistory.length === 0" class="p-3 text-center text-400 italic">No polling activity.</div>
                   </template>
                 </Card>
               </div>
@@ -557,12 +557,26 @@ export default {
 
 .firmware-queue-page :deep(.p-tabview-panels) {
   background: transparent;
-  padding: 1rem 0;
+  padding: 0.25rem 0;
 }
 
 .firmware-queue-page .stat-card {
-  min-height: 78px;
-  padding: 1rem;
+  min-height: 60px;
+  padding: 0.75rem 1rem;
   border-radius: 12px;
+}
+
+.queue-header-card :deep(.p-card-body) {
+  padding: 0.5rem 1rem;
+}
+.queue-header-card :deep(.p-card-title) {
+  margin-bottom: 0;
+}
+
+.jobs-card :deep(.p-card-body) {
+  padding: 0.75rem 1rem;
+}
+.jobs-card :deep(.p-card-content) {
+  padding: 0;
 }
 </style>

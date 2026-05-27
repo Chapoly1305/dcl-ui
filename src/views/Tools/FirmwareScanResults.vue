@@ -1,5 +1,6 @@
 <template>
   <div class="p-2 scan-results-page">
+    <ConfirmDialog />
     <div class="grid">
       <div class="col-12">
         <Card class="results-card">
@@ -7,14 +8,7 @@
             <div class="flex align-items-center justify-content-between gap-1 flex-wrap">
               <div class="flex align-items-center gap-1 flex-wrap">
                 <span>Scan Results</span>
-                <SelectButton
-                  v-model="scope"
-                  :options="scopeOptions"
-                  optionLabel="label"
-                  optionValue="value"
-                  class="p-button-sm"
-                  @change="onScopeChange"
-                />
+
                 <Tag :value="`Total: ${totalCount}`" severity="info" />
                 <Tag :value="`Network: ${selectedNetwork}`" severity="warning" />
               </div>
@@ -105,6 +99,7 @@
               scrollHeight="34rem"
               responsiveLayout="scroll"
               class="p-datatable-sm scan-results-table"
+              :pt="{ headerCell: { style: 'justify-content:center;text-align:center' }, bodyCell: { style: 'justify-content:center;text-align:center' } }"
             >
               <Column field="analyzed_at" header="Analyzed At" sortable headerClass="scan-col-analyzed" bodyClass="scan-col-analyzed">
                 <template #body="slotProps">{{ formatTimestamp(slotProps.data.analyzed_at) }}</template>
@@ -120,42 +115,13 @@
               <Column field="block_height" header="Block Height" headerClass="scan-col-height" bodyClass="scan-col-height">
                 <template #body="slotProps">{{ displayValue(slotProps.data.block_height) }}</template>
               </Column>
-              <Column field="tx_hash_last8" header="TxHash (Last 8)" headerClass="scan-col-hash" bodyClass="scan-col-hash">
-                <template #body="slotProps"><code>{{ displayValue(slotProps.data.tx_hash_last8) }}</code></template>
+              <Column field="tx_hash_first8" header="TxHash (First 8)" headerClass="scan-col-hash" bodyClass="scan-col-hash">
+                <template #body="slotProps"><code>{{ displayValue(slotProps.data.tx_hash_first8) }}</code></template>
               </Column>
               <Column field="status" header="Run Status" sortable headerClass="scan-col-status" bodyClass="scan-col-status">
                 <template #body="slotProps">
                   <Tag :value="slotProps.data.status" :severity="runStatusSeverity(slotProps.data.status)" />
                 </template>
-              </Column>
-              <Column field="verdict_integrity" header="Payload Hash" sortable headerClass="scan-col-status" bodyClass="scan-col-status">
-                <template #body="slotProps">
-                  <Tag :value="slotProps.data.verdict_integrity" :severity="verdictSeverity(slotProps.data.verdict_integrity)" />
-                </template>
-              </Column>
-              <Column field="verdict_validation_path" header="Validation Path" sortable headerClass="scan-col-status" bodyClass="scan-col-status">
-                <template #body="slotProps">
-                  <Tag :value="slotProps.data.verdict_validation_path" :severity="verdictSeverity(slotProps.data.verdict_validation_path)" />
-                </template>
-              </Column>
-              <Column field="verdict_authenticity" header="Authenticity" sortable headerClass="scan-col-status" bodyClass="scan-col-status">
-                <template #body="slotProps">
-                  <Tag :value="slotProps.data.verdict_authenticity" :severity="verdictSeverity(slotProps.data.verdict_authenticity)" />
-                </template>
-              </Column>
-              <Column field="chipset" header="Chipset" sortable headerClass="scan-col-chipset" bodyClass="scan-col-chipset">
-                <template #body="slotProps">
-                  <div class="flex flex-column gap-1">
-                    <span>{{ displayValue(slotProps.data.chipset) }}</span>
-                    <span class="text-500 text-xs">det score {{ formatConfidence(slotProps.data.chipset_confidence) }}</span>
-                  </div>
-                </template>
-              </Column>
-              <Column field="sdk_decoded_version" header="SDK Decoded" headerClass="scan-col-sdk" bodyClass="scan-col-sdk">
-                <template #body="slotProps">{{ sdkDisplayValue(slotProps.data.sdk_decoded_version) }}</template>
-              </Column>
-              <Column field="sdk_inferred_version" header="SDK Inferred" headerClass="scan-col-sdk" bodyClass="scan-col-sdk">
-                <template #body="slotProps">{{ sdkDisplayValue(slotProps.data.sdk_inferred_version) }}</template>
               </Column>
               <Column header="Actions" headerClass="scan-col-actions" bodyClass="scan-col-actions">
                 <template #body="slotProps">
@@ -172,6 +138,12 @@
                       v-tooltip.top="slotProps.data.firmware_sha256 ? 'Open firmware detail' : 'Firmware SHA missing'"
                       :disabled="!slotProps.data.firmware_sha256"
                       @click.stop="openFirmwareDetail(slotProps.data)"
+                    />
+                    <Button
+                      icon="pi pi-trash"
+                      class="p-button-sm p-button-text p-button-danger"
+                      v-tooltip.top="'Delete result'"
+                      @click.stop="confirmDelete(slotProps.data)"
                     />
                   </div>
                 </template>
@@ -440,17 +412,27 @@
 
             <div v-else>
               <div class="flex align-items-center justify-content-between mb-3">
-                <span class="text-sm text-600">{{ stagesCompleteCount }} / {{ stageRows.length }} stages complete</span>
+                <span class="text-sm text-600">{{ stagesCompleteCount }} / {{ stageRows.length }} resolved</span>
                 <span class="text-sm text-500">{{ totalPipelineDuration }}</span>
               </div>
               <div class="stage-progress mb-3">
                 <div class="stage-progress-fill" :style="{ width: stagesPercent + '%' }"></div>
               </div>
 
-              <div class="text-xs text-500 mb-3 flex align-items-center gap-3">
-                <span class="cl-legend"><i class="pi pi-check-circle text-green-500"></i> Passed</span>
-                <span class="cl-legend"><i class="pi pi-exclamation-triangle text-yellow-500"></i> Observation</span>
-                <span class="cl-legend"><i class="pi pi-times-circle text-red-500"></i> Not checked</span>
+              <div class="text-xs mb-3 flex flex-wrap align-items-center gap-3">
+                <span class="cl-tally"><span class="cl-dot cl-dot-success"></span> Passed <strong>{{ stageStatusCounts.passed }}</strong></span>
+                <span class="cl-tally"><span class="cl-dot cl-dot-secondary"></span> Skipped <strong>{{ stageStatusCounts.skipped }}</strong></span>
+                <span class="cl-tally"><span class="cl-dot cl-dot-warning"></span> Pending <strong>{{ stageStatusCounts.pending }}</strong></span>
+                <span class="cl-tally"><span class="cl-dot cl-dot-info"></span> AI review <strong>{{ stageStatusCounts.review }}</strong></span>
+                <span class="cl-tally"><span class="cl-dot cl-dot-danger"></span> Issues <strong>{{ stageStatusCounts.issue }}</strong></span>
+              </div>
+
+              <div class="text-xs text-500 mb-3 flex flex-wrap align-items-center gap-3">
+                <span class="cl-legend"><span class="cl-badge cl-badge-success">PASSED</span> Passed / OK</span>
+                <span class="cl-legend"><span class="cl-badge cl-badge-warning">PENDING</span> Not checked yet</span>
+                <span class="cl-legend"><span class="cl-badge cl-badge-secondary">SKIPPED</span> Not applicable</span>
+                <span class="cl-legend"><span class="cl-badge cl-badge-danger">ISSUE</span> Confirmed problem</span>
+                <span class="cl-legend"><span class="cl-badge cl-badge-info">AI REVIEW</span> Needs human review</span>
               </div>
 
               <div class="stage-timeline">
@@ -466,8 +448,8 @@
                     <div class="flex align-items-center justify-content-between gap-2 stage-summary" @click="toggleNode('stage-' + stage.name)">
                       <div class="flex align-items-center gap-1">
                         <i class="pi text-xs stage-chevron" :class="isExpanded('stage-' + stage.name) ? 'pi-chevron-down' : 'pi-chevron-right'" />
-                        <span class="font-medium text-sm">{{ stageLabel(stage.name) }}</span>
-                        <Tag :value="stage.status" :severity="stageSeverity(stage.status)" class="ml-1" />
+                        <span class="font-medium text-sm">{{ stage.label }}</span>
+                        <Tag :value="stageStatusLabel(stage.status)" :severity="stageSeverity(stage.status)" class="ml-1" />
                       </div>
                       <span class="text-xs text-500">{{ stage.duration }}</span>
                     </div>
@@ -492,7 +474,7 @@
                       <div v-if="stageSections(stage.name).length > 0" class="checklist-grid">
                         <div v-for="sec in stageSections(stage.name)" :key="sec.id" class="checklist-item" :class="'cl-'+checklistStatus(sec.id)">
                           <div class="cl-header">
-                            <span class="cl-name">{{ sec.id }} — {{ sec.name }}</span>
+                            <span class="cl-name">{{ sec.name }}</span>
                             <i :class="checklistIcon(sec.id)" :style="{ color: checklistIconColor(sec.id), fontSize: '1.3rem' }" />
                           </div>
                           <div class="cl-outcome">{{ sec.outcome }}</div>
@@ -543,55 +525,6 @@
             </Card>
           </TabPanel>
 
-          <!-- ===== Tab 6: Checklist ===== -->
-          <TabPanel header="Checklist">
-            <div class="text-500 text-xs mb-3">
-              <span class="cl-legend"><i class="pi pi-check-circle text-green-500"></i> Passed</span>
-              <span class="cl-legend ml-3"><i class="pi pi-exclamation-triangle text-yellow-500"></i> Observation</span>
-              <span class="cl-legend ml-3"><i class="pi pi-times-circle text-red-500"></i> Not checked</span>
-              <span class="cl-legend ml-3 text-400">Phase 1 = Spec Conformance &middot; Phase 2 = Firmware Analysis</span>
-            </div>
-
-            <div class="checklist-phase-header mb-2">
-              <Tag value="Phase 1" severity="info" class="text-xs" />
-              <span class="text-sm font-semibold ml-2 text-700">Matter Specification Conformance</span>
-            </div>
-            <div v-for="tier in phase1Tiers" :key="'p1-'+tier.level" class="mb-3">
-              <div class="text-xs text-500 mb-1 flex align-items-center gap-1">
-                <Tag :value="'Group '+tier.level" severity="secondary" class="text-xs" />
-                <span v-if="tier.max_workers > 1" class="text-400">{{ tier.max_workers }}&times; parallel</span>
-              </div>
-              <div class="checklist-grid">
-                <div v-for="sec in tier.sections" :key="sec.id" class="checklist-item" :class="'cl-'+checklistStatus(sec.id)">
-                  <div class="cl-header">
-                    <span class="cl-name" style="font-weight:600;font-size:0.95rem;color:var(--text-color)">{{ sec.name }}</span>
-                    <i :class="checklistIcon(sec.id)" :style="{ color: checklistIconColor(sec.id), fontSize: '1.3rem' }" />
-                  </div>
-                  <div class="cl-outcome">{{ checklistOutcome(sec) }}</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="checklist-phase-header mt-4 mb-2">
-              <Tag value="Phase 2" severity="warn" class="text-xs" />
-              <span class="text-sm font-semibold ml-2 text-700">Firmware Security Analysis</span>
-            </div>
-            <div v-for="tier in phase2Tiers" :key="'p2-'+tier.level" class="mb-3">
-              <div class="text-xs text-500 mb-1 flex align-items-center gap-1">
-                <Tag :value="'Group '+tier.level" severity="secondary" class="text-xs" />
-                <span v-if="tier.max_workers > 1" class="text-400">{{ tier.max_workers }}&times; parallel</span>
-              </div>
-              <div class="checklist-grid">
-                <div v-for="sec in tier.sections" :key="sec.id" class="checklist-item" :class="'cl-'+checklistStatus(sec.id)">
-                  <div class="cl-header">
-                    <span class="cl-name" style="font-weight:600;font-size:0.95rem;color:var(--text-color)">{{ sec.name }}</span>
-                    <i :class="checklistIcon(sec.id)" :style="{ color: checklistIconColor(sec.id), fontSize: '1.3rem' }" />
-                  </div>
-                  <div class="cl-outcome">{{ checklistOutcome(sec) }}</div>
-                </div>
-              </div>
-            </div>
-          </TabPanel>
 
         </TabView>
       </div>
@@ -602,77 +535,15 @@
 <script>
 import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
 
-// Static DAG structure — sections A-G (Phase 1: Spec Conformance) and H-S (Phase 2: Firmware Analysis)
-// Mapping from stage name to the checklist sections it runs
-const STAGE_SECTION_MAP = {
-  '00_meta': [
-    { id: 'A', name: 'DCL Record / Provenance', desc: 'Look up DCL metadata by VID/PID, verify on-chain record exists' },
-    { id: 'B', name: 'Ledger-only Conformance', desc: '30+ rule-based checks on DCL manifest fields without downloading' },
-    { id: 'C', name: 'URL / TLS / Hosting', desc: 'Validate OTA URL format, TLS handshake, cert chain, and hosting provider' },
-  ],
-  '10_matter_ota': [
-    { id: 'D', name: 'Artifact Download / Acquisition', desc: 'Dual-client download with SHA-256 reproducibility check' },
-    { id: 'E', name: 'Manifest-layer Integrity', desc: 'Verify OtaChecksum from DCL matches actual downloaded image' },
-    { id: 'F', name: 'Matter OTA Image Format', desc: 'Magic number check, TLV parse, and header field validation' },
-    { id: 'G', name: 'Image Digest / Payload Extraction', desc: 'Extract payload from Matter wrapper, verify ImageDigest' },
-  ],
-  '20_chipset_identify': [
-    { id: 'H', name: 'Payload Type / Firmware Orientation', desc: 'Identify file type, architecture, platform, and load segments' },
-    { id: 'I', name: 'Entropy / Encryption / Compression', desc: 'Global + sliding-window Shannon entropy, encryption detection' },
-  ],
-  '30_extract_executable': [
-    { id: 'Q', name: 'Non-firmware Payload / Contamination', desc: 'Detect non-firmware artifacts (config, certs, backups, debug)' },
-  ],
-  '40_ida_headless': [],
-  '45_secure_boot_authenticity': [
-    { id: 'L', name: 'Secure Boot / OTA Authenticity', desc: 'Signed-update evidence, default key detection, signature validation' },
-  ],
-  '50_capability_recovery': [],
-  '55_sidekick_triage': [
-    { id: 'M', name: 'Secrets / Sensitive Material', desc: 'Scan for private keys, credentials, and Matter-specific secrets' },
-  ],
-  '60_sdk_version': [
-    { id: 'K', name: 'Matter SDK / Specification Baseline', desc: 'Recover SpecVer from Basic Information cluster, SDK branch estimate' },
-    { id: 'J', name: 'Version Lineage / Cross-network', desc: 'Version chain analysis, testnet/mainnet cross-reference, rollback detection' },
-  ],
-  '90_finalize': [
-    { id: 'S', name: 'Scoring / Prioritization / Triage', desc: 'Aggregate conformance + security scores, assign P0-P3 priority' },
-  ],
-};
+// Display config lives in utils/pipelineDisplay.js (shared with the live
+// progress modal). Edit there to rename, add, or reorder stages — every UI
+// surface picks up the change.
+import {
+  DISPLAY_STAGES,
+  stageSeverity as sharedStageSeverity,
+  stageStatusBadgeLabel,
+} from '@/utils/pipelineDisplay';
 
-const STATIC_DAG_TIERS = [
-  // Phase 1 — Spec Conformance
-  { level: 0, phase: 1, max_workers: 1, sections: [{ id: 'A', name: 'DCL Record / Provenance', description: 'Load DCL record metadata, build provenance link', runner: 'code', phase: 1 }] },
-  { level: 1, phase: 1, max_workers: 2, sections: [
-    { id: 'B', name: 'Ledger-only Conformance', description: '30+ rule-based checks on DCL manifest fields', runner: 'code', phase: 1 },
-    { id: 'C', name: 'URL / TLS / Hosting', description: 'URL validation, TLS handshake, cert chain, hosting classification', runner: 'code', phase: 1 }
-  ]},
-  { level: 2, phase: 1, max_workers: 1, sections: [{ id: 'D', name: 'Artifact Download / Acquisition', description: 'Dual-client download, retry, SHA-256, reproducibility', runner: 'code', phase: 1 }] },
-  { level: 3, phase: 1, max_workers: 2, sections: [
-    { id: 'E', name: 'Manifest-layer Integrity', description: 'OtaChecksum verification against DCL declaration', runner: 'code', phase: 1 },
-    { id: 'F', name: 'Matter OTA Image Format', description: 'Magic number, TLV parse, header field validation', runner: 'code', phase: 1 }
-  ]},
-  { level: 4, phase: 1, max_workers: 1, sections: [{ id: 'G', name: 'Image Digest / Payload Extraction', description: 'Extract payload, verify ImageDigest', runner: 'code', phase: 1 }] },
-  // Phase 2 — Firmware Analysis
-  { level: 5, phase: 2, max_workers: 3, sections: [
-    { id: 'H', name: 'Payload Type / Firmware Orientation', description: 'File type, architecture, platform identification', runner: 'code', phase: 2 },
-    { id: 'I', name: 'Entropy / Encryption / Compression', description: 'Shannon entropy, opacity cutoff, compression detection', runner: 'code', phase: 2 },
-    { id: 'M', name: 'Secrets / Sensitive Material', description: 'Scan for private keys, credentials, Matter secrets', runner: 'hybrid', phase: 2 }
-  ]},
-  { level: 6, phase: 2, max_workers: 5, sections: [
-    { id: 'K', name: 'Matter SDK / Specification Baseline', description: 'Recover SpecVer from Basic Information cluster', runner: 'code', phase: 2 },
-    { id: 'N', name: 'RNG / Crypto Initialization', description: 'Trace entropy init paths, detect null/static entropy', runner: 'llm', phase: 2 },
-    { id: 'L', name: 'Secure Boot / OTA Authenticity', description: 'Signed-update evidence, default key detection', runner: 'code', phase: 2 },
-    { id: 'Q', name: 'Non-firmware Payload / Contamination', description: 'Classify non-firmware artifacts, detect pipeline issues', runner: 'code', phase: 2 },
-    { id: 'J', name: 'Version Lineage / Cross-network', description: 'Version chain, testnet/mainnet cross-reference', runner: 'code', phase: 2, cross_firmware: true }
-  ]},
-  { level: 7, phase: 2, max_workers: 3, sections: [
-    { id: 'O', name: 'Vendor Implementation / Sink RE', description: 'Sink-driven reverse engineering, authorization gaps', runner: 'llm', phase: 2 },
-    { id: 'P', name: 'Cloud Telemetry / Privacy', description: 'Cloud endpoints, data classification, consent assessment', runner: 'llm', phase: 2 },
-    { id: 'R', name: 'Supply-chain / Integration Failure', description: 'Cross-firmware pattern matching, shared vulnerabilities', runner: 'llm', phase: 2, cross_firmware: true }
-  ]},
-  { level: 8, phase: 2, max_workers: 1, sections: [{ id: 'S', name: 'Scoring / Prioritization / Triage', description: 'Conformance score, security score, P0-P3 priority', runner: 'code', phase: 2 }] }
-];
 
 export default {
   name: 'FirmwareScanResults',
@@ -686,11 +557,7 @@ export default {
       totalCount: 0,
       pageSize: 5,
       pageFirst: 0,
-      scope: 'latest',
-      scopeOptions: [
-        { label: 'Latest', value: 'latest' },
-        { label: 'All Attempts', value: 'all' }
-      ],
+
       uiSortField: 'analyzed_at',
       sortOrder: -1,
       filters: {
@@ -716,7 +583,7 @@ export default {
       selectedResultId: '',
       detailLoading: false,
       detailError: null,
-      staticDagTiers: STATIC_DAG_TIERS,
+
       detailPayload: {
         result: null,
         attempts: []
@@ -785,25 +652,7 @@ export default {
       }
       return null;
     },
-    checklistTiers() {
-      if (this.phaseIiReport?.dag && Array.isArray(this.phaseIiReport.dag.tiers) && this.phaseIiReport.dag.tiers.length > 0) {
-        return this.phaseIiReport.dag.tiers;
-      }
-      return this.staticDagTiers;
-    },
-    // Split tiers by paper phase
-    phase1Tiers() {
-      return this.checklistTiers.filter(t => {
-        const sec = t.sections?.[0];
-        return sec && (sec.phase === 1 || (!sec.phase && ['A','B','C','D','E','F','G'].includes(sec.id)));
-      });
-    },
-    phase2Tiers() {
-      return this.checklistTiers.filter(t => {
-        const sec = t.sections?.[0];
-        return sec && (sec.phase === 2 || (!sec.phase && !['A','B','C','D','E','F','G'].includes(sec.id)));
-      });
-    },
+
     checklistResults() {
       return this.phaseIiReport?.results || {};
     },
@@ -903,23 +752,42 @@ export default {
       return Array.isArray(this.sdkResult?.attribution_warnings) ? this.sdkResult.attribution_warnings : [];
     },
     stageRows() {
-      const stages = Array.isArray(this.sanitizedReport?.stages) ? this.sanitizedReport.stages : [];
-      return stages.map((stage) => {
-        const details = stage?.details || {};
-        const started = stage?.started_at || null;
-        const ended = stage?.ended_at || null;
+      const backendStages = Array.isArray(this.sanitizedReport?.stages) ? this.sanitizedReport.stages : [];
+      const byName = new Map(backendStages.map(s => [String(s?.name || ''), s]));
+      return DISPLAY_STAGES.map((display) => {
+        const linked = display.backend.map(name => byName.get(name)).filter(Boolean);
+        const starts = linked.map(s => s?.started_at).filter(Boolean).sort();
+        const ends = linked.map(s => s?.ended_at).filter(Boolean).sort();
+        const started_at = starts.length ? starts[0] : null;
+        const ended_at = ends.length ? ends[ends.length - 1] : null;
+        const error = linked.map(s => s?.details?.error).filter(Boolean).join('; ') || null;
         return {
-          name: stage?.name || '',
-          status: stage?.status || '',
-          started_at: started,
-          ended_at: ended,
-          duration: this.durationLabel(started, ended),
-          error: details?.error || null
+          id: display.id,
+          name: display.id,
+          label: display.label,
+          status: this.aggregateDisplayStatus(display, linked),
+          started_at,
+          ended_at,
+          duration: this.durationLabel(started_at, ended_at),
+          error,
         };
       });
     },
+    stageStatusCounts() {
+      const counts = { passed: 0, pending: 0, skipped: 0, issue: 0, review: 0 };
+      for (const s of this.stageRows) {
+        const sev = this.stageSeverity(s.status);
+        if (sev === 'success') counts.passed += 1;
+        else if (sev === 'warning') counts.pending += 1;
+        else if (sev === 'secondary') counts.skipped += 1;
+        else if (sev === 'danger') counts.issue += 1;
+        else if (sev === 'info') counts.review += 1;
+      }
+      return counts;
+    },
     stagesCompleteCount() {
-      return this.stageRows.filter(s => s.status === 'success' || s.status === 'done').length;
+      const c = this.stageStatusCounts;
+      return c.passed + c.skipped;
     },
     stagesPercent() {
       if (this.stageRows.length === 0) return 0;
@@ -953,9 +821,10 @@ export default {
     isExpanded(key) {
       return !!this.expandedNodes[key];
     },
-    stageSections(stageName) {
-      const defs = STAGE_SECTION_MAP[stageName] || [];
-      return defs.map(def => {
+    stageSections(displayId) {
+      const display = DISPLAY_STAGES.find(d => d.id === displayId);
+      if (!display) return [];
+      return display.sections.map(def => {
         const result = this.checklistResults[def.id] || null;
         const status = result ? result.status : 'pending';
         return {
@@ -965,6 +834,24 @@ export default {
           outcome: status === 'pending' ? def.desc : this.checklistOutcome({ id: def.id, runner: result?.runner || 'code' }),
         };
       });
+    },
+    aggregateDisplayStatus(display, linkedBackendStages) {
+      // Roll up the worst-case status across this display stage's cards and
+      // its linked backend stages. Priority: danger > info > warning > success
+      // > secondary. If everything is skipped, surface as skipped.
+      const sectionSeverities = display.sections.map(def => {
+        const r = this.checklistResults[def.id];
+        return this.stageSeverity(r ? r.status : 'pending');
+      });
+      const backendSeverities = linkedBackendStages.map(s => this.stageSeverity(s?.status || ''));
+      const all = [...sectionSeverities, ...backendSeverities];
+      if (!all.length) return 'pending';
+      if (all.includes('danger'))    return 'issue';
+      if (all.includes('info'))      return 'needs_review';
+      if (all.every(s => s === 'secondary')) return 'skipped';
+      if (all.includes('warning'))   return 'pending';
+      if (all.includes('success'))   return 'passed';
+      return 'pending';
     },
     checklistStatus(secId) {
       const r = this.checklistResults[secId];
@@ -1010,10 +897,7 @@ export default {
       const key = String(value || '').trim().toLowerCase();
       return key === 'mainnet' || key === 'testnet' ? key : 'testnet';
     },
-    onScopeChange() {
-      this.pageFirst = 0;
-      this.loadResults();
-    },
+
     onPage(event) {
       this.pageFirst = event.first;
       this.pageSize = event.rows;
@@ -1033,7 +917,7 @@ export default {
     buildQuery() {
       const params = new URLSearchParams({
         network: this.selectedNetwork,
-        scope: this.scope,
+        scope: 'all',
         limit: String(this.pageSize),
         offset: String(this.pageFirst),
         sort_by: this.sortFieldApi(this.uiSortField),
@@ -1163,6 +1047,36 @@ export default {
       if (!sha) return;
       this.$router.push(`/firmware-security/firmware/${sha}`);
     },
+    confirmDelete(row) {
+      const resultId = String(row?.result_id || '').trim();
+      if (!resultId) return;
+      this.$confirm.require({
+        message: `Delete result ${this.shortId(resultId)}?`,
+        header: 'Confirm Delete',
+        icon: 'pi pi-exclamation-triangle',
+        acceptClass: 'p-button-danger',
+        acceptLabel: 'Delete',
+        rejectLabel: 'Cancel',
+        accept: () => this.doDelete(resultId),
+      });
+    },
+    async doDelete(resultId) {
+      if (!this.apiBase) return;
+      try {
+        const query = new URLSearchParams({ network: this.selectedNetwork });
+        const response = await fetch(
+          `${this.apiBase}/api/v1/results/${encodeURIComponent(resultId)}?${query.toString()}`,
+          { method: 'DELETE' }
+        );
+        if (!response.ok) throw new Error(`Delete failed (${response.status})`);
+        this.reportSidebarVisible = false;
+        this.selectedResultId = '';
+        this.detailPayload = { result: null, attempts: [] };
+        await this.loadResults();
+      } catch (err) {
+        this.$toast?.add({ severity: 'error', summary: 'Delete failed', detail: err instanceof Error ? err.message : 'Unknown error', life: 5000 });
+      }
+    },
     otaFieldValue(label) {
       const row = this.otaRows.find(r => r.label === label);
       return row ? row.value : '-';
@@ -1202,28 +1116,8 @@ export default {
       if (key === 'warning') return 'warning';
       return 'info';
     },
-    stageSeverity(value) {
-      const key = String(value || '').toLowerCase();
-      if (key === 'success' || key === 'done') return 'success';
-      if (key === 'failed' || key === 'error') return 'danger';
-      if (key === 'running') return 'info';
-      if (key === 'pending') return 'warning';
-      return 'secondary';
-    },
-    stageLabel(value) {
-      const map = {
-        '00_meta': '00 Meta',
-        '10_matter_ota': '10 Matter OTA',
-        '20_chipset_identify': '20 Chipset Identify',
-        '30_extract_executable': '30 Extract Executable',
-        '40_ida_headless': '40 IDA Headless',
-        '45_secure_boot_authenticity': '45 Secure Boot',
-        '50_capability_recovery': '50 Capability Recovery',
-        '60_sdk_version': '60 SDK Version',
-        '90_finalize': '90 Finalize'
-      };
-      return map[String(value || '')] || String(value || '-');
-    },
+    stageSeverity(value) { return sharedStageSeverity(value); },
+    stageStatusLabel(value) { return stageStatusBadgeLabel(value); },
     formatTimestamp(value) {
       if (!value) return '';
       const dt = new Date(value);
@@ -1368,9 +1262,8 @@ export default {
   padding: 0.65rem 0.1rem;
 }
 
-/* ---- Table columns (unchanged) ---- */
 .scan-results-page :deep(.scan-results-table .p-datatable-table) {
-  min-width: 112rem;
+  min-width: 68rem;
 }
 
 .scan-results-page :deep(.scan-col-analyzed) {
@@ -1384,14 +1277,12 @@ export default {
   min-width: 5.25rem;
 }
 
-.scan-results-page :deep(.scan-col-hash),
-.scan-results-page :deep(.scan-col-sdk) {
+.scan-results-page :deep(.scan-col-hash) {
   white-space: nowrap;
   min-width: 7.5rem;
 }
 
-.scan-results-page :deep(.scan-col-name),
-.scan-results-page :deep(.scan-col-chipset) {
+.scan-results-page :deep(.scan-col-name) {
   min-width: 10rem;
 }
 
@@ -1584,6 +1475,42 @@ export default {
 .stage-dot-warning { color: #f59e0b; background: #f59e0b; }
 .stage-dot-secondary { color: #9ca3af; background: #9ca3af; }
 
+/* Status tallies and legend pills */
+.cl-tally {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #334155;
+}
+.cl-tally strong { color: #0f172a; font-weight: 700; margin-left: 0.15rem; }
+.cl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.cl-dot-success   { background: #22c55e; }
+.cl-dot-danger    { background: #ef4444; }
+.cl-dot-info      { background: #3b82f6; }
+.cl-dot-warning   { background: #f59e0b; }
+.cl-dot-secondary { background: #9ca3af; }
+
+.cl-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  margin-right: 0.35rem;
+  line-height: 1.4;
+}
+.cl-badge-success   { background: #dcfce7; color: #15803d; }
+.cl-badge-danger    { background: #fee2e2; color: #b91c1c; }
+.cl-badge-info      { background: #dbeafe; color: #1d4ed8; }
+.cl-badge-warning   { background: #fef9c3; color: #a16207; }
+.cl-badge-secondary { background: #f3f4f6; color: #4b5563; }
+
 /* Expand/collapse chevron */
 .stage-chevron {
   flex-shrink: 0;
@@ -1613,7 +1540,13 @@ export default {
 .stage-meta {
   opacity: 0.85;
   line-height: 1.6;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 1.5rem;
+  row-gap: 0.25rem;
 }
+.stage-meta > span { white-space: nowrap; }
+.stage-meta > span strong { margin-right: 0.35rem; }
 
 .stage-expanded .checklist-grid {
   margin-top: 4px;
@@ -1652,9 +1585,15 @@ export default {
 .checklist-item.cl-success { border-left: 4px solid #22c55e; }
 .checklist-item.cl-done { border-left: 4px solid #22c55e; }
 .checklist-item.cl-failed { border-left: 4px solid #ef4444; background: #fef2f2; }
+.checklist-item.cl-issue { border-left: 4px solid #ef4444; background: #fef2f2; }
+.checklist-item.cl-needs_review,
+.checklist-item.cl-ai_review,
+.checklist-item.cl-review { border-left: 4px solid #3b82f6; background: #eff6ff; }
 .checklist-item.cl-running { border-left: 4px solid #3b82f6; }
-.checklist-item.cl-skipped { opacity: 0.5; border-left: 4px solid #9ca3af; }
-.checklist-item.cl-pending { border-left: 4px solid #ef4444; opacity: 0.75; }
+.checklist-item.cl-skipped,
+.checklist-item.cl-not_applicable { opacity: 0.6; border-left: 4px solid #9ca3af; }
+.checklist-item.cl-pending,
+.checklist-item.cl-not_checked { border-left: 4px solid #f59e0b; opacity: 0.85; }
 .cl-header {
   display: flex;
   justify-content: space-between;

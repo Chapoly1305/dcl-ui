@@ -76,8 +76,8 @@
                   <InputText v-model="filters.blockHeight" class="w-full p-inputtext-sm" placeholder="Contains..." @keyup.enter="applyFilters" />
                 </div>
                 <div class="col-6 md:col-2 pt-0">
-                  <label class="filter-label">TxHash (Last 8)</label>
-                  <InputText v-model="filters.txHashLast8" class="w-full p-inputtext-sm" placeholder="Contains..." @keyup.enter="applyFilters" />
+                  <label class="filter-label">TxHash (First 8)</label>
+                  <InputText v-model="filters.txHashFirst8" class="w-full p-inputtext-sm" placeholder="Contains..." @keyup.enter="applyFilters" />
                 </div>
                 <div class="col-6 md:col-2 pt-0">
                   <label class="filter-label">Conformance</label>
@@ -171,9 +171,9 @@
                   {{ displayValue(formatReleaseTime(slotProps.data.releaseTime)) }}
                 </template>
               </Column>
-              <Column field="txHash" header="TxHash (Last 8)">
+              <Column field="txHash" header="TxHash (First 8)">
                 <template #body="slotProps">
-                  <code>{{ displayValue(txHashLast8(slotProps.data.txHash)) }}</code>
+                  <code>{{ displayValue(txHashFirst8(slotProps.data.txHash)) }}</code>
                 </template>
               </Column>
               <Column field="isDownloaded" header="Downloaded" headerClass="text-center" bodyClass="text-center">
@@ -352,7 +352,7 @@ export default {
         softwareVersionString: '',
         releaseTime: '',
         blockHeight: '',
-        txHashLast8: '',
+        txHashFirst8: '',
         formalityConformance: null,
         isDownloaded: null,
         analysisStatus: null
@@ -422,7 +422,7 @@ export default {
         ['software_version_string', this.filters.softwareVersionString],
         ['release_time', this.filters.releaseTime],
         ['block_height', this.filters.blockHeight],
-        ['tx_hash_last8', this.filters.txHashLast8],
+        ['tx_hash_first8', this.filters.txHashFirst8],
         ['formality_conformance', this.filters.formalityConformance],
         ['is_downloaded', this.filters.isDownloaded],
         ['analysis_status', this.filters.analysisStatus]
@@ -485,7 +485,7 @@ export default {
           softwareVersionString: item.software_version_string || '',
           releaseTime: item.release_time || null,
           blockHeight: item.block_height,
-          txHash: item.tx_hash_last8 || '',
+          txHash: item.tx_hash_first8 || '',
           firmwareSha256: item.firmware_sha256 || '',
           isDownloaded: Boolean(item.is_downloaded),
           analysisLatestStatus: this.normalizeAnalysisStatus(item.analysis_latest_status),
@@ -550,7 +550,7 @@ export default {
           pid: row?.pid ?? null,
           software_version: row?.softwareVersion ?? null,
           block_height: row?.blockHeight ?? null,
-          tx_hash_last8: this.txHashLast8(row?.txHash)
+          tx_hash_first8: this.txHashFirst8(row?.txHash)
         };
         const response = await fetch(`${this.metadataApiBase}/api/v1/jobs/analyze-firmware`, {
           method: 'POST',
@@ -591,13 +591,13 @@ export default {
       const vid = String(row?.vid || '').trim();
       const pid = String(row?.pid || '').trim();
       const blockHeight = String(row?.blockHeight || '').trim();
-      const txHashLast8 = String(row?.txHashLast8 || '').trim();
+      const txHashFirst8 = String(row?.txHashFirst8 || '').trim();
       let queryToken = '';
       if (vid && pid && blockHeight) {
         const otaPrefix = this.selectedNetwork === 'mainnet' ? 'otaM' : 'otaT';
         queryToken = `${otaPrefix}_${vid}_${pid}_${blockHeight}_`;
-      } else if (txHashLast8) {
-        queryToken = txHashLast8;
+      } else if (txHashFirst8) {
+        queryToken = txHashFirst8;
       }
       if (!queryToken) {
         this.error = 'No firmware group yet and no identity fields to locate scan results.';
@@ -622,7 +622,7 @@ export default {
       if (value === null || value === undefined || value === '') return '-';
       return value;
     },
-    txHashLast8(txHash) {
+    txHashFirst8(txHash) {
       if (!txHash) return '';
       return String(txHash).slice(-8);
     },
@@ -694,7 +694,7 @@ export default {
       if (f.softwareVersionString) q.sw_ver_str = f.softwareVersionString;
       if (f.releaseTime) q.rel_time = f.releaseTime;
       if (f.blockHeight) q.block = f.blockHeight;
-      if (f.txHashLast8) q.tx = f.txHashLast8;
+      if (f.txHashFirst8) q.tx = f.txHashFirst8;
       if (f.formalityConformance) q.conformance = f.formalityConformance;
       if (f.isDownloaded) q.downloaded = f.isDownloaded;
       if (f.analysisStatus) q.analysis = f.analysisStatus;
@@ -720,7 +720,7 @@ export default {
       if (q.sw_ver_str) this.filters.softwareVersionString = q.sw_ver_str;
       if (q.rel_time) this.filters.releaseTime = q.rel_time;
       if (q.block) this.filters.blockHeight = q.block;
-      if (q.tx) this.filters.txHashLast8 = q.tx;
+      if (q.tx) this.filters.txHashFirst8 = q.tx;
       if (q.conformance) this.filters.formalityConformance = q.conformance;
       if (q.downloaded) this.filters.isDownloaded = q.downloaded;
       if (q.analysis) this.filters.analysisStatus = q.analysis;

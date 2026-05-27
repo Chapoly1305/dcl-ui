@@ -140,6 +140,50 @@
           </DataTable>
         </div>
 
+        <!-- Live AI Activity (collapsible) -->
+        <div v-if="!isConformanceJob && !isPollJob" class="mt-4">
+          <div class="flex align-items-center justify-content-between mb-2">
+            <div class="flex align-items-center gap-2">
+              <span class="text-700 font-bold">Live AI Activity</span>
+              <Tag
+                :value="aiStreamSummary"
+                :severity="aiStreamConnected ? 'success' : 'secondary'"
+                class="text-xs"
+              />
+              <span v-if="aiStreamConnected" class="text-500 text-xs">
+                <i class="pi pi-circle-fill text-green-500" style="font-size:0.5rem"></i>
+                streaming
+              </span>
+            </div>
+            <Button
+              :label="aiStreamExpanded ? 'Hide Stream' : 'Show Stream'"
+              :icon="aiStreamExpanded ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+              class="p-button-text p-button-sm"
+              @click="aiStreamExpanded = !aiStreamExpanded"
+            />
+          </div>
+          <div v-if="aiStreamExpanded" class="ai-stream" ref="aiStreamScroller">
+            <div v-if="aiEvents.length === 0" class="ai-stream-empty">
+              No AI activity yet. The pane fills as the pipeline calls models and tools.
+            </div>
+            <div
+              v-for="(ev, idx) in aiEvents"
+              :key="idx"
+              class="ai-event"
+              :class="'ai-event-'+aiEventCategory(ev.kind)"
+            >
+              <i :class="aiEventIcon(ev.kind) + ' ai-event-icon'" />
+              <span class="ai-event-time">{{ formatStreamTime(ev.ts) }}</span>
+              <span class="ai-event-source" v-if="ev.source">[{{ ev.source }}]</span>
+              <span class="ai-event-message">{{ ev.message || ev.kind }}</span>
+            </div>
+          </div>
+          <div v-else class="text-500 text-sm ml-2 p-2">
+            {{ aiEvents.length }} event{{ aiEvents.length === 1 ? '' : 's' }} recorded.
+            Click "Show Stream" to watch the AI work in real time.
+          </div>
+        </div>
+
         <!-- Phase II DAG Section (collapsible) -->
         <div v-if="hasPhaseIi" class="mt-4">
           <div class="flex align-items-center justify-content-between mb-2">
@@ -206,6 +250,13 @@
 </template>
 
 <script>
+import {
+  isToolStage,
+  labelForBackendStage,
+  stageSeverity as sharedStageSeverity,
+  stageStatusFriendlyLabel,
+} from '@/utils/pipelineDisplay';
+
 export default {
   name: 'FirmwareJobProgressModal',
   props: {
@@ -229,6 +280,11 @@ export default {
       lastUpdatedAt: null,
       pollHandle: null,
       phaseIiExpanded: false,
+      aiStreamExpanded: true,
+      aiStreamConnected: false,
+      aiEvents: [],
+      aiEventSource: null,
+      aiStreamRetryHandle: null,
       payload: {
         job: {},
         pipeline: { run_id: null, current_stage: null, percent_complete: 0, stages: [] },
@@ -247,7 +303,11 @@ export default {
       return this.payload.summary || { state_label: 'Unknown', message: '' };
     },
     stages() {
-      return Array.isArray(this.pipeline.stages) ? this.pipeline.stages : [];
+      // Tool/enabler stages have no pass-fail verdict of their own and are
+      // hidden from the timeline. The hide set is derived from the shared
+      // DISPLAY_STAGES config — see utils/pipelineDisplay.js.
+      const all = Array.isArray(this.pipeline.stages) ? this.pipeline.stages : [];
+      return all.filter(s => !isToolStage(s?.name));
     },
     phaseIi() {
       return this.payload.phase_ii || null;
@@ -281,6 +341,12 @@ export default {
       const pct = this.phaseIi ? this.phaseIi.percent_complete : 0;
       return `${pct}% complete. Sections: ${statuses || 'none yet'}`;
     },
+    aiStreamSummary() {
+      const n = this.aiEvents.length;
+      if (!n) return this.aiStreamConnected ? 'Listening...' : 'Idle';
+      const tail = this.aiEvents[n - 1];
+      return `${n} event${n === 1 ? '' : 's'} · last: ${tail.kind}`;
+    },
     stateLabel() {
       return String(this.summary.state_label || 'Unknown');
     },
@@ -303,19 +369,25 @@ export default {
         if (next) {
           this.loadProgress();
           this.startPolling();
+          this.openAiStream();
         } else {
           this.stopPolling();
+          this.closeAiStream();
         }
       }
     },
     jobId() {
       if (this.visible) {
         this.loadProgress();
+        this.closeAiStream();
+        this.aiEvents = [];
+        this.openAiStream();
       }
     }
   },
   beforeUnmount() {
     this.stopPolling();
+    this.closeAiStream();
   },
   methods: {
     onVisibleChange(next) {
@@ -370,45 +442,13 @@ export default {
       if (text.length <= 16) return text;
       return `${text.slice(0, 8)}...${text.slice(-8)}`;
     },
-    stageLabel(name) {
-      const map = {
-        '00_meta': '00 Meta',
-        '10_matter_ota': '10 Matter OTA',
-        '20_chipset_identify': '20 Chipset Identify',
-        '30_extract_executable': '30 Extract Executable',
-        '40_ida_headless': '40 IDA Headless',
-        '45_secure_boot_authenticity': '45 Secure Boot',
-        '50_capability_recovery': '50 Capability Recovery',
-        '60_sdk_version': '60 SDK Version',
-        '90_finalize': '90 Finalize'
-      };
-      return map[String(name || '')] || String(name || '-');
-    },
-    statusLabel(status) {
-      const key = String(status || '').toLowerCase();
-      if (key === 'done') return 'Done';
-      if (key === 'failed') return 'Failed';
-      if (key === 'running') return 'Running';
-      if (key === 'pending') return 'Pending';
-      if (key === 'skipped') return 'Skipped';
-      return 'Unknown';
-    },
-    statusSeverity(status) {
-      const key = String(status || '').toLowerCase();
-      if (key === 'done') return 'success';
-      if (key === 'failed') return 'danger';
-      if (key === 'running') return 'info';
-      if (key === 'pending') return 'warning';
-      if (key === 'skipped') return 'secondary';
-      return 'secondary';
-    },
+    stageLabel(name) { return labelForBackendStage(name); },
+    statusLabel(status) { return stageStatusFriendlyLabel(status); },
+    statusSeverity(status) { return sharedStageSeverity(status); },
     stateSeverity(status) {
-      const key = String(status || '').toLowerCase();
-      if (key === 'done') return 'success';
-      if (key === 'failed') return 'danger';
-      if (key === 'running') return 'info';
-      if (key === 'pending') return 'warning';
-      return 'secondary';
+      // Job-level state (running / done / failed / pending) — narrower than
+      // section status, but use the same severity mapping for consistency.
+      return sharedStageSeverity(status);
     },
     formatTimestamp(value) {
       if (!value) return '';
@@ -431,12 +471,7 @@ export default {
       return s ? s.status : 'pending';
     },
     sectionStatusSeverity(sectionId) {
-      const s = this.sectionStatus(sectionId);
-      if (s === 'success' || s === 'done') return 'success';
-      if (s === 'failed') return 'danger';
-      if (s === 'running') return 'info';
-      if (s === 'skipped') return 'secondary';
-      return 'warning';
+      return sharedStageSeverity(this.sectionStatus(sectionId));
     },
     sectionTooltip(sec) {
       const s = this.phaseIiSections[sec.id];
@@ -459,6 +494,86 @@ export default {
         return !prevSec || prevSec.phase !== 2;
       }
       return false;
+    },
+    openAiStream() {
+      const id = String(this.jobId || '').trim();
+      if (!id) return;
+      if (typeof window === 'undefined' || typeof window.EventSource !== 'function') return;
+      this.closeAiStream();
+      try {
+        const url = `${this.apiBase}/api/v1/jobs/${encodeURIComponent(id)}/events`;
+        const es = new window.EventSource(url);
+        this.aiEventSource = es;
+        es.addEventListener('open', () => { this.aiStreamConnected = true; });
+        es.addEventListener('agent_event', (msg) => {
+          try {
+            const ev = JSON.parse(msg.data);
+            this.pushAiEvent(ev);
+          } catch (_e) { /* ignore malformed line */ }
+        });
+        es.addEventListener('done', () => {
+          this.aiStreamConnected = false;
+          this.closeAiStream();
+        });
+        es.addEventListener('error', () => {
+          this.aiStreamConnected = false;
+          // Browser will normally auto-retry; we don't manually reopen unless
+          // the connection stays dropped — keep handle around so retry uses it.
+        });
+      } catch (_err) {
+        this.aiStreamConnected = false;
+      }
+    },
+    closeAiStream() {
+      if (this.aiEventSource) {
+        try { this.aiEventSource.close(); } catch (_e) { /* ignore */ }
+        this.aiEventSource = null;
+      }
+      if (this.aiStreamRetryHandle) {
+        clearTimeout(this.aiStreamRetryHandle);
+        this.aiStreamRetryHandle = null;
+      }
+      this.aiStreamConnected = false;
+    },
+    pushAiEvent(ev) {
+      // Keep a bounded ring buffer so long jobs don't blow up memory.
+      const MAX_EVENTS = 500;
+      this.aiEvents.push(ev);
+      if (this.aiEvents.length > MAX_EVENTS) {
+        this.aiEvents.splice(0, this.aiEvents.length - MAX_EVENTS);
+      }
+      this.$nextTick(() => {
+        const el = this.$refs.aiStreamScroller;
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+    },
+    formatStreamTime(iso) {
+      if (!iso) return '';
+      const dt = new Date(iso);
+      if (Number.isNaN(dt.getTime())) return '';
+      const hh = String(dt.getHours()).padStart(2, '0');
+      const mm = String(dt.getMinutes()).padStart(2, '0');
+      const ss = String(dt.getSeconds()).padStart(2, '0');
+      return `${hh}:${mm}:${ss}`;
+    },
+    aiEventCategory(kind) {
+      if (!kind) return 'info';
+      if (kind.startsWith('llm_')) return 'llm';
+      if (kind.startsWith('tool_')) return 'tool';
+      if (kind.startsWith('agent_')) return 'agent';
+      if (kind.startsWith('sidekick_')) return 'sidekick';
+      return 'info';
+    },
+    aiEventIcon(kind) {
+      const cat = this.aiEventCategory(kind);
+      const finished = kind.endsWith('_finished') || kind.endsWith('_done');
+      const failed = kind.endsWith('_failed') || kind.endsWith('_timeout') || kind.endsWith('_empty');
+      if (failed) return 'pi pi-times-circle';
+      if (cat === 'llm') return finished ? 'pi pi-comment' : 'pi pi-spinner pi-spin';
+      if (cat === 'tool') return finished ? 'pi pi-wrench' : 'pi pi-cog pi-spin';
+      if (cat === 'agent') return finished ? 'pi pi-flag' : 'pi pi-bolt';
+      if (cat === 'sidekick') return finished ? 'pi pi-check' : 'pi pi-search';
+      return 'pi pi-info-circle';
     }
   }
 };
@@ -546,11 +661,73 @@ export default {
   opacity: 0.5;
 }
 
-/* Status-based border colors */
-.dag-node-success { border-color: var(--green-400, #86efac); background: #f0fdf4; }
-.dag-node-done { border-color: var(--green-400, #86efac); background: #f0fdf4; }
-.dag-node-running { border-color: var(--blue-400, #93c5fd); background: #eff6ff; }
-.dag-node-failed { border-color: var(--red-400, #fca5a5); background: #fef2f2; }
-.dag-node-skipped { border-color: var(--surface-d, #dee2e6); background: #f8f9fa; opacity: 0.6; }
+/* Status-based border colors — aligned with the 5-state palette. */
+.dag-node-success,
+.dag-node-done           { border-color: #86efac; background: #f0fdf4; } /* green PASSED */
+.dag-node-failed,
+.dag-node-issue          { border-color: #fca5a5; background: #fef2f2; } /* red ISSUE */
+.dag-node-needs_review,
+.dag-node-review,
+.dag-node-uncertain      { border-color: #93c5fd; background: #eff6ff; } /* blue AI REVIEW */
+.dag-node-pending,
+.dag-node-not_checked,
+.dag-node-running        { border-color: #fcd34d; background: #fffbeb; } /* yellow PENDING */
+.dag-node-skipped,
+.dag-node-not_applicable { border-color: #dee2e6; background: #f8f9fa; opacity: 0.6; } /* gray SKIPPED */
 .dag-node-pending { border-color: var(--surface-d, #dee2e6); background: #fff; }
+
+/* Live AI Activity pane */
+.ai-stream {
+  border: 1px solid var(--surface-border, #dee2e6);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #0b1220;
+  color: #e2e8f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  max-height: 320px;
+  overflow-y: auto;
+  line-height: 1.55;
+}
+.ai-stream-empty {
+  color: #94a3b8;
+  font-style: italic;
+  padding: 6px 2px;
+}
+.ai-event {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 0;
+  border-left: 2px solid transparent;
+  padding-left: 6px;
+}
+.ai-event-icon {
+  font-size: 0.7rem;
+  width: 12px;
+  flex-shrink: 0;
+}
+.ai-event-time {
+  color: #64748b;
+  flex-shrink: 0;
+}
+.ai-event-source {
+  color: #93c5fd;
+  flex-shrink: 0;
+}
+.ai-event-message {
+  color: #e2e8f0;
+  word-break: break-word;
+  min-width: 0;
+}
+.ai-event-llm      { border-left-color: #60a5fa; }   /* blue */
+.ai-event-llm .ai-event-icon      { color: #60a5fa; }
+.ai-event-tool     { border-left-color: #fbbf24; }   /* amber */
+.ai-event-tool .ai-event-icon     { color: #fbbf24; }
+.ai-event-agent    { border-left-color: #a78bfa; }   /* purple */
+.ai-event-agent .ai-event-icon    { color: #a78bfa; }
+.ai-event-sidekick { border-left-color: #34d399; }   /* green */
+.ai-event-sidekick .ai-event-icon { color: #34d399; }
+.ai-event-info     { border-left-color: #64748b; }
+.ai-event-info .ai-event-icon     { color: #94a3b8; }
 </style>

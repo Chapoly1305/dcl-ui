@@ -75,9 +75,9 @@
                       <Column field="vid" header="VID" />
                       <Column field="pid" header="PID" />
                       <Column field="software_version" header="Software Version" />
-                      <Column field="tx_hash_last8" header="TxHash (Last 8)">
+                      <Column field="tx_hash_first8" header="TxHash (First 8)">
                         <template #body="slotProps">
-                          <code>{{ slotProps.data.tx_hash_last8 }}</code>
+                          <code>{{ slotProps.data.tx_hash_first8 }}</code>
                         </template>
                       </Column>
                     </DataTable>
