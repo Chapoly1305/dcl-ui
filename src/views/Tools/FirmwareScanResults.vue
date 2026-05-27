@@ -439,7 +439,6 @@
             </div>
 
             <div v-else>
-              <!-- Progress summary -->
               <div class="flex align-items-center justify-content-between mb-3">
                 <span class="text-sm text-600">{{ stagesCompleteCount }} / {{ stageRows.length }} stages complete</span>
                 <span class="text-sm text-500">{{ totalPipelineDuration }}</span>
@@ -448,7 +447,12 @@
                 <div class="stage-progress-fill" :style="{ width: stagesPercent + '%' }"></div>
               </div>
 
-              <!-- Timeline -->
+              <div class="text-xs text-500 mb-3 flex align-items-center gap-3">
+                <span class="cl-legend"><i class="pi pi-check-circle text-green-500"></i> Passed</span>
+                <span class="cl-legend"><i class="pi pi-exclamation-triangle text-yellow-500"></i> Observation</span>
+                <span class="cl-legend"><i class="pi pi-times-circle text-red-500"></i> Not checked</span>
+              </div>
+
               <div class="stage-timeline">
                 <div
                   v-for="(stage, idx) in stageRows"
@@ -459,16 +463,42 @@
                   <div class="stage-dot" :class="'stage-dot-' + stageSeverity(stage.status)"></div>
                   <div v-if="idx < stageRows.length - 1" class="stage-line"></div>
                   <div class="stage-body">
-                    <div class="flex align-items-center justify-content-between gap-2">
-                      <div>
+                    <div class="flex align-items-center justify-content-between gap-2 stage-summary" @click="toggleNode('stage-' + stage.name)">
+                      <div class="flex align-items-center gap-1">
+                        <i class="pi text-xs stage-chevron" :class="isExpanded('stage-' + stage.name) ? 'pi-chevron-down' : 'pi-chevron-right'" />
                         <span class="font-medium text-sm">{{ stageLabel(stage.name) }}</span>
-                        <Tag :value="stage.status" :severity="stageSeverity(stage.status)" class="ml-2" />
+                        <Tag :value="stage.status" :severity="stageSeverity(stage.status)" class="ml-1" />
                       </div>
                       <span class="text-xs text-500">{{ stage.duration }}</span>
                     </div>
-                    <div v-if="stage.error" class="stage-error mt-1">
+                    <div v-if="stage.error && !isExpanded('stage-' + stage.name)" class="stage-error mt-1">
                       <i class="pi pi-exclamation-triangle text-xs mr-1"></i>
                       <span class="text-xs">{{ stage.error }}</span>
+                    </div>
+                    <!-- Expanded: summary + section cards -->
+                    <div v-if="isExpanded('stage-' + stage.name)" class="stage-expanded mt-2">
+                      <div class="stage-meta text-xs text-500 mb-3 flex flex-wrap gap-x-3 gap-y-1">
+                        <span><strong>Status:</strong> {{ stage.status }}</span>
+                        <span><strong>Duration:</strong> {{ stage.duration }}</span>
+                        <span v-if="stage.started_at"><strong>Started:</strong> {{ formatTimestamp(stage.started_at) }}</span>
+                        <span v-if="stage.ended_at"><strong>Ended:</strong> {{ formatTimestamp(stage.ended_at) }}</span>
+                      </div>
+                      <div v-if="stage.error" class="stage-error mb-2">
+                        <i class="pi pi-exclamation-triangle text-xs mr-1"></i>
+                        <span class="text-xs">{{ stage.error }}</span>
+                      </div>
+
+                      <!-- Section cards -->
+                      <div v-if="stageSections(stage.name).length > 0" class="checklist-grid">
+                        <div v-for="sec in stageSections(stage.name)" :key="sec.id" class="checklist-item" :class="'cl-'+checklistStatus(sec.id)">
+                          <div class="cl-header">
+                            <span class="cl-name">{{ sec.id }} — {{ sec.name }}</span>
+                            <i :class="checklistIcon(sec.id)" :style="{ color: checklistIconColor(sec.id), fontSize: '1.3rem' }" />
+                          </div>
+                          <div class="cl-outcome">{{ sec.outcome }}</div>
+                        </div>
+                      </div>
+                      <div v-else class="text-xs text-400 italic">No checks defined for this stage.</div>
                     </div>
                   </div>
                 </div>
@@ -522,7 +552,6 @@
               <span class="cl-legend ml-3 text-400">Phase 1 = Spec Conformance &middot; Phase 2 = Firmware Analysis</span>
             </div>
 
-            <!-- Phase 1: Spec Conformance -->
             <div class="checklist-phase-header mb-2">
               <Tag value="Phase 1" severity="info" class="text-xs" />
               <span class="text-sm font-semibold ml-2 text-700">Matter Specification Conformance</span>
@@ -543,7 +572,6 @@
               </div>
             </div>
 
-            <!-- Phase 2: Firmware Analysis -->
             <div class="checklist-phase-header mt-4 mb-2">
               <Tag value="Phase 2" severity="warn" class="text-xs" />
               <span class="text-sm font-semibold ml-2 text-700">Firmware Security Analysis</span>
@@ -564,6 +592,7 @@
               </div>
             </div>
           </TabPanel>
+
         </TabView>
       </div>
     </Sidebar>
@@ -574,6 +603,43 @@
 import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
 
 // Static DAG structure — sections A-G (Phase 1: Spec Conformance) and H-S (Phase 2: Firmware Analysis)
+// Mapping from stage name to the checklist sections it runs
+const STAGE_SECTION_MAP = {
+  '00_meta': [
+    { id: 'A', name: 'DCL Record / Provenance', desc: 'Look up DCL metadata by VID/PID, verify on-chain record exists' },
+    { id: 'B', name: 'Ledger-only Conformance', desc: '30+ rule-based checks on DCL manifest fields without downloading' },
+    { id: 'C', name: 'URL / TLS / Hosting', desc: 'Validate OTA URL format, TLS handshake, cert chain, and hosting provider' },
+  ],
+  '10_matter_ota': [
+    { id: 'D', name: 'Artifact Download / Acquisition', desc: 'Dual-client download with SHA-256 reproducibility check' },
+    { id: 'E', name: 'Manifest-layer Integrity', desc: 'Verify OtaChecksum from DCL matches actual downloaded image' },
+    { id: 'F', name: 'Matter OTA Image Format', desc: 'Magic number check, TLV parse, and header field validation' },
+    { id: 'G', name: 'Image Digest / Payload Extraction', desc: 'Extract payload from Matter wrapper, verify ImageDigest' },
+  ],
+  '20_chipset_identify': [
+    { id: 'H', name: 'Payload Type / Firmware Orientation', desc: 'Identify file type, architecture, platform, and load segments' },
+    { id: 'I', name: 'Entropy / Encryption / Compression', desc: 'Global + sliding-window Shannon entropy, encryption detection' },
+  ],
+  '30_extract_executable': [
+    { id: 'Q', name: 'Non-firmware Payload / Contamination', desc: 'Detect non-firmware artifacts (config, certs, backups, debug)' },
+  ],
+  '40_ida_headless': [],
+  '45_secure_boot_authenticity': [
+    { id: 'L', name: 'Secure Boot / OTA Authenticity', desc: 'Signed-update evidence, default key detection, signature validation' },
+  ],
+  '50_capability_recovery': [],
+  '55_sidekick_triage': [
+    { id: 'M', name: 'Secrets / Sensitive Material', desc: 'Scan for private keys, credentials, and Matter-specific secrets' },
+  ],
+  '60_sdk_version': [
+    { id: 'K', name: 'Matter SDK / Specification Baseline', desc: 'Recover SpecVer from Basic Information cluster, SDK branch estimate' },
+    { id: 'J', name: 'Version Lineage / Cross-network', desc: 'Version chain analysis, testnet/mainnet cross-reference, rollback detection' },
+  ],
+  '90_finalize': [
+    { id: 'S', name: 'Scoring / Prioritization / Triage', desc: 'Aggregate conformance + security scores, assign P0-P3 priority' },
+  ],
+};
+
 const STATIC_DAG_TIERS = [
   // Phase 1 — Spec Conformance
   { level: 0, phase: 1, max_workers: 1, sections: [{ id: 'A', name: 'DCL Record / Provenance', description: 'Load DCL record metadata, build provenance link', runner: 'code', phase: 1 }] },
@@ -657,7 +723,8 @@ export default {
       },
       tableFiltersExpanded: false,
       detailTabIndex: 0,
-      reportSidebarVisible: false
+      reportSidebarVisible: false,
+      expandedNodes: {}
     };
   },
   computed: {
@@ -871,9 +938,34 @@ export default {
       if (ms < 0) return '';
       if (ms < 1000) return `Total: ${ms} ms`;
       return `Total: ${(ms / 1000).toFixed(2)} s`;
-    }
+    },
   },
   methods: {
+    toggleNode(key) {
+      const next = { ...this.expandedNodes };
+      if (next[key]) {
+        delete next[key];
+      } else {
+        next[key] = true;
+      }
+      this.expandedNodes = next;
+    },
+    isExpanded(key) {
+      return !!this.expandedNodes[key];
+    },
+    stageSections(stageName) {
+      const defs = STAGE_SECTION_MAP[stageName] || [];
+      return defs.map(def => {
+        const result = this.checklistResults[def.id] || null;
+        const status = result ? result.status : 'pending';
+        return {
+          ...def,
+          result,
+          status,
+          outcome: status === 'pending' ? def.desc : this.checklistOutcome({ id: def.id, runner: result?.runner || 'code' }),
+        };
+      });
+    },
     checklistStatus(secId) {
       const r = this.checklistResults[secId];
       if (!r) return 'pending';
@@ -1043,6 +1135,7 @@ export default {
     async loadResultDetail(resultId) {
       this.detailLoading = true;
       this.detailError = null;
+      this.expandedNodes = {};
       if (!this.apiBase) {
         this.detailError = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
         this.detailLoading = false;
@@ -1490,6 +1583,41 @@ export default {
 .stage-dot-info { color: #3b82f6; background: #3b82f6; }
 .stage-dot-warning { color: #f59e0b; background: #f59e0b; }
 .stage-dot-secondary { color: #9ca3af; background: #9ca3af; }
+
+/* Expand/collapse chevron */
+.stage-chevron {
+  flex-shrink: 0;
+  font-size: 0.7rem !important;
+  color: #6b7280;
+  transition: transform 0.15s ease;
+}
+
+/* Clickable summary row */
+.stage-summary {
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background 0.1s ease;
+}
+
+.stage-summary:hover {
+  background: #f3f4f6;
+}
+
+/* Expanded area */
+.stage-expanded {
+  margin-top: 8px;
+}
+
+.stage-meta {
+  opacity: 0.85;
+  line-height: 1.6;
+}
+
+.stage-expanded .checklist-grid {
+  margin-top: 4px;
+}
 
 /* ---- Report card title icon sizing ---- */
 .scan-results-page :deep(.report-card .p-card-title) {
