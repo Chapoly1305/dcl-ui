@@ -70,7 +70,8 @@ export default {
 			return state.selectedNetwork || state.defaultNetwork;
 		},
 		networkItems(state) {
-			return dedupe(state.enabledNetworks);
+			const items = dedupe(state.enabledNetworks);
+		return items.sort((a) => a.value === 'mainnet' ? -1 : 1);
 		},
 		networkDisplayLabel(state) {
 			const value = String(state.selectedNetwork || state.defaultNetwork || '').trim();

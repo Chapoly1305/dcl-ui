@@ -12,24 +12,20 @@
             <i class="pi pi-ellipsis-v"></i>
         </button>
         <ul class="layout-topbar-menu hidden lg:flex origin-top">
-            <li>
-                <AppWallet></AppWallet>
-            </li>
-            <li>
-                <Dropdown
-                    class="network-switch"
-                    v-model="selectedNetwork"
-                    :options="networkItems"
-                    optionLabel="label"
-                    optionValue="value"
-                    :disabled="!networkReady || networkItems.length <= 1"
-                    :placeholder="`Network: ${networkLabel}`"
-                    @change="onNetworkSelect"
-                >
-                    <template #value="slotProps">
-                        <span class="network-switch-value">{{ slotProps.value || networkLabel }}</span>
-                    </template>
-                </Dropdown>
+            <li v-if="networkReady && networkItems.length > 1">
+                <div class="network-segment" role="radiogroup" aria-label="Network selector">
+                    <button
+                        v-for="net in networkItems"
+                        :key="net.value"
+                        class="network-segment-btn"
+                        :class="{ active: selectedNetwork === net.value }"
+                        :aria-checked="selectedNetwork === net.value"
+                        role="radio"
+                        @click="onNetworkSegmentClick(net.value)"
+                    >
+                        {{ net.label }}
+                    </button>
+                </div>
             </li>
             <li>
                 <ThemeToggle />
@@ -39,7 +35,6 @@
 </template>
 
 <script>
-import AppWallet from './AppWallet.vue';
 import ThemeToggle from './ThemeToggle.vue';
 export default {
     methods: {
@@ -49,9 +44,8 @@ export default {
         onTopbarMenuToggle(event) {
             this.$emit('topbar-menu-toggle', event);
         },
-        onNetworkSelect(event) {
-            const value = event?.value;
-            if (!value) return;
+        onNetworkSegmentClick(value) {
+            if (!value || value === this.selectedNetwork) return;
             this.$emit('network-change', value);
         }
     },
@@ -70,39 +64,55 @@ export default {
         networkReady() {
             return this.$store.getters['network/isReady'];
         },
-        networkLabel() {
-            return this.$store.getters['network/networkDisplayLabel'];
-        },
         darkTheme() {
             return this.$appState.darkTheme;
         }
     },
     components: {
-        AppWallet: AppWallet,
         ThemeToggle: ThemeToggle
     }
 };
 </script>
 
 <style scoped>
-.layout-topbar .layout-topbar-logo img {
-    height: 12rem;
-    margin-right: 0.5rem;
+.network-segment {
+    display: inline-flex;
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    border: 1px solid var(--surface-border);
 }
 
-.network-switch {
-    min-width: 118px;
-}
-
-.network-switch :deep(.p-dropdown-label) {
-    padding: 0.1rem 0.65rem;
-    font-size: 0.8rem;
-    min-height: 2rem;
-}
-
-.network-switch-value {
-    font-size: 0.8rem;
+.network-segment-btn {
+    padding: 0.65rem 1.2rem;
+    font-size: 0.9rem;
     font-weight: 600;
     text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border: none;
+    background: transparent;
+    color: var(--text-color-secondary);
+    cursor: pointer;
+    transition: color 0.15s, background-color 0.15s;
+    outline: none;
+    white-space: nowrap;
+    font-family: inherit;
+}
+
+.network-segment-btn:not(:last-child) {
+    border-right: 1px solid var(--surface-border);
+}
+
+.network-segment-btn:hover:not(.active) {
+    color: var(--text-color);
+    background: var(--surface-hover);
+}
+
+.network-segment-btn:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--primary-color);
+}
+
+.network-segment-btn.active {
+    background: var(--primary-color);
+    color: var(--primary-color-text);
 }
 </style>
