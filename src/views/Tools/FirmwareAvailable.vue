@@ -155,6 +155,11 @@
               responsiveLayout="scroll"
               class="p-datatable-sm"
             >
+              <Column field="blockHeight" header="Block Height" sortable>
+                <template #body="slotProps">
+                  {{ displayValue(slotProps.data.blockHeight) }}
+                </template>
+              </Column>
               <Column field="vid" header="VID" sortable></Column>
               <Column field="pid" header="PID" sortable></Column>
               <Column field="vendorName" header="Vendor Name" sortable></Column>
@@ -164,11 +169,6 @@
               <Column field="releaseTime" header="Release Time" sortable>
                 <template #body="slotProps">
                   {{ displayValue(formatReleaseTime(slotProps.data.releaseTime)) }}
-                </template>
-              </Column>
-              <Column field="blockHeight" header="Block Height" sortable>
-                <template #body="slotProps">
-                  {{ displayValue(slotProps.data.blockHeight) }}
                 </template>
               </Column>
               <Column field="txHash" header="TxHash (Last 8)">
@@ -603,8 +603,8 @@ export default {
       if (!value) return 'Unknown';
       const lower = String(value).toLowerCase();
       if (lower === 'pending') return 'Pending';
-      if (lower === 'pass') return basis === 'sec26_db' ? 'Pass' : 'Pass';
-      if (lower === 'violation') return basis === 'sec26_db' ? 'Violation' : 'Violation';
+      if (lower === 'pass') return 'Pass';
+      if (lower === 'violation') return 'Violation';
       return 'Unknown';
     },
     formatReleaseTime(value) {
@@ -632,7 +632,44 @@ export default {
     },
     formatViolationDetails(value) {
       if (!value) return 'No violation detail';
-      return String(value).split(';').join('; ');
+      const codes = String(value).split(';').filter(Boolean);
+      const labels = codes.map((c) => this.conformanceIssueLabel(c.trim()));
+      return labels.join('\n');
+    },
+    conformanceIssueLabel(code) {
+      const map = {
+        'missing_ota_checksum_type': 'Missing checksum type',
+        'missing_ota_checksum': 'Missing OTA checksum',
+        'missing_ota_file_size': 'Missing OTA file size',
+        'invalid_checksum_type': 'Invalid checksum type (not in IANA registry)',
+        'reserved_checksum_type': 'Reserved checksum type',
+        'weak_checksum_type_lt_256': 'Weak checksum type (strength under 256 bits)',
+        'rfc1738:invalid_hostname': 'Invalid hostname in OTA URL',
+        'rfc1738:empty_hostname': 'Empty hostname in OTA URL',
+        'rfc1738:non_ascii_url': 'Non-ASCII characters in OTA URL',
+        'rfc1738:url_too_long': 'OTA URL exceeds 256 characters',
+        'rfc1738:missing_scheme': 'Missing scheme in OTA URL',
+        'rfc1738:invalid_scheme': 'Unsupported URL scheme',
+        'rfc1738:missing_hostname': 'Missing hostname in OTA URL',
+        'rfc1738:malformed_hostname': 'Malformed hostname',
+        'rfc1738:fragment_not_allowed': 'URL fragment not allowed',
+        'rfc1738:invalid_percent_encoding': 'Invalid percent-encoding in OTA URL',
+        'rfc1738:empty_url': 'Empty OTA URL',
+        'https:http_not_https': 'OTA URL uses HTTP instead of HTTPS',
+        'https:empty_url': 'Empty OTA URL',
+        'checksum_base64:invalid_base64_format': 'Checksum is not valid Base64',
+        'checksum_base64:invalid_base64_decode': 'Checksum Base64 decoding failed',
+        'checksum_base64:empty_checksum': 'Empty checksum',
+      };
+      if (map[code]) return map[code];
+      if (code.startsWith('https:invalid_scheme:')) {
+        const scheme = code.split(':')[2] || 'unknown';
+        return `Unsupported URL scheme "${scheme}" (expected HTTPS)`;
+      }
+      if (code.startsWith('rfc1738:')) return code.replace('rfc1738:', '').replace(/_/g, ' ');
+      if (code.startsWith('https:')) return code.replace('https:', '').replace(/_/g, ' ');
+      if (code.startsWith('checksum_base64:')) return code.replace('checksum_base64:', '').replace(/_/g, ' ');
+      return code.replace(/_/g, ' ');
     }
   },
   watch: {
