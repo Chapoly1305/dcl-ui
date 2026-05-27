@@ -187,14 +187,16 @@
       </div>
     </div>
 
-    <Sidebar v-model:visible="reportSidebarVisible" position="right" class="w-full md:w-30rem lg:w-40rem">
+    <!-- ===== Rendered Report Sidebar ===== -->
+    <Sidebar v-model:visible="reportSidebarVisible" position="right" class="report-sidebar w-full md:w-32rem lg:w-45rem">
       <template #header>
-        <div class="flex align-items-center gap-3 w-full">
+        <div class="flex align-items-center gap-2 w-full">
+          <i class="pi pi-file-check text-xl text-blue-500"></i>
           <span class="text-xl font-bold">Rendered Report</span>
-          <Tag v-if="selectedResult" :value="`Result: ${shortId(selectedResult.result_id)}`" severity="info" />
+          <Tag v-if="selectedResult" :value="shortId(selectedResult.result_id)" severity="info" class="ml-1" />
           <Button
             icon="pi pi-refresh"
-            class="p-button-text p-button-sm p-button-rounded ml-auto mr-2"
+            class="p-button-text p-button-sm p-button-rounded ml-auto"
             :loading="detailLoading"
             v-tooltip.top="'Refresh selected report'"
             :disabled="!selectedResultId"
@@ -205,100 +207,311 @@
 
       <Message v-if="detailError" severity="error" :closable="false" class="mb-2">{{ detailError }}</Message>
 
-      <div v-if="!selectedResultId && !detailLoading" class="flex flex-column align-items-center justify-content-center p-5 text-400">
-        <i class="pi pi-file text-4xl mb-3"></i>
+      <div v-if="!selectedResultId && !detailLoading" class="flex flex-column align-items-center justify-content-center p-6 text-400">
+        <i class="pi pi-file text-5xl mb-3"></i>
         <span class="text-lg">Select a row to read the report.</span>
       </div>
 
-      <div v-else-if="detailLoading" class="flex align-items-center justify-content-center p-5 text-500 gap-3">
+      <div v-else-if="detailLoading" class="flex align-items-center justify-content-center p-6 text-500 gap-3">
         <ProgressSpinner style="width: 2rem; height: 2rem" strokeWidth="6" />
         <span class="text-lg">Loading report...</span>
       </div>
 
-      <div v-else-if="selectedResult" class="mt-2">
+      <div v-else-if="selectedResult" class="report-content">
+        <div class="report-banner mb-2">
+          <div class="flex align-items-center gap-2 flex-wrap">
+            <i class="pi pi-microchip text-blue-500"></i>
+            <span class="font-semibold">{{ displayValue(selectedResult.product_name) || displayValue(selectedResult.vendor_name) || 'Firmware Report' }}</span>
+            <Tag :value="selectedResult.status" :severity="runStatusSeverity(selectedResult.status)" class="ml-auto" />
+          </div>
+          <div class="flex align-items-center gap-2 flex-wrap mt-1 text-sm text-600">
+            <span>VID: <code>{{ displayValue(selectedResult.vid) }}</code></span>
+            <span>PID: <code>{{ displayValue(selectedResult.pid) }}</code></span>
+            <span v-if="selectedResult.chipset" class="text-500">| {{ selectedResult.chipset }}</span>
+          </div>
+        </div>
+
         <TabView v-model:activeIndex="detailTabIndex">
-          <TabPanel header="Summary">
-            <div class="grid">
-              <div class="col-6"><strong>Run ID:</strong> <code>{{ selectedResult.run_id }}</code></div>
-              <div class="col-6"><strong>Result ID:</strong> <code>{{ selectedResult.result_id }}</code></div>
-              <div class="col-6"><strong>Analyzed:</strong> {{ formatTimestamp(selectedResult.analyzed_at) }}</div>
-              <div class="col-6"><strong>Status:</strong> <Tag :value="selectedResult.status" :severity="runStatusSeverity(selectedResult.status)" /></div>
-              <div class="col-6"><strong>Payload Hash:</strong> <Tag :value="selectedResult.verdict_integrity" :severity="verdictSeverity(selectedResult.verdict_integrity)" /></div>
-              <div class="col-6"><strong>Validation Path:</strong> <Tag :value="displayValue(selectedResult.verdict_validation_path)" :severity="verdictSeverity(selectedResult.verdict_validation_path)" /></div>
-              <div class="col-6"><strong>Authenticity:</strong> <Tag :value="selectedResult.verdict_authenticity" :severity="verdictSeverity(selectedResult.verdict_authenticity)" /></div>
-              <div class="col-6"><strong>Chipset:</strong> {{ displayValue(selectedResult.chipset) }}</div>
-              <div class="col-6"><strong>SDK Decoded:</strong> {{ sdkDisplayValue(selectedResult.sdk_decoded_version) }}</div>
-              <div class="col-6"><strong>SDK Inferred:</strong> {{ sdkDisplayValue(selectedResult.sdk_inferred_version) }}</div>
-              <div class="col-6"><strong>SDK Primary:</strong> {{ sdkDisplayValue(selectedResult.sdk_primary_version || selectedResult.sdk_best_guess_base) }}</div>
-              <div class="col-6"><strong>SDK Consistency:</strong> {{ sdkDisplayValue(selectedResult.sdk_version_consistency) }}</div>
-              <div class="col-12"><strong>Input Firmware:</strong> {{ displayValue(selectedResult.input_firmware_name) }}</div>
+          <!-- ===== Tab 1: Overview ===== -->
+          <TabPanel header="Overview">
+            <!-- Verdict stat cards -->
+            <div class="grid mb-2">
+              <div class="col-4" v-for="v in verdictCards" :key="v.label">
+                <div class="stat-card card mb-0">
+                  <div class="flex justify-content-between">
+                    <div>
+                      <span class="stat-label-text block text-500 font-medium mb-1">{{ v.label }}</span>
+                      <div class="text-900 font-bold text-lg">{{ displayValue(v.value) }}</div>
+                    </div>
+                    <div class="flex align-items-center justify-content-center border-round" :class="v.iconBg" style="width:2.2rem;height:2.2rem">
+                      <i class="pi" :class="[v.icon, v.iconColor]" style="font-size:1rem"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
+
+            <!-- Identity Card -->
+            <Card class="report-card mb-2">
+              <template #title><i class="pi pi-id-card mr-2 text-blue-500"></i>Firmware Identity</template>
+              <template #content>
+                <div class="outcome-grid">
+                  <div class="outcome-row"><span class="outcome-label">VID / PID</span><span class="outcome-value">{{ displayValue(selectedResult.vid) }} / {{ displayValue(selectedResult.pid) }}</span></div>
+                  <div class="outcome-row"><span class="outcome-label">Vendor</span><span class="outcome-value">{{ displayValue(selectedResult.vendor_name) }}</span></div>
+                  <div class="outcome-row"><span class="outcome-label">Product</span><span class="outcome-value">{{ displayValue(selectedResult.product_name) }}</span></div>
+                  <div class="outcome-row"><span class="outcome-label">Chipset</span><span class="outcome-value">{{ displayValue(selectedResult.chipset) }}</span></div>
+                  <div class="outcome-row"><span class="outcome-label">Input Firmware</span><span class="outcome-value">{{ displayValue(selectedResult.input_firmware_name) }}</span></div>
+                </div>
+              </template>
+            </Card>
+
+            <!-- Execution Info Card -->
+            <Card class="report-card mb-2">
+              <template #title><i class="pi pi-clock mr-2 text-green-500"></i>Execution</template>
+              <template #content>
+                <div class="outcome-grid">
+                  <div class="outcome-row"><span class="outcome-label">Run ID</span><code class="outcome-value text-xs">{{ selectedResult.run_id }}</code></div>
+                  <div class="outcome-row"><span class="outcome-label">Result ID</span><code class="outcome-value text-xs">{{ selectedResult.result_id }}</code></div>
+                  <div class="outcome-row"><span class="outcome-label">Analyzed</span><span class="outcome-value">{{ formatTimestamp(selectedResult.analyzed_at) }}</span></div>
+                  <div class="outcome-row"><span class="outcome-label">Status</span><span class="outcome-value"><Tag :value="selectedResult.status" :severity="runStatusSeverity(selectedResult.status)" /></span></div>
+                </div>
+              </template>
+            </Card>
+
+            <!-- SDK Summary Card -->
+            <Card class="report-card mb-0">
+              <template #title><i class="pi pi-code mr-2 text-purple-500"></i>SDK Versions</template>
+              <template #content>
+                <div class="outcome-grid">
+                  <div class="outcome-row"><span class="outcome-label">Decoded</span><span class="outcome-value">{{ sdkDisplayValue(selectedResult.sdk_decoded_version) }}</span></div>
+                  <div class="outcome-row"><span class="outcome-label">Inferred</span><span class="outcome-value">{{ sdkDisplayValue(selectedResult.sdk_inferred_version) }}</span></div>
+                  <div class="outcome-row"><span class="outcome-label">Primary</span><span class="outcome-value">{{ sdkDisplayValue(selectedResult.sdk_primary_version || selectedResult.sdk_best_guess_base) }}</span></div>
+                  <div class="outcome-row"><span class="outcome-label">Consistency</span><span class="outcome-value"><Tag :value="sdkDisplayValue(selectedResult.sdk_version_consistency)" :severity="sdkConsistencySeverity(selectedResult.sdk_version_consistency)" /></span></div>
+                </div>
+              </template>
+            </Card>
           </TabPanel>
 
+          <!-- ===== Tab 2: OTA/Header ===== -->
           <TabPanel header="OTA/Header">
-            <DataTable :value="otaRows" responsiveLayout="scroll" class="p-datatable-sm">
-              <Column field="label" header="Field" />
-              <Column field="value" header="Value" />
-            </DataTable>
-            <div v-if="otaRows.length === 0" class="text-600 mt-2">No OTA header data available.</div>
-          </TabPanel>
+            <div v-if="otaRows.length === 0" class="flex flex-column align-items-center justify-content-center p-4 text-500">
+              <i class="pi pi-info-circle text-3xl mb-2"></i>
+              <span>No OTA header data available.</span>
+            </div>
 
-          <TabPanel header="SDK Evidence">
-            <div class="mb-2"><strong>Decoded:</strong> {{ sdkDisplayValue(sdkDecodedVersion) }}</div>
-            <div class="mb-2"><strong>Inferred:</strong> {{ sdkDisplayValue(sdkInferredVersion) }}</div>
-            <div class="mb-2"><strong>Primary:</strong> {{ sdkDisplayValue(sdkBestGuess) }}</div>
-            <div class="mb-2"><strong>Consistency:</strong> {{ sdkDisplayValue(sdkConsistency) }}</div>
-            <div class="mb-2"><strong>Inferred Source:</strong> {{ sdkDisplayValue(sdkInferredSource) }}</div>
-            <div class="mb-2">
-              <strong>Possible Versions:</strong>
-              <span v-if="sdkPossible.length === 0" class="text-600"> - </span>
-              <Tag v-for="v in sdkPossible" :key="`possible-${v}`" :value="v" severity="success" class="mr-2 mb-2" />
-            </div>
-            <div class="mb-2">
-              <strong>Impossible Versions:</strong>
-              <span v-if="sdkImpossible.length === 0" class="text-600"> - </span>
-              <Tag v-for="v in sdkImpossible" :key="`impossible-${v}`" :value="v" severity="danger" class="mr-2 mb-2" />
-            </div>
-            <div class="mb-2">
-              <strong>Warnings:</strong>
-              <span v-if="sdkWarnings.length === 0" class="text-600"> - </span>
-              <Tag v-for="(v, idx) in sdkWarnings" :key="`warn-${idx}`" :value="v" severity="warning" class="mr-2 mb-2" />
-            </div>
-          </TabPanel>
+            <div v-else>
+              <!-- Status banner -->
+              <div class="flex gap-2 mb-3">
+                <div class="flex-1 ota-banner-card" :class="isMatterOta ? 'banner-pass' : 'banner-fail'">
+                  <i class="pi text-xl" :class="isMatterOta ? 'pi-check-circle' : 'pi-times-circle'"></i>
+                  <div>
+                    <div class="text-sm text-500">Matter OTA</div>
+                    <div class="font-semibold">{{ isMatterOta ? 'Yes' : 'No' }}</div>
+                  </div>
+                </div>
+                <div class="flex-1 ota-banner-card" :class="isHashVerified ? 'banner-pass' : 'banner-fail'">
+                  <i class="pi text-xl" :class="isHashVerified ? 'pi-check-circle' : 'pi-times-circle'"></i>
+                  <div>
+                    <div class="text-sm text-500">Hash Verified</div>
+                    <div class="font-semibold">{{ isHashVerified ? 'Yes' : 'No' }}</div>
+                  </div>
+                </div>
+              </div>
 
-          <TabPanel header="Stages">
-            <DataTable :value="stageRows" responsiveLayout="scroll" class="p-datatable-sm">
-              <Column field="name" header="Stage">
-                <template #body="slotProps">{{ stageLabel(slotProps.data.name) }}</template>
-              </Column>
-              <Column field="status" header="Status">
-                <template #body="slotProps">
-                  <Tag :value="slotProps.data.status" :severity="stageSeverity(slotProps.data.status)" />
+              <!-- Device Identity -->
+              <Card class="report-card mb-2">
+                <template #title><i class="pi pi-mobile mr-2 text-blue-500"></i>Device Identity</template>
+                <template #content>
+                  <div class="outcome-grid">
+                    <div class="outcome-row"><span class="outcome-label">VID</span><span class="outcome-value"><code>{{ otaFieldValue('VID') }}</code></span></div>
+                    <div class="outcome-row"><span class="outcome-label">PID</span><span class="outcome-value"><code>{{ otaFieldValue('PID') }}</code></span></div>
+                    <div class="outcome-row"><span class="outcome-label">Software Version</span><span class="outcome-value">{{ otaFieldValue('Software Version') }}</span></div>
+                    <div class="outcome-row"><span class="outcome-label">Version String</span><span class="outcome-value">{{ otaFieldValue('Software Version String') }}</span></div>
+                  </div>
                 </template>
-              </Column>
-              <Column field="started_at" header="Started">
-                <template #body="slotProps">{{ displayValue(formatTimestamp(slotProps.data.started_at)) }}</template>
-              </Column>
-              <Column field="ended_at" header="Ended">
-                <template #body="slotProps">{{ displayValue(formatTimestamp(slotProps.data.ended_at)) }}</template>
-              </Column>
-              <Column field="duration" header="Duration">
-                <template #body="slotProps">{{ slotProps.data.duration }}</template>
-              </Column>
-              <Column field="error" header="Error">
-                <template #body="slotProps">{{ displayValue(slotProps.data.error) }}</template>
-              </Column>
-            </DataTable>
+              </Card>
+
+              <!-- Crypto Details -->
+              <Card class="report-card mb-2">
+                <template #title><i class="pi pi-lock mr-2 text-orange-500"></i>Cryptography</template>
+                <template #content>
+                  <div class="outcome-grid">
+                    <div class="outcome-row"><span class="outcome-label">Hash Algorithm</span><span class="outcome-value">{{ otaFieldValue('Hash Algorithm') }}</span></div>
+                    <div class="outcome-row"><span class="outcome-label">Digest Type</span><span class="outcome-value">{{ otaFieldValue('Digest Type') }}</span></div>
+                    <div class="outcome-row col-span-2"><span class="outcome-label">Payload Hash</span><code class="outcome-value text-xs">{{ otaFieldValue('Payload Hash') }}</code></div>
+                  </div>
+                </template>
+              </Card>
+
+              <!-- Size Info -->
+              <Card class="report-card mb-0">
+                <template #title><i class="pi pi-chart-bar mr-2 text-green-500"></i>Size</template>
+                <template #content>
+                  <div class="outcome-grid">
+                    <div class="outcome-row"><span class="outcome-label">Payload Size</span><span class="outcome-value">{{ otaFieldValue('Payload Size') }}</span></div>
+                    <div class="outcome-row"><span class="outcome-label">Total Size</span><span class="outcome-value">{{ otaFieldValue('Total Size') }}</span></div>
+                  </div>
+                  <div v-if="otaSizePayload > 0 && otaSizeTotal > 0" class="mt-2">
+                    <div class="text-xs text-500 mb-1">Payload / Overhead ratio</div>
+                    <div class="size-bar">
+                      <div class="size-bar-fill" :style="{ width: otaSizeRatio + '%' }"></div>
+                    </div>
+                    <div class="flex justify-content-between text-xs text-500 mt-1">
+                      <span>Payload {{ otaSizeRatio }}%</span>
+                      <span>Overhead {{ 100 - otaSizeRatio }}%</span>
+                    </div>
+                  </div>
+                </template>
+              </Card>
+            </div>
           </TabPanel>
 
-          <TabPanel header="Provenance">
-            <div class="grid">
-              <div class="col-12"><strong>Source Network:</strong> {{ displayValue(selectedResult.source_network) }}</div>
-              <div class="col-12"><strong>Source Path:</strong> {{ displayValue(selectedResult.source_rel_path) }}</div>
-              <div class="col-12"><strong>Firmware Store File:</strong> {{ displayPathTail(selectedResult.firmware_store_path) }}</div>
-              <div class="col-12"><strong>Report File:</strong> {{ displayPathTail(selectedResult.report_path) }}</div>
-              <div class="col-12"><strong>Parent Run ID:</strong> {{ displayValue(selectedResult.parent_run_id) }}</div>
+          <!-- ===== Tab 3: SDK Evidence ===== -->
+          <TabPanel header="SDK Evidence">
+            <!-- Version flow -->
+            <div class="sdk-flow mb-3">
+              <div class="sdk-flow-node">
+                <div class="text-xs text-500 uppercase mb-1">Decoded</div>
+                <div class="font-semibold">{{ sdkDisplayValue(sdkDecodedVersion) }}</div>
+              </div>
+              <div class="sdk-flow-arrow"><i class="pi pi-arrow-right text-400"></i></div>
+              <div class="sdk-flow-node">
+                <div class="text-xs text-500 uppercase mb-1">Inferred</div>
+                <div class="font-semibold">{{ sdkDisplayValue(sdkInferredVersion) }}</div>
+              </div>
+              <div class="sdk-flow-arrow"><i class="pi pi-arrow-right text-400"></i></div>
+              <div class="sdk-flow-node sdk-flow-best">
+                <div class="text-xs text-500 uppercase mb-1">Best Guess</div>
+                <div class="font-semibold text-blue-600">{{ sdkDisplayValue(sdkBestGuess) }}</div>
+              </div>
             </div>
+
+            <!-- Consistency + Source -->
+            <Card class="report-card mb-2">
+              <template #title><i class="pi pi-balance mr-2 text-blue-500"></i>Consistency</template>
+              <template #content>
+                <div class="outcome-row mb-2">
+                  <span class="outcome-label">Verdict</span>
+                  <span class="outcome-value"><Tag :value="sdkDisplayValue(sdkConsistency)" :severity="sdkConsistencySeverity(sdkConsistency)" /></span>
+                </div>
+                <div class="outcome-row">
+                  <span class="outcome-label">Inferred Source</span>
+                  <span class="outcome-value">{{ sdkDisplayValue(sdkInferredSource) }}</span>
+                </div>
+              </template>
+            </Card>
+
+            <!-- Version Classification -->
+            <Card class="report-card mb-2">
+              <template #title><i class="pi pi-tags mr-2 text-green-500"></i>Version Classification</template>
+              <template #content>
+                <div class="mb-2">
+                  <div class="text-sm font-semibold text-green-600 mb-1">Possible Versions</div>
+                  <div v-if="sdkPossible.length === 0" class="text-500 text-sm">None identified</div>
+                  <div v-else class="flex flex-wrap gap-1">
+                    <Tag v-for="v in sdkPossible" :key="`possible-${v}`" :value="v" severity="success" />
+                  </div>
+                </div>
+                <Divider class="my-2" />
+                <div>
+                  <div class="text-sm font-semibold text-red-600 mb-1">Impossible Versions</div>
+                  <div v-if="sdkImpossible.length === 0" class="text-500 text-sm">None excluded</div>
+                  <div v-else class="flex flex-wrap gap-1">
+                    <Tag v-for="v in sdkImpossible" :key="`impossible-${v}`" :value="v" severity="danger" />
+                  </div>
+                </div>
+              </template>
+            </Card>
+
+            <!-- Warnings -->
+            <Message v-if="sdkWarnings.length > 0" severity="warn" :closable="false">
+              <template #default>
+                <div class="text-sm font-semibold mb-1">Attribution Warnings</div>
+                <div v-for="(w, idx) in sdkWarnings" :key="`warn-${idx}`" class="text-sm">{{ w }}</div>
+              </template>
+            </Message>
+          </TabPanel>
+
+          <!-- ===== Tab 4: Stages ===== -->
+          <TabPanel header="Stages">
+            <div v-if="stageRows.length === 0" class="flex flex-column align-items-center justify-content-center p-4 text-500">
+              <i class="pi pi-info-circle text-3xl mb-2"></i>
+              <span>No stage data available.</span>
+            </div>
+
+            <div v-else>
+              <!-- Progress summary -->
+              <div class="flex align-items-center justify-content-between mb-3">
+                <span class="text-sm text-600">{{ stagesCompleteCount }} / {{ stageRows.length }} stages complete</span>
+                <span class="text-sm text-500">{{ totalPipelineDuration }}</span>
+              </div>
+              <div class="stage-progress mb-3">
+                <div class="stage-progress-fill" :style="{ width: stagesPercent + '%' }"></div>
+              </div>
+
+              <!-- Timeline -->
+              <div class="stage-timeline">
+                <div
+                  v-for="(stage, idx) in stageRows"
+                  :key="stage.name"
+                  class="stage-node"
+                  :class="{ 'stage-last': idx === stageRows.length - 1 }"
+                >
+                  <div class="stage-dot" :class="'stage-dot-' + stageSeverity(stage.status)"></div>
+                  <div v-if="idx < stageRows.length - 1" class="stage-line"></div>
+                  <div class="stage-body">
+                    <div class="flex align-items-center justify-content-between gap-2">
+                      <div>
+                        <span class="font-medium text-sm">{{ stageLabel(stage.name) }}</span>
+                        <Tag :value="stage.status" :severity="stageSeverity(stage.status)" class="ml-2" />
+                      </div>
+                      <span class="text-xs text-500">{{ stage.duration }}</span>
+                    </div>
+                    <div v-if="stage.error" class="stage-error mt-1">
+                      <i class="pi pi-exclamation-triangle text-xs mr-1"></i>
+                      <span class="text-xs">{{ stage.error }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </TabPanel>
+
+          <!-- ===== Tab 5: Provenance ===== -->
+          <TabPanel header="Provenance">
+            <Card class="report-card mb-2">
+              <template #title><i class="pi pi-globe mr-2 text-blue-500"></i>Source</template>
+              <template #content>
+                <div class="outcome-grid">
+                  <div class="outcome-row"><span class="outcome-label">Network</span><span class="outcome-value"><Tag :value="displayValue(selectedResult.source_network)" severity="warning" /></span></div>
+                  <div class="outcome-row col-span-2"><span class="outcome-label">Source Path</span><code class="outcome-value text-xs">{{ displayValue(selectedResult.source_rel_path) }}</code></div>
+                </div>
+              </template>
+            </Card>
+
+            <Card class="report-card mb-2">
+              <template #title><i class="pi pi-folder-open mr-2 text-orange-500"></i>Files</template>
+              <template #content>
+                <div class="outcome-row mb-2">
+                  <span class="outcome-label">Firmware Store</span>
+                  <span class="outcome-value text-sm" v-tooltip.top="selectedResult.firmware_store_path">{{ displayPathTail(selectedResult.firmware_store_path) }}</span>
+                </div>
+                <div class="outcome-row">
+                  <span class="outcome-label">Report File</span>
+                  <span class="outcome-value text-sm" v-tooltip.top="selectedResult.report_path">{{ displayPathTail(selectedResult.report_path) }}</span>
+                </div>
+              </template>
+            </Card>
+
+            <Card class="report-card mb-0">
+              <template #title><i class="pi pi-link mr-2 text-purple-500"></i>Parent Run</template>
+              <template #content>
+                <div class="outcome-row">
+                  <span class="outcome-label">Parent Run ID</span>
+                  <code class="outcome-value text-xs">{{ displayValue(selectedResult.parent_run_id) }}</code>
+                </div>
+              </template>
+            </Card>
           </TabPanel>
         </TabView>
       </div>
@@ -375,6 +588,33 @@ export default {
     reportOutputs() {
       return this.sanitizedReport?.outputs || {};
     },
+    verdictCards() {
+      const r = this.selectedResult || {};
+      const cards = [
+        {
+          label: 'Authenticity',
+          value: r.verdict_authenticity || '-',
+          icon: 'pi-shield',
+          iconColor: this.verdictIconColor(r.verdict_authenticity),
+          iconBg: this.verdictIconBg(r.verdict_authenticity)
+        },
+        {
+          label: 'Integrity',
+          value: r.verdict_integrity || '-',
+          icon: 'pi-check-circle',
+          iconColor: this.verdictIconColor(r.verdict_integrity),
+          iconBg: this.verdictIconBg(r.verdict_integrity)
+        },
+        {
+          label: 'Validation',
+          value: r.verdict_validation_path || '-',
+          icon: 'pi-sitemap',
+          iconColor: this.verdictIconColor(r.verdict_validation_path),
+          iconBg: this.verdictIconBg(r.verdict_validation_path)
+        }
+      ];
+      return cards;
+    },
     otaRows() {
       const ota = this.reportOutputs?.matter_ota || {};
       const header = ota?.header || {};
@@ -394,6 +634,26 @@ export default {
       return data
         .filter(([, value]) => value !== null && value !== undefined && value !== '')
         .map(([label, value]) => ({ label, value: String(value) }));
+    },
+    isMatterOta() {
+      const ota = this.reportOutputs?.matter_ota || {};
+      return ota?.is_matter_ota === true;
+    },
+    isHashVerified() {
+      const ota = this.reportOutputs?.matter_ota || {};
+      return ota?.hash_verified === true;
+    },
+    otaSizePayload() {
+      const header = this.reportOutputs?.matter_ota?.header || {};
+      return Number(header?.payload_size) || 0;
+    },
+    otaSizeTotal() {
+      const header = this.reportOutputs?.matter_ota?.header || {};
+      return Number(header?.total_size) || 0;
+    },
+    otaSizeRatio() {
+      if (this.otaSizeTotal <= 0) return 0;
+      return Math.round((this.otaSizePayload / this.otaSizeTotal) * 100);
     },
     sdkResult() {
       return this.reportOutputs?.sdk_result || {};
@@ -438,6 +698,27 @@ export default {
           error: details?.error || null
         };
       });
+    },
+    stagesCompleteCount() {
+      return this.stageRows.filter(s => s.status === 'success' || s.status === 'done').length;
+    },
+    stagesPercent() {
+      if (this.stageRows.length === 0) return 0;
+      return Math.round((this.stagesCompleteCount / this.stageRows.length) * 100);
+    },
+    totalPipelineDuration() {
+      const rows = this.stageRows;
+      if (rows.length === 0) return '';
+      const first = rows[0]?.started_at;
+      const last = rows[rows.length - 1]?.ended_at;
+      if (!first || !last) return '';
+      const start = new Date(first);
+      const end = new Date(last);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return '';
+      const ms = end.getTime() - start.getTime();
+      if (ms < 0) return '';
+      if (ms < 1000) return `Total: ${ms} ms`;
+      return `Total: ${(ms / 1000).toFixed(2)} s`;
     }
   },
   methods: {
@@ -597,6 +878,31 @@ export default {
       if (!sha) return;
       this.$router.push(`/firmware-security/firmware/${sha}`);
     },
+    otaFieldValue(label) {
+      const row = this.otaRows.find(r => r.label === label);
+      return row ? row.value : '-';
+    },
+    verdictIconColor(value) {
+      const key = String(value || '').toLowerCase();
+      if (key === 'pass') return 'text-green-500';
+      if (key === 'fail') return 'text-red-500';
+      if (key === 'warning') return 'text-yellow-500';
+      return 'text-blue-500';
+    },
+    verdictIconBg(value) {
+      const key = String(value || '').toLowerCase();
+      if (key === 'pass') return 'bg-green-100';
+      if (key === 'fail') return 'bg-red-100';
+      if (key === 'warning') return 'bg-yellow-100';
+      return 'bg-blue-100';
+    },
+    sdkConsistencySeverity(value) {
+      const key = String(value || '').toLowerCase();
+      if (key === 'consistent') return 'success';
+      if (key === 'inconsistent') return 'danger';
+      if (key === 'partial') return 'warning';
+      return 'info';
+    },
     runStatusSeverity(value) {
       const key = String(value || '').toLowerCase();
       if (key === 'success') return 'success';
@@ -702,6 +1008,7 @@ export default {
 </script>
 
 <style scoped>
+/* ---- Page & Card ---- */
 .scan-results-page .results-card,
 .scan-results-page .report-card {
   border-radius: 12px;
@@ -736,14 +1043,39 @@ export default {
   margin-bottom: 0.2rem;
 }
 
+/* ---- Sidebar ---- */
+:deep(.report-sidebar.p-sidebar) {
+  background: #f8fafc;
+}
+:deep(.report-sidebar .p-sidebar-header) {
+  padding: 1rem 1.2rem 0.5rem;
+}
+:deep(.report-sidebar .p-sidebar-content) {
+  padding: 0.5rem 1.2rem 1.2rem;
+}
+
+/* ---- Report Content ---- */
+.report-content {
+  font-size: 0.88rem;
+}
+
+.report-banner {
+  padding: 0.65rem 0.8rem;
+  background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%);
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+}
+
+/* ---- TabView ---- */
 .scan-results-page :deep(.p-tabview .p-tabview-nav li .p-tabview-nav-link) {
   padding: 0.45rem 0.75rem;
 }
 
 .scan-results-page :deep(.p-tabview .p-tabview-panels) {
-  padding: 0.55rem 0.3rem;
+  padding: 0.65rem 0.1rem;
 }
 
+/* ---- Table columns (unchanged) ---- */
 .scan-results-page :deep(.scan-results-table .p-datatable-table) {
   min-width: 112rem;
 }
@@ -776,10 +1108,191 @@ export default {
   min-width: 7rem;
 }
 
-:deep(.p-sidebar-header) {
-  padding: 1rem 1rem 0.5rem;
+/* ---- Verdict Stat Cards ---- */
+.stat-card {
+  min-height: 66px;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
 }
-:deep(.p-sidebar-content) {
-  padding: 0.5rem 1rem 1rem;
+.stat-label-text {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* ---- Outcome Grid ---- */
+.outcome-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  column-gap: 1.2rem;
+  row-gap: 0.55rem;
+}
+
+.outcome-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px dashed #e5e7eb;
+  padding-bottom: 0.3rem;
+}
+
+.outcome-label {
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 0.8rem;
+  padding-right: 0.75rem;
+  white-space: nowrap;
+}
+
+.outcome-value {
+  color: #111827;
+  font-size: 0.85rem;
+  text-align: right;
+  word-break: break-word;
+}
+
+.col-span-2 {
+  grid-column: span 2;
+}
+
+/* ---- OTA Banner ---- */
+.ota-banner-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+}
+.banner-pass {
+  border-left: 3px solid #22c55e;
+}
+.banner-pass i {
+  color: #22c55e;
+}
+.banner-fail {
+  border-left: 3px solid #ef4444;
+}
+.banner-fail i {
+  color: #ef4444;
+}
+
+/* ---- Size Bar ---- */
+.size-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: #fee2e2;
+  overflow: hidden;
+}
+.size-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #22c55e;
+  transition: width 0.3s ease;
+}
+
+/* ---- SDK Flow ---- */
+.sdk-flow {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+.sdk-flow-node {
+  flex: 1;
+  min-width: 80px;
+  text-align: center;
+  padding: 0.5rem 0.4rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+.sdk-flow-best {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+.sdk-flow-arrow {
+  flex-shrink: 0;
+  padding: 0 0.15rem;
+}
+
+/* ---- Stage Progress Bar ---- */
+.stage-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+.stage-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: #22c55e;
+  transition: width 0.3s ease;
+}
+
+/* ---- Stage Timeline ---- */
+.stage-timeline {
+  position: relative;
+}
+
+.stage-node {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  position: relative;
+  padding-bottom: 0.7rem;
+}
+
+.stage-node.stage-last {
+  padding-bottom: 0;
+}
+
+.stage-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-top: 3px;
+  flex-shrink: 0;
+  z-index: 1;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px currentColor;
+}
+
+.stage-line {
+  position: absolute;
+  left: 5px;
+  top: 18px;
+  width: 2px;
+  height: calc(100% - 8px);
+  background: #e5e7eb;
+  z-index: 0;
+}
+
+.stage-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.stage-error {
+  padding: 0.35rem 0.5rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #991b1b;
+}
+
+/* Stage dot colors */
+.stage-dot-success { color: #22c55e; background: #22c55e; }
+.stage-dot-danger { color: #ef4444; background: #ef4444; }
+.stage-dot-info { color: #3b82f6; background: #3b82f6; }
+.stage-dot-warning { color: #f59e0b; background: #f59e0b; }
+.stage-dot-secondary { color: #9ca3af; background: #9ca3af; }
+
+/* ---- Report card title icon sizing ---- */
+.scan-results-page :deep(.report-card .p-card-title) {
+  font-size: 0.9rem;
 }
 </style>
