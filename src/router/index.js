@@ -15,6 +15,8 @@ import FirmwareDetail from '@/views/Tools/FirmwareDetail.vue'
 import FirmwareScanQueue from '@/views/Tools/FirmwareScanQueue.vue'
 import FirmwareScanResults from '@/views/Tools/FirmwareScanResults.vue'
 import FirmwareWebhookSettings from '@/views/Tools/FirmwareWebhookSettings.vue'
+import DeviceProfiles from '@/views/Tools/DeviceProfiles.vue'
+import VendorProfiles from '@/views/Tools/VendorProfiles.vue'
 const routerHistory = createWebHistory()
 const routes = [
     {
@@ -37,6 +39,8 @@ const routes = [
     { path: '/firmware-security/scan-queue', component: FirmwareScanQueue },
     { path: '/firmware-security/scan-results', component: FirmwareScanResults },
     { path: '/firmware-security/webhook-settings', component: FirmwareWebhookSettings },
+    { path: '/firmware-security/device-profiles', component: DeviceProfiles },
+    { path: '/firmware-security/vendor-profiles', component: VendorProfiles },
 ]
 
 const router = createRouter({
