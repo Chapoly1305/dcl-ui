@@ -218,16 +218,29 @@
       </div>
 
       <div v-else-if="selectedResult" class="report-content">
-        <div class="report-banner mb-2">
-          <div class="flex align-items-center gap-2 flex-wrap">
-            <i class="pi pi-microchip text-blue-500"></i>
-            <span class="font-semibold">{{ displayValue(selectedResult.product_name) || displayValue(selectedResult.vendor_name) || 'Firmware Report' }}</span>
-            <Tag :value="selectedResult.status" :severity="runStatusSeverity(selectedResult.status)" class="ml-auto" />
-          </div>
-          <div class="flex align-items-center gap-2 flex-wrap mt-1 text-sm text-600">
-            <span>VID: <code>{{ displayValue(selectedResult.vid) }}</code></span>
-            <span>PID: <code>{{ displayValue(selectedResult.pid) }}</code></span>
-            <span v-if="selectedResult.chipset" class="text-500">| {{ selectedResult.chipset }}</span>
+        <!-- Firmware identity banner -->
+        <div class="report-banner mb-3">
+          <div class="flex align-items-center gap-3 flex-wrap">
+            <i class="pi pi-microchip text-blue-500" style="font-size:1.3rem"></i>
+            <div>
+              <div class="font-bold text-lg">
+                {{ dclProvenance?.product_name || dclProvenance?.vendor_name || selectedResult.input_firmware_name || 'Firmware Report' }}
+              </div>
+              <div class="text-sm text-600 mt-1">
+                <span v-if="dclProvenance?.vendor_name">{{ dclProvenance.vendor_name }} &middot; </span>
+                <span>VID <code>{{ dclProvenance?.vid ?? '?' }}</code></span>
+                <span class="ml-2">PID <code>{{ dclProvenance?.pid ?? '?' }}</code></span>
+                <span v-if="dclProvenance?.software_version" class="ml-2">v<code>{{ dclProvenance.software_version }}</code></span>
+                <span v-if="dclProvenance?.software_version_string" class="ml-2">"{{ dclProvenance.software_version_string }}"</span>
+              </div>
+              <div class="text-xs text-500 mt-1 flex gap-2 flex-wrap">
+                <span v-if="dclProvenance?.network"><Tag :value="dclProvenance.network" :severity="dclProvenance.network === 'mainnet' ? 'danger' : 'info'" /></span>
+                <span v-if="dclProvenance?.block_height">Block {{ dclProvenance.block_height }}</span>
+                <span v-if="dclProvenance?.tx_hash">TX <code>{{ dclProvenance.tx_hash.slice(0,8) }}</code></span>
+                <span v-if="selectedResult.chipset">| {{ selectedResult.chipset }}</span>
+                <span class="ml-auto"><Tag :value="selectedResult.status" :severity="runStatusSeverity(selectedResult.status)" /></span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -251,34 +264,20 @@
               </div>
             </div>
 
-            <!-- Identity Card -->
-            <Card class="report-card mb-2">
-              <template #title><i class="pi pi-id-card mr-2 text-blue-500"></i>Firmware Identity</template>
-              <template #content>
-                <div class="outcome-grid">
-                  <div class="outcome-row"><span class="outcome-label">VID / PID</span><span class="outcome-value">{{ displayValue(selectedResult.vid) }} / {{ displayValue(selectedResult.pid) }}</span></div>
-                  <div class="outcome-row"><span class="outcome-label">Vendor</span><span class="outcome-value">{{ displayValue(selectedResult.vendor_name) }}</span></div>
-                  <div class="outcome-row"><span class="outcome-label">Product</span><span class="outcome-value">{{ displayValue(selectedResult.product_name) }}</span></div>
-                  <div class="outcome-row"><span class="outcome-label">Chipset</span><span class="outcome-value">{{ displayValue(selectedResult.chipset) }}</span></div>
-                  <div class="outcome-row"><span class="outcome-label">Input Firmware</span><span class="outcome-value">{{ displayValue(selectedResult.input_firmware_name) }}</span></div>
-                </div>
-              </template>
-            </Card>
-
-            <!-- Execution Info Card -->
+            <!-- Execution Info -->
             <Card class="report-card mb-2">
               <template #title><i class="pi pi-clock mr-2 text-green-500"></i>Execution</template>
               <template #content>
                 <div class="outcome-grid">
-                  <div class="outcome-row"><span class="outcome-label">Run ID</span><code class="outcome-value text-xs">{{ selectedResult.run_id }}</code></div>
-                  <div class="outcome-row"><span class="outcome-label">Result ID</span><code class="outcome-value text-xs">{{ selectedResult.result_id }}</code></div>
+                  <div class="outcome-row"><span class="outcome-label">SHA-256</span><code class="outcome-value text-xs">{{ selectedResult.firmware_sha256 }}</code></div>
+                  <div class="outcome-row"><span class="outcome-label">Size</span><span class="outcome-value">{{ formatSize(selectedResult.firmware_size) }}</span></div>
                   <div class="outcome-row"><span class="outcome-label">Analyzed</span><span class="outcome-value">{{ formatTimestamp(selectedResult.analyzed_at) }}</span></div>
-                  <div class="outcome-row"><span class="outcome-label">Status</span><span class="outcome-value"><Tag :value="selectedResult.status" :severity="runStatusSeverity(selectedResult.status)" /></span></div>
+                  <div class="outcome-row"><span class="outcome-label">Run ID</span><code class="outcome-value text-xs">{{ selectedResult.run_id?.slice(0, 16) }}...</code></div>
                 </div>
               </template>
             </Card>
 
-            <!-- SDK Summary Card -->
+            <!-- SDK Summary -->
             <Card class="report-card mb-0">
               <template #title><i class="pi pi-code mr-2 text-purple-500"></i>SDK Versions</template>
               <template #content>
@@ -513,6 +512,58 @@
               </template>
             </Card>
           </TabPanel>
+
+          <!-- ===== Tab 6: Checklist ===== -->
+          <TabPanel header="Checklist">
+            <div class="text-500 text-xs mb-3">
+              <span class="cl-legend"><i class="pi pi-check-circle text-green-500"></i> Passed</span>
+              <span class="cl-legend ml-3"><i class="pi pi-exclamation-triangle text-yellow-500"></i> Observation</span>
+              <span class="cl-legend ml-3"><i class="pi pi-times-circle text-red-500"></i> Not checked</span>
+              <span class="cl-legend ml-3 text-400">Phase 1 = Spec Conformance &middot; Phase 2 = Firmware Analysis</span>
+            </div>
+
+            <!-- Phase 1: Spec Conformance -->
+            <div class="checklist-phase-header mb-2">
+              <Tag value="Phase 1" severity="info" class="text-xs" />
+              <span class="text-sm font-semibold ml-2 text-700">Matter Specification Conformance</span>
+            </div>
+            <div v-for="tier in phase1Tiers" :key="'p1-'+tier.level" class="mb-3">
+              <div class="text-xs text-500 mb-1 flex align-items-center gap-1">
+                <Tag :value="'Group '+tier.level" severity="secondary" class="text-xs" />
+                <span v-if="tier.max_workers > 1" class="text-400">{{ tier.max_workers }}&times; parallel</span>
+              </div>
+              <div class="checklist-grid">
+                <div v-for="sec in tier.sections" :key="sec.id" class="checklist-item" :class="'cl-'+checklistStatus(sec.id)">
+                  <div class="cl-header">
+                    <span class="cl-name" style="font-weight:600;font-size:0.95rem;color:var(--text-color)">{{ sec.name }}</span>
+                    <i :class="checklistIcon(sec.id)" :style="{ color: checklistIconColor(sec.id), fontSize: '1.3rem' }" />
+                  </div>
+                  <div class="cl-outcome">{{ checklistOutcome(sec) }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Phase 2: Firmware Analysis -->
+            <div class="checklist-phase-header mt-4 mb-2">
+              <Tag value="Phase 2" severity="warn" class="text-xs" />
+              <span class="text-sm font-semibold ml-2 text-700">Firmware Security Analysis</span>
+            </div>
+            <div v-for="tier in phase2Tiers" :key="'p2-'+tier.level" class="mb-3">
+              <div class="text-xs text-500 mb-1 flex align-items-center gap-1">
+                <Tag :value="'Group '+tier.level" severity="secondary" class="text-xs" />
+                <span v-if="tier.max_workers > 1" class="text-400">{{ tier.max_workers }}&times; parallel</span>
+              </div>
+              <div class="checklist-grid">
+                <div v-for="sec in tier.sections" :key="sec.id" class="checklist-item" :class="'cl-'+checklistStatus(sec.id)">
+                  <div class="cl-header">
+                    <span class="cl-name" style="font-weight:600;font-size:0.95rem;color:var(--text-color)">{{ sec.name }}</span>
+                    <i :class="checklistIcon(sec.id)" :style="{ color: checklistIconColor(sec.id), fontSize: '1.3rem' }" />
+                  </div>
+                  <div class="cl-outcome">{{ checklistOutcome(sec) }}</div>
+                </div>
+              </div>
+            </div>
+          </TabPanel>
         </TabView>
       </div>
     </Sidebar>
@@ -521,6 +572,41 @@
 
 <script>
 import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
+
+// Static DAG structure — sections A-G (Phase 1: Spec Conformance) and H-S (Phase 2: Firmware Analysis)
+const STATIC_DAG_TIERS = [
+  // Phase 1 — Spec Conformance
+  { level: 0, phase: 1, max_workers: 1, sections: [{ id: 'A', name: 'DCL Record / Provenance', description: 'Load DCL record metadata, build provenance link', runner: 'code', phase: 1 }] },
+  { level: 1, phase: 1, max_workers: 2, sections: [
+    { id: 'B', name: 'Ledger-only Conformance', description: '30+ rule-based checks on DCL manifest fields', runner: 'code', phase: 1 },
+    { id: 'C', name: 'URL / TLS / Hosting', description: 'URL validation, TLS handshake, cert chain, hosting classification', runner: 'code', phase: 1 }
+  ]},
+  { level: 2, phase: 1, max_workers: 1, sections: [{ id: 'D', name: 'Artifact Download / Acquisition', description: 'Dual-client download, retry, SHA-256, reproducibility', runner: 'code', phase: 1 }] },
+  { level: 3, phase: 1, max_workers: 2, sections: [
+    { id: 'E', name: 'Manifest-layer Integrity', description: 'OtaChecksum verification against DCL declaration', runner: 'code', phase: 1 },
+    { id: 'F', name: 'Matter OTA Image Format', description: 'Magic number, TLV parse, header field validation', runner: 'code', phase: 1 }
+  ]},
+  { level: 4, phase: 1, max_workers: 1, sections: [{ id: 'G', name: 'Image Digest / Payload Extraction', description: 'Extract payload, verify ImageDigest', runner: 'code', phase: 1 }] },
+  // Phase 2 — Firmware Analysis
+  { level: 5, phase: 2, max_workers: 3, sections: [
+    { id: 'H', name: 'Payload Type / Firmware Orientation', description: 'File type, architecture, platform identification', runner: 'code', phase: 2 },
+    { id: 'I', name: 'Entropy / Encryption / Compression', description: 'Shannon entropy, opacity cutoff, compression detection', runner: 'code', phase: 2 },
+    { id: 'M', name: 'Secrets / Sensitive Material', description: 'Scan for private keys, credentials, Matter secrets', runner: 'hybrid', phase: 2 }
+  ]},
+  { level: 6, phase: 2, max_workers: 5, sections: [
+    { id: 'K', name: 'Matter SDK / Specification Baseline', description: 'Recover SpecVer from Basic Information cluster', runner: 'code', phase: 2 },
+    { id: 'N', name: 'RNG / Crypto Initialization', description: 'Trace entropy init paths, detect null/static entropy', runner: 'llm', phase: 2 },
+    { id: 'L', name: 'Secure Boot / OTA Authenticity', description: 'Signed-update evidence, default key detection', runner: 'code', phase: 2 },
+    { id: 'Q', name: 'Non-firmware Payload / Contamination', description: 'Classify non-firmware artifacts, detect pipeline issues', runner: 'code', phase: 2 },
+    { id: 'J', name: 'Version Lineage / Cross-network', description: 'Version chain, testnet/mainnet cross-reference', runner: 'code', phase: 2, cross_firmware: true }
+  ]},
+  { level: 7, phase: 2, max_workers: 3, sections: [
+    { id: 'O', name: 'Vendor Implementation / Sink RE', description: 'Sink-driven reverse engineering, authorization gaps', runner: 'llm', phase: 2 },
+    { id: 'P', name: 'Cloud Telemetry / Privacy', description: 'Cloud endpoints, data classification, consent assessment', runner: 'llm', phase: 2 },
+    { id: 'R', name: 'Supply-chain / Integration Failure', description: 'Cross-firmware pattern matching, shared vulnerabilities', runner: 'llm', phase: 2, cross_firmware: true }
+  ]},
+  { level: 8, phase: 2, max_workers: 1, sections: [{ id: 'S', name: 'Scoring / Prioritization / Triage', description: 'Conformance score, security score, P0-P3 priority', runner: 'code', phase: 2 }] }
+];
 
 export default {
   name: 'FirmwareScanResults',
@@ -564,6 +650,7 @@ export default {
       selectedResultId: '',
       detailLoading: false,
       detailError: null,
+      staticDagTiers: STATIC_DAG_TIERS,
       detailPayload: {
         result: null,
         attempts: []
@@ -587,6 +674,71 @@ export default {
     },
     reportOutputs() {
       return this.sanitizedReport?.outputs || {};
+    },
+    phaseIiReport() {
+      return this.reportOutputs?.phase_ii || {};
+    },
+    // Extract DCL provenance from Phase II Section A, or parse from source_rel_path
+    dclProvenance() {
+      // Try Phase II Section A output
+      const secA = this.checklistResults['A'];
+      if (secA && secA.status === 'success' && secA.output && secA.output.dcl_records && secA.output.dcl_records.length > 0) {
+        const r = secA.output.dcl_records[0];
+        return {
+          vid: r.vid,
+          pid: r.pid,
+          vendor_name: r.vendor_name || null,
+          product_name: r.product_name || null,
+          software_version: r.software_version,
+          software_version_string: r.software_version_string,
+          block_height: r.block_height,
+          tx_hash: r.tx_hash,
+          network: r.network,
+          release_time: r.release_time,
+        };
+      }
+      // Fallback: parse source_rel_path (otaM_VID_PID_VERSION_TXHASH.bin)
+      const src = this.selectedResult?.source_rel_path;
+      if (src) {
+        const match = String(src).match(/ota[a-z]?_(\d+)_(\d+)_(\d+)_([0-9a-fA-F]{8})/);
+        if (match) {
+          return {
+            vid: parseInt(match[1]),
+            pid: parseInt(match[2]),
+            vendor_name: null,
+            product_name: null,
+            software_version: parseInt(match[3]),
+            software_version_string: null,
+            block_height: null,
+            tx_hash: match[4].toUpperCase(),
+            network: this.selectedResult?.source_network || null,
+            release_time: null,
+          };
+        }
+      }
+      return null;
+    },
+    checklistTiers() {
+      if (this.phaseIiReport?.dag && Array.isArray(this.phaseIiReport.dag.tiers) && this.phaseIiReport.dag.tiers.length > 0) {
+        return this.phaseIiReport.dag.tiers;
+      }
+      return this.staticDagTiers;
+    },
+    // Split tiers by paper phase
+    phase1Tiers() {
+      return this.checklistTiers.filter(t => {
+        const sec = t.sections?.[0];
+        return sec && (sec.phase === 1 || (!sec.phase && ['A','B','C','D','E','F','G'].includes(sec.id)));
+      });
+    },
+    phase2Tiers() {
+      return this.checklistTiers.filter(t => {
+        const sec = t.sections?.[0];
+        return sec && (sec.phase === 2 || (!sec.phase && !['A','B','C','D','E','F','G'].includes(sec.id)));
+      });
+    },
+    checklistResults() {
+      return this.phaseIiReport?.results || {};
     },
     verdictCards() {
       const r = this.selectedResult || {};
@@ -722,6 +874,46 @@ export default {
     }
   },
   methods: {
+    checklistStatus(secId) {
+      const r = this.checklistResults[secId];
+      if (!r) return 'pending';
+      return r.status || 'pending';
+    },
+    checklistIcon(secId) {
+      const s = this.checklistStatus(secId);
+      if (s === 'success' || s === 'done') return 'pi pi-check-circle';
+      if (s === 'failed' || s === 'pending') return 'pi pi-times-circle';
+      if (s === 'skipped') return 'pi pi-minus-circle';
+      return 'pi pi-exclamation-triangle';
+    },
+    checklistIconColor(secId) {
+      const s = this.checklistStatus(secId);
+      if (s === 'success' || s === 'done') return '#22c55e';
+      if (s === 'failed' || s === 'pending') return '#ef4444';
+      if (s === 'skipped') return '#9ca3af';
+      return '#eab308';
+    },
+    checklistOutcome(sec) {
+      const r = this.checklistResults[sec.id];
+      if (!r) {
+        if (sec.runner === 'llm') return 'Not evaluated — LLM analysis not yet configured';
+        if (sec.runner === 'hybrid') return 'Not evaluated — hybrid analysis pending';
+        return 'Not evaluated — run analysis to check';
+      }
+      if (r.status === 'skipped') {
+        if (sec.runner === 'llm' || sec.runner === 'hybrid') return 'Deferred — LLM analysis not yet configured';
+        return 'Skipped — dependency not met';
+      }
+      if (r.status === 'failed') return r.error ? r.error.substring(0, 120) : 'Check failed';
+      if (r.status === 'success' || r.status === 'done') {
+        const output = r.output || {};
+        const keys = Object.keys(output).filter(k => !k.startsWith('_')).slice(0, 3);
+        if (keys.length === 0) return 'Passed';
+        return `Verified: ${keys.join(', ')}`;
+      }
+      if (r.status === 'running') return 'In progress...';
+      return 'Not evaluated';
+    },
     normalizeNetwork(value) {
       const key = String(value || '').trim().toLowerCase();
       return key === 'mainnet' || key === 'testnet' ? key : 'testnet';
@@ -945,6 +1137,14 @@ export default {
       if (Number.isNaN(dt.getTime())) return String(value);
       return dt.toLocaleString();
     },
+    formatSize(bytes) {
+      if (bytes === null || bytes === undefined || bytes === '') return '-';
+      const n = Number(bytes);
+      if (!Number.isFinite(n) || n < 0) return '-';
+      if (n < 1024) return `${n} B`;
+      if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
+      return `${(n / 1048576).toFixed(1)} MB`;
+    },
     durationLabel(startedAt, endedAt) {
       const start = startedAt ? new Date(startedAt) : null;
       const end = endedAt ? new Date(endedAt) : null;
@@ -1060,7 +1260,7 @@ export default {
 }
 
 .report-banner {
-  padding: 0.65rem 0.8rem;
+  padding: 1rem 1.2rem;
   background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%);
   border: 1px solid #dbeafe;
   border-radius: 10px;
@@ -1117,7 +1317,7 @@ export default {
   border: 1px solid #e5e7eb;
 }
 .stat-label-text {
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -1141,14 +1341,14 @@ export default {
 .outcome-label {
   color: #6b7280;
   font-weight: 600;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   padding-right: 0.75rem;
   white-space: nowrap;
 }
 
 .outcome-value {
   color: #111827;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   text-align: right;
   word-break: break-word;
 }
@@ -1294,5 +1494,57 @@ export default {
 /* ---- Report card title icon sizing ---- */
 .scan-results-page :deep(.report-card .p-card-title) {
   font-size: 0.9rem;
+}
+
+/* ---- Checklist tab ---- */
+.checklist-phase-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--surface-border, #dee2e6);
+  font-size: 0.9rem;
+}
+.cl-legend {
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.checklist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+.checklist-item {
+  border: 1px solid var(--surface-border, #dee2e6);
+  border-radius: 10px;
+  padding: 20px 22px;
+  background: #fff;
+}
+.checklist-item.cl-success { border-left: 4px solid #22c55e; }
+.checklist-item.cl-done { border-left: 4px solid #22c55e; }
+.checklist-item.cl-failed { border-left: 4px solid #ef4444; background: #fef2f2; }
+.checklist-item.cl-running { border-left: 4px solid #3b82f6; }
+.checklist-item.cl-skipped { opacity: 0.5; border-left: 4px solid #9ca3af; }
+.checklist-item.cl-pending { border-left: 4px solid #ef4444; opacity: 0.75; }
+.cl-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.cl-name {
+  font-size: 0.78rem;
+  color: var(--text-color-secondary, #6c757d);
+  margin-bottom: 0;
+  line-height: 1.3;
+}
+.cl-outcome {
+  font-size: 0.82rem;
+  color: var(--text-color-secondary, #6c757d);
+  line-height: 1.4;
+  border-top: 1px solid var(--surface-ground, #f8f9fa);
+  padding-top: 8px;
 }
 </style>

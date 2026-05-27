@@ -139,6 +139,58 @@
             </Column>
           </DataTable>
         </div>
+
+        <!-- Phase II DAG Section (collapsible) -->
+        <div v-if="hasPhaseIi" class="mt-4">
+          <div class="flex align-items-center justify-content-between mb-2">
+            <div class="flex align-items-center gap-2">
+              <span class="text-700 font-bold">Phase 1 &amp; 2 Details</span>
+              <Tag :value="phaseIiSummary" severity="info" class="text-xs" />
+            </div>
+            <Button
+              :label="phaseIiExpanded ? 'Hide Details' : 'Show Details'"
+              :icon="phaseIiExpanded ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+              class="p-button-text p-button-sm"
+              @click="phaseIiExpanded = !phaseIiExpanded"
+            />
+          </div>
+          <div v-if="phaseIiExpanded" class="phase2-dag">
+            <div class="phase-divider"><Tag value="Phase 1: Spec Conformance" severity="info" /></div>
+            <div v-for="(tier, ti) in phaseIiTiers" :key="'tier-'+ti" class="dag-tier">
+              <div v-if="isPhaseBoundary(ti)" class="phase-divider mt-3 mb-1">
+                <Tag value="Phase 2: Firmware Analysis" severity="warn" />
+              </div>
+              <div class="dag-tier-label">
+                <Tag :value="'Group '+ti" severity="secondary" class="tier-tag" />
+                <span class="text-400 text-xs ml-2">max {{ tier.max_workers }} parallel</span>
+              </div>
+              <div class="dag-tier-nodes">
+                <div
+                  v-for="sec in tier.sections"
+                  :key="sec.id"
+                  class="dag-node"
+                  :class="'dag-node-'+sectionStatus(sec.id)"
+                  v-tooltip.top="sectionTooltip(sec)"
+                >
+                  <div class="dag-node-name" style="font-weight:600;font-size:0.8rem;color:var(--text-color)">{{ sec.name }}</div>
+                  <Tag
+                    :value="sectionStatus(sec.id)"
+                    :severity="sectionStatusSeverity(sec.id)"
+                    class="dag-node-tag"
+                  />
+                </div>
+              </div>
+              <div v-if="ti < phaseIiTiers.length - 1" class="dag-tier-arrow">
+                <i class="pi pi-arrow-down text-400" />
+                <i class="pi pi-arrow-down text-400" />
+                <i class="pi pi-arrow-down text-400" />
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-500 text-sm ml-2 p-2">
+            {{ phaseIiSummaryDetail }}
+          </div>
+        </div>
       </div>
     </div>
 
@@ -176,6 +228,7 @@ export default {
       error: null,
       lastUpdatedAt: null,
       pollHandle: null,
+      phaseIiExpanded: false,
       payload: {
         job: {},
         pipeline: { run_id: null, current_stage: null, percent_complete: 0, stages: [] },
@@ -195,6 +248,38 @@ export default {
     },
     stages() {
       return Array.isArray(this.pipeline.stages) ? this.pipeline.stages : [];
+    },
+    phaseIi() {
+      return this.payload.phase_ii || null;
+    },
+    hasPhaseIi() {
+      return this.phaseIi && this.phaseIi.dag && Array.isArray(this.phaseIi.dag.tiers);
+    },
+    phaseIiTiers() {
+      if (!this.hasPhaseIi) return [];
+      return this.phaseIi.dag.tiers;
+    },
+    phaseIiSections() {
+      return this.phaseIi ? (this.phaseIi.sections || {}) : {};
+    },
+    phaseIiSummary() {
+      if (!this.hasPhaseIi) return '';
+      const sections = this.phaseIiSections;
+      const total = Object.keys(sections).length;
+      if (total === 0) return 'Pending';
+      const done = Object.values(sections).filter(s => s.status === 'success' || s.status === 'done').length;
+      const running = Object.values(sections).filter(s => s.status === 'running').length;
+      const failed = Object.values(sections).filter(s => s.status === 'failed').length;
+      if (running > 0) return `${done}/${total} done, ${running} running`;
+      if (failed > 0) return `${done}/${total} done, ${failed} failed`;
+      return `${done}/${total} sections`;
+    },
+    phaseIiSummaryDetail() {
+      if (!this.hasPhaseIi) return '';
+      const sections = this.phaseIiSections;
+      const statuses = Object.entries(sections).map(([id, s]) => `${id}:${s.status}`).join(', ');
+      const pct = this.phaseIi ? this.phaseIi.percent_complete : 0;
+      return `${pct}% complete. Sections: ${statuses || 'none yet'}`;
     },
     stateLabel() {
       return String(this.summary.state_label || 'Unknown');
@@ -340,6 +425,40 @@ export default {
     displayValue(value) {
       if (value === null || value === undefined || value === '') return '-';
       return value;
+    },
+    sectionStatus(sectionId) {
+      const s = this.phaseIiSections[sectionId];
+      return s ? s.status : 'pending';
+    },
+    sectionStatusSeverity(sectionId) {
+      const s = this.sectionStatus(sectionId);
+      if (s === 'success' || s === 'done') return 'success';
+      if (s === 'failed') return 'danger';
+      if (s === 'running') return 'info';
+      if (s === 'skipped') return 'secondary';
+      return 'warning';
+    },
+    sectionTooltip(sec) {
+      const s = this.phaseIiSections[sec.id];
+      const status = s ? s.status : 'pending';
+      const runner = sec.runner || 'code';
+      let tip = `${sec.id}: ${sec.name}\nStatus: ${status}\nRunner: ${runner}`;
+      if (s && s.error) tip += `\nError: ${s.error.substring(0, 120)}`;
+      return tip;
+    },
+    isPhaseBoundary(ti) {
+      // Phase 2 starts at the first tier where sections have phase=2
+      const tier = this.phaseIiTiers[ti];
+      if (!tier || !tier.sections || !tier.sections.length) return false;
+      const sec = tier.sections[0];
+      if (sec.phase === 2) {
+        // Only show the divider at the FIRST phase-2 tier
+        if (ti === 0) return false;
+        const prevTier = this.phaseIiTiers[ti - 1];
+        const prevSec = prevTier?.sections?.[0];
+        return !prevSec || prevSec.phase !== 2;
+      }
+      return false;
     }
   }
 };
@@ -352,4 +471,86 @@ export default {
 .custom-stages-table :deep(.p-datatable-thead > tr > th) {
   background: #f9fafb;
 }
+
+/* Phase II DAG */
+.phase2-dag {
+  border: 1px solid var(--surface-border, #dee2e6);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--surface-ground, #f8f9fa);
+  max-height: 500px;
+  overflow-y: auto;
+}
+.dag-tier {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.dag-tier-label {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.tier-tag {
+  font-size: 0.8rem;
+}
+.dag-tier-nodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+.dag-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 2px solid var(--surface-border, #dee2e6);
+  background: #fff;
+  min-width: 100px;
+  max-width: 150px;
+  transition: transform 0.15s, box-shadow 0.15s;
+  cursor: default;
+}
+.dag-node:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.dag-node-name {
+  font-size: 0.78rem;
+  color: var(--text-color-secondary, #6c757d);
+  text-align: center;
+  line-height: 1.3;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dag-node-tag {
+  transform: scale(0.75);
+  transform-origin: center;
+  margin-top: 2px;
+}
+.phase-divider {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0;
+}
+.dag-tier-arrow {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  padding: 4px 0;
+  opacity: 0.5;
+}
+
+/* Status-based border colors */
+.dag-node-success { border-color: var(--green-400, #86efac); background: #f0fdf4; }
+.dag-node-done { border-color: var(--green-400, #86efac); background: #f0fdf4; }
+.dag-node-running { border-color: var(--blue-400, #93c5fd); background: #eff6ff; }
+.dag-node-failed { border-color: var(--red-400, #fca5a5); background: #fef2f2; }
+.dag-node-skipped { border-color: var(--surface-d, #dee2e6); background: #f8f9fa; opacity: 0.6; }
+.dag-node-pending { border-color: var(--surface-d, #dee2e6); background: #fff; }
 </style>

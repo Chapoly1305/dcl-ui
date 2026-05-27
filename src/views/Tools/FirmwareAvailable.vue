@@ -361,21 +361,25 @@ export default {
     clearFilters() {
       this.filters = this.defaultFilters();
       this.pageFirst = 0;
+      this.syncQueryParams();
       this.loadAvailableFirmware();
     },
     applyFilters() {
       this.pageFirst = 0;
+      this.syncQueryParams();
       this.loadAvailableFirmware();
     },
     onPage(event) {
       this.pageFirst = event.first;
       this.pageSize = event.rows;
+      this.syncQueryParams();
       this.loadAvailableFirmware();
     },
     onSort(event) {
       this.uiSortField = event.sortField || 'releaseTime';
       this.sortOrder = event.sortOrder || -1;
       this.pageFirst = 0;
+      this.syncQueryParams();
       this.loadAvailableFirmware();
     },
     normalizeSortField(value) {
@@ -432,6 +436,7 @@ export default {
     },
     async refreshNow() {
       this.pageFirst = 0;
+      this.syncQueryParams();
       await this.loadAvailableFirmware(false);
     },
     async loadAvailableFirmware(refresh = false) {
@@ -579,7 +584,8 @@ export default {
     openFirmwareDetail(row) {
       const sha = String(row?.firmwareSha256 || '').trim();
       if (sha) {
-        this.$router.push(`/firmware-security/firmware/${sha}`);
+        const route = this.$router.resolve(`/firmware-security/firmware/${sha}`);
+        window.open(route.href, '_blank');
         return;
       }
       const vid = String(row?.vid || '').trim();
@@ -597,7 +603,8 @@ export default {
         this.error = 'No firmware group yet and no identity fields to locate scan results.';
         return;
       }
-      this.$router.push({ path: '/firmware-security/scan-results', query: { q: queryToken } });
+      const route = this.$router.resolve({ path: '/firmware-security/scan-results', query: { q: queryToken } });
+      window.open(route.href, '_blank');
     },
     normalizeConformance(value, basis) {
       if (!value) return 'Unknown';
@@ -670,16 +677,65 @@ export default {
       if (code.startsWith('https:')) return code.replace('https:', '').replace(/_/g, ' ');
       if (code.startsWith('checksum_base64:')) return code.replace('checksum_base64:', '').replace(/_/g, ' ');
       return code.replace(/_/g, ' ');
+    },
+    syncQueryParams() {
+      const q = {};
+      const page = Math.floor(this.pageFirst / this.pageSize) + 1;
+      if (page > 1) q.page = String(page);
+      if (this.pageSize !== 50) q.per_page = String(this.pageSize);
+      if (this.uiSortField !== 'releaseTime') q.sort = this.uiSortField;
+      if (this.sortOrder !== -1) q.order = String(this.sortOrder);
+      const f = this.filters;
+      if (f.vid) q.vid = f.vid;
+      if (f.pid) q.pid = f.pid;
+      if (f.vendorName) q.vendor = f.vendorName;
+      if (f.productName) q.product = f.productName;
+      if (f.softwareVersion) q.sw_ver = f.softwareVersion;
+      if (f.softwareVersionString) q.sw_ver_str = f.softwareVersionString;
+      if (f.releaseTime) q.rel_time = f.releaseTime;
+      if (f.blockHeight) q.block = f.blockHeight;
+      if (f.txHashLast8) q.tx = f.txHashLast8;
+      if (f.formalityConformance) q.conformance = f.formalityConformance;
+      if (f.isDownloaded) q.downloaded = f.isDownloaded;
+      if (f.analysisStatus) q.analysis = f.analysisStatus;
+      this.$router.replace({ query: q }).catch(() => {});
+    },
+    restoreFromQuery() {
+      const q = this.$route.query;
+      if (q.page) {
+        const p = parseInt(q.page, 10);
+        if (p > 0) this.pageFirst = (p - 1) * this.pageSize;
+      }
+      if (q.per_page) {
+        const s = parseInt(q.per_page, 10);
+        if (s > 0) this.pageSize = s;
+      }
+      if (q.sort) this.uiSortField = q.sort;
+      if (q.order) this.sortOrder = parseInt(q.order, 10) || -1;
+      if (q.vid) this.filters.vid = q.vid;
+      if (q.pid) this.filters.pid = q.pid;
+      if (q.vendor) this.filters.vendorName = q.vendor;
+      if (q.product) this.filters.productName = q.product;
+      if (q.sw_ver) this.filters.softwareVersion = q.sw_ver;
+      if (q.sw_ver_str) this.filters.softwareVersionString = q.sw_ver_str;
+      if (q.rel_time) this.filters.releaseTime = q.rel_time;
+      if (q.block) this.filters.blockHeight = q.block;
+      if (q.tx) this.filters.txHashLast8 = q.tx;
+      if (q.conformance) this.filters.formalityConformance = q.conformance;
+      if (q.downloaded) this.filters.isDownloaded = q.downloaded;
+      if (q.analysis) this.filters.analysisStatus = q.analysis;
     }
   },
   watch: {
     selectedNetwork(next, prev) {
       if (next === prev) return;
       this.pageFirst = 0;
+      this.syncQueryParams();
       this.loadAvailableFirmware();
     }
   },
   mounted() {
+    this.restoreFromQuery();
     this.loadAvailableFirmware();
   }
 };
