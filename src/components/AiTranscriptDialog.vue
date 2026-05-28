@@ -30,244 +30,256 @@
         </Message>
       </div>
 
-      <div v-else-if="data">
-        <!-- ============= Summary panel ============= -->
-        <div class="summary-grid mb-3">
-          <div class="summary-cell">
-            <div class="summary-label">Model</div>
-            <div class="summary-value"><code>{{ data.summary.model || '—' }}</code></div>
+      <div v-else-if="data" class="transcript-content-root">
+        <!-- ============= Top Summary Bar ============= -->
+        <div class="summary-bar mb-3 p-3 surface-100 border-round flex flex-wrap gap-4">
+          <div class="summary-item">
+            <div class="text-xs text-500 uppercase font-bold mb-1">Model</div>
+            <div class="text-sm font-medium"><code>{{ data.summary.model || '—' }}</code></div>
           </div>
-          <div class="summary-cell">
-            <div class="summary-label">Chipset</div>
-            <div class="summary-value">{{ data.summary.chipset_family || '—' }}</div>
+          <div class="summary-item">
+            <div class="text-xs text-500 uppercase font-bold mb-1">Chipset</div>
+            <div class="text-sm font-medium">{{ data.summary.chipset_family || '—' }}</div>
           </div>
-          <div class="summary-cell">
-            <div class="summary-label">Platform SB</div>
-            <div class="summary-value">
-              <Tag :value="data.summary.sb_status_label || '—'" :severity="sbBadgeSeverity(data.summary.sb_status_label)" />
-            </div>
+          <div class="summary-item">
+            <div class="text-xs text-500 uppercase font-bold mb-1">Platform SB</div>
+            <div><Tag :value="data.summary.sb_status_label || '—'" :severity="sbBadgeSeverity(data.summary.sb_status_label)" /></div>
           </div>
-          <div class="summary-cell">
-            <div class="summary-label">Assistant turns</div>
-            <div class="summary-value">{{ data.summary.rounds }}</div>
+          <div class="summary-item">
+            <div class="text-xs text-500 uppercase font-bold mb-1">Turns</div>
+            <div class="text-sm font-medium">{{ data.summary.rounds }}</div>
           </div>
-          <div class="summary-cell">
-            <div class="summary-label">Tool calls</div>
-            <div class="summary-value">
-              {{ data.summary.tool_calls }}
-              <span v-if="data.summary.tool_errors" class="text-red-500 text-xs">({{ data.summary.tool_errors }} err)</span>
-            </div>
+          <div class="summary-item">
+            <div class="text-xs text-500 uppercase font-bold mb-1">Tokens</div>
+            <div class="text-sm font-medium">{{ data.summary.input_tokens }} <span class="text-400">/</span> {{ data.summary.output_tokens }}</div>
           </div>
-          <div class="summary-cell">
-            <div class="summary-label">Tokens (in / out)</div>
-            <div class="summary-value">{{ data.summary.input_tokens }} / {{ data.summary.output_tokens }}</div>
-          </div>
-          <div class="summary-cell">
-            <div class="summary-label">Latency</div>
-            <div class="summary-value">{{ formatElapsed(data.summary.elapsed_ms) }}</div>
-          </div>
-          <div class="summary-cell">
-            <div class="summary-label">Events recorded</div>
-            <div class="summary-value">{{ data.summary.event_count }}</div>
+          <div class="summary-item">
+            <div class="text-xs text-500 uppercase font-bold mb-1">Latency</div>
+            <div class="text-sm font-medium">{{ formatElapsed(data.summary.elapsed_ms) }}</div>
           </div>
         </div>
 
-        <!-- ============= Final verdict ============= -->
-        <Card v-if="data.summary.final_verdict" class="mb-3 verdict-card">
-          <template #title>
-            <div class="flex align-items-center gap-2">
-              <i class="pi pi-flag-fill text-blue-500"></i>
-              <span>Final Verdict</span>
-              <Tag
-                v-if="data.summary.final_verdict.category"
-                :value="data.summary.final_verdict.category"
-                :severity="verdictBadgeSeverity(data.summary.final_verdict)"
-                class="ml-2"
-              />
-              <Tag
-                v-if="data.summary.final_verdict.confidence"
-                :value="`confidence: ${data.summary.final_verdict.confidence}`"
-                severity="secondary"
-                class="ml-1"
-              />
-            </div>
-          </template>
-          <template #content>
-            <div v-if="data.summary.final_verdict.reasoning" class="mb-2 text-sm">
-              <strong>Reasoning:</strong> {{ data.summary.final_verdict.reasoning }}
-            </div>
-            <div v-if="evidenceList.length" class="mb-2">
-              <div class="text-xs text-500 mb-1">Evidence strings ({{ evidenceList.length }}):</div>
-              <div class="evidence-chips">
-                <code v-for="(ev, i) in evidenceList" :key="i" class="evidence-chip">{{ ev }}</code>
+        <TabView>
+          <!-- ============= Tab 1: Verdict & Review ============= -->
+          <TabPanel>
+            <template #header>
+              <div class="flex align-items-center gap-2">
+                <i class="pi pi-chart-bar text-green-500"></i>
+                <span>Insights &amp; Verdict</span>
               </div>
-            </div>
-            <div v-if="citationList.length" class="text-xs text-500">
-              <strong>KB citations:</strong>
-              <ul class="m-0 pl-3">
-                <li v-for="(c, i) in citationList" :key="i"><code>{{ c }}</code></li>
-              </ul>
-            </div>
-            <div v-if="data.summary.final_verdict.error" class="text-red-500">
-              <strong>Error:</strong> {{ data.summary.final_verdict.error }}
-            </div>
-          </template>
-        </Card>
-
-        <!-- ============= KB files consulted ============= -->
-        <Accordion v-if="uniqueKbFiles.length" :multiple="true" class="mb-3">
-          <AccordionTab>
-            <template #header>
-              <span><i class="pi pi-book mr-2 text-blue-500"></i>Knowledge base files consulted ({{ uniqueKbFiles.length }})</span>
             </template>
-            <ul class="m-0 pl-3 text-xs">
-              <li v-for="(f, i) in uniqueKbFiles" :key="i"><code>{{ f }}</code></li>
-            </ul>
-          </AccordionTab>
-        </Accordion>
 
-        <!-- ============= Prompts (collapsed by default) ============= -->
-        <Accordion :multiple="true" class="mb-3">
-          <AccordionTab v-if="systemPromptText">
-            <template #header>
-              <span><i class="pi pi-cog mr-2 text-purple-500"></i>System prompt ({{ systemPromptText.length }} chars)</span>
-            </template>
-            <pre class="prompt-block">{{ systemPromptText }}</pre>
-          </AccordionTab>
-          <AccordionTab v-if="userPromptText">
-            <template #header>
-              <span><i class="pi pi-user mr-2 text-blue-500"></i>User prompt ({{ userPromptText.length }} chars)</span>
-            </template>
-            <pre class="prompt-block">{{ userPromptText }}</pre>
-          </AccordionTab>
-        </Accordion>
+            <div class="pt-3">
+              <!-- Final verdict card -->
+              <Card v-if="data.summary.final_verdict" class="mb-4 verdict-card-new shadow-1">
+                <template #title>
+                  <div class="flex align-items-center gap-2">
+                    <i class="pi pi-flag-fill text-blue-500"></i>
+                    <span>Final Verdict</span>
+                    <Tag
+                      v-if="data.summary.final_verdict.category"
+                      :value="data.summary.final_verdict.category"
+                      :severity="verdictBadgeSeverity(data.summary.final_verdict)"
+                      class="ml-2"
+                    />
+                    <Tag
+                      v-if="data.summary.final_verdict.confidence"
+                      :value="`confidence: ${data.summary.final_verdict.confidence}`"
+                      severity="secondary"
+                      class="ml-1"
+                    />
+                  </div>
+                </template>
+                <template #content>
+                  <div v-if="data.summary.final_verdict.reasoning" class="mb-4 text-base line-height-3">
+                    <strong>Reasoning:</strong> {{ data.summary.final_verdict.reasoning }}
+                  </div>
+                  
+                  <div v-if="evidenceList.length" class="mb-4">
+                    <div class="text-xs font-bold text-500 uppercase mb-2">Evidence strings ({{ evidenceList.length }})</div>
+                    <div class="flex flex-wrap gap-2">
+                      <code v-for="(ev, i) in evidenceList" :key="i" class="evidence-tag-new">{{ ev }}</code>
+                    </div>
+                  </div>
 
-        <!-- ============= AI self-review (under User prompt) ============= -->
-        <Card class="mb-3 review-card" :class="reviewCardSeverityClass">
-          <template #title>
-            <div class="flex align-items-center gap-2 review-title">
-              <i class="pi pi-comment text-amber-500"></i>
-              <span>AI Self-Review &amp; KB Suggestions</span>
-              <Tag
-                :value="reviewSummaryLabel"
-                :severity="reviewSummarySeverity"
-                class="ml-2"
-              />
+                  <div v-if="citationList.length">
+                    <div class="text-xs font-bold text-500 uppercase mb-2">KB Citations</div>
+                    <ul class="m-0 pl-4 text-sm">
+                      <li v-for="(c, i) in citationList" :key="i" class="mb-1"><code>{{ c }}</code></li>
+                    </ul>
+                  </div>
+
+                  <div v-if="data.summary.final_verdict.error" class="mt-3 p-3 bg-red-50 text-red-600 border-round text-sm">
+                    <strong>Error:</strong> {{ data.summary.final_verdict.error }}
+                  </div>
+                </template>
+              </Card>
+
+              <!-- AI self-review card -->
+              <Card class="mb-3 review-card-new shadow-1" :class="reviewCardSeverityClass">
+                <template #title>
+                  <div class="flex align-items-center gap-2">
+                    <i class="pi pi-comment text-amber-500"></i>
+                    <span>AI Self-Review &amp; Suggestions</span>
+                    <Tag :value="reviewSummaryLabel" :severity="reviewSummarySeverity" class="ml-2" />
+                  </div>
+                </template>
+                <template #content>
+                  <div v-if="!harnessReview" class="p-3 bg-gray-100 border-round text-500 text-sm italic">
+                    <i class="pi pi-info-circle mr-1"></i>
+                    No self-review submitted for this run.
+                  </div>
+
+                  <div v-else>
+                    <div class="review-summary-box mb-4 p-3 border-round">
+                      {{ harnessReview.summary || '(no summary)' }}
+                    </div>
+
+                    <!-- Issues -->
+                    <div v-if="reviewIssues.length" class="mb-4">
+                      <div class="text-sm font-bold mb-2"><i class="pi pi-exclamation-triangle text-orange-500 mr-2"></i>Issues Observed</div>
+                      <div class="flex flex-column gap-2">
+                        <div v-for="(it, i) in reviewIssues" :key="i" class="p-3 border-1 border-200 border-round surface-50">
+                          <div class="flex align-items-center gap-2 mb-2">
+                            <Tag :value="it.category || 'other'" :severity="issueCategorySeverity(it.category)" />
+                            <i :class="issueCategoryIcon(it.category)" class="text-xs"></i>
+                          </div>
+                          <div class="text-sm"><strong>What:</strong> {{ it.detail }}</div>
+                          <div v-if="it.suggestion" class="text-sm mt-1 text-600 italic"><strong>Fix idea:</strong> {{ it.suggestion }}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- KB Suggestions -->
+                    <div v-if="reviewKbSuggestions.length">
+                      <div class="text-sm font-bold mb-2"><i class="pi pi-book text-blue-500 mr-2"></i>KB Improvements</div>
+                      <div class="flex flex-column gap-2">
+                        <div v-for="(s, i) in reviewKbSuggestions" :key="i" class="p-3 border-1 border-200 border-round surface-50">
+                          <div class="flex align-items-center gap-2 mb-2">
+                            <Tag :value="s.kind || 'amend'" :severity="suggestionKindSeverity(s.kind)" />
+                            <code class="text-xs text-blue-600">{{ s.path }}</code>
+                          </div>
+                          <div class="text-sm"><strong>Change:</strong> {{ s.suggestion }}</div>
+                          <div v-if="s.rationale" class="text-sm mt-1 text-600 italic"><strong>Why:</strong> {{ s.rationale }}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div v-if="harnessReview && !reviewIssues.length && !reviewKbSuggestions.length" class="p-3 bg-green-50 text-green-700 border-round text-sm">
+                      <i class="pi pi-check-circle mr-1"></i> Clean run — no issues observed.
+                    </div>
+                  </div>
+                </template>
+              </Card>
             </div>
-          </template>
-          <template #content>
-            <!-- Placeholder for runs whose verdict predates harness_review -->
-            <div v-if="!harnessReview" class="review-empty review-empty-missing">
-              <i class="pi pi-info-circle text-blue-500 mr-1"></i>
-              No self-review submitted for this run. Runs predating the
-              <code>harness_review</code> schema (or transcripts written before
-              the verdict pydantic model added the field) won't have one — re-run
-              the section to capture it.
-            </div>
+          </TabPanel>
 
-            <!-- One-line summary the model wrote -->
-            <div v-if="harnessReview" class="review-summary">{{ harnessReview.summary || '(no summary)' }}</div>
-
-            <!-- Reactive issues observed during the run -->
-            <div v-if="reviewIssues.length" class="review-section">
-              <div class="review-section-head">
-                <i class="pi pi-exclamation-triangle text-orange-500 mr-1"></i>
-                Issues observed ({{ reviewIssues.length }})
+          <!-- ============= Tab 2: Reasoning Timeline ============= -->
+          <TabPanel>
+            <template #header>
+              <div class="flex align-items-center gap-2">
+                <i class="pi pi-clock text-blue-500"></i>
+                <span>Reasoning Timeline</span>
               </div>
-              <div v-for="(it, i) in reviewIssues" :key="`iss-${i}`" class="review-item">
-                <div class="review-item-head">
-                  <i :class="issueCategoryIcon(it.category)" class="mr-1"></i>
-                  <Tag :value="it.category || 'other'" :severity="issueCategorySeverity(it.category)" />
+            </template>
+
+            <div v-if="timelineRounds.length" class="timeline-wrapper pt-3">
+              <div v-for="round in timelineRounds" :key="round.idx" class="round-container mb-4">
+                <div class="round-header flex align-items-center gap-3 mb-2">
+                  <span class="round-number">TURN {{ round.idx }}</span>
+                  <div class="round-stats flex gap-3 text-xs text-500">
+                    <span v-if="round.thinking"><i class="pi pi-lightbulb mr-1"></i>{{ round.thinking }} thoughts</span>
+                    <span v-if="round.latencyMs"><i class="pi pi-hourglass mr-1"></i>{{ round.latencyMs.toFixed(0) }}ms</span>
+                    <span v-if="round.tokens && (round.tokens.input || round.tokens.output)">
+                      <i class="pi pi-chart-line mr-1"></i>{{ round.tokens.input }} / {{ round.tokens.output }} tokens
+                    </span>
+                  </div>
                 </div>
-                <div class="review-item-body">
-                  <div class="review-item-detail"><strong>What:</strong> {{ it.detail }}</div>
-                  <div v-if="it.suggestion" class="review-item-suggestion">
-                    <strong>Fix idea:</strong> {{ it.suggestion }}
+
+                <div v-if="round.text" class="assistant-bubble p-3 mb-3">
+                  {{ round.text }}
+                </div>
+
+                <div v-if="round.toolCalls.length" class="tool-actions-list flex flex-column gap-2">
+                  <div
+                    v-for="(tc, i) in round.toolCalls"
+                    :key="i"
+                    class="tool-action-card shadow-1"
+                    :class="{ 'tool-action-err': tc.isError }"
+                  >
+                    <div class="tool-action-header p-2 flex align-items-center justify-content-between cursor-pointer hover:surface-200" @click="toggleTool(round.idx, i)">
+                      <div class="flex align-items-center gap-2 overflow-hidden">
+                        <i :class="tc.isError ? 'pi pi-times-circle text-red-500' : 'pi pi-wrench text-blue-500'" class="flex-shrink-0"></i>
+                        <span class="tool-name-text font-bold text-sm">{{ tc.name }}</span>
+                        <code class="tool-args-text text-xs text-500 white-space-nowrap overflow-hidden text-overflow-ellipsis">{{ formatToolArgs(tc.args) }}</code>
+                      </div>
+                      <div class="flex align-items-center gap-3 flex-shrink-0 ml-2">
+                        <span class="text-xs text-500">{{ tc.returnedChars }} chars</span>
+                        <i :class="isToolExpanded(round.idx, i) ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" class="text-400"></i>
+                      </div>
+                    </div>
+                    <div v-if="isToolExpanded(round.idx, i)" class="tool-action-body p-2 border-top-1 border-200">
+                      <pre class="tool-output-block">{{ tc.returnedContent || '(no output)' }}</pre>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-
-            <!-- Proactive KB-quality suggestions -->
-            <div v-if="reviewKbSuggestions.length" class="review-section">
-              <div class="review-section-head">
-                <i class="pi pi-book text-blue-500 mr-1"></i>
-                Suggested KB improvements ({{ reviewKbSuggestions.length }})
-                <span class="text-xs text-500 ml-2">— suggestions only; the team reviews before adopting</span>
-              </div>
-              <div v-for="(s, i) in reviewKbSuggestions" :key="`kb-${i}`" class="review-item">
-                <div class="review-item-head">
-                  <Tag :value="s.kind || 'amend'" :severity="suggestionKindSeverity(s.kind)" />
-                  <code class="review-item-path ml-2">{{ s.path }}</code>
-                </div>
-                <div class="review-item-body">
-                  <div class="review-item-detail"><strong>Change:</strong> {{ s.suggestion }}</div>
-                  <div v-if="s.rationale" class="review-item-suggestion">
-                    <strong>Why:</strong> {{ s.rationale }}
-                  </div>
-                </div>
-              </div>
+            <div v-else class="text-center py-6 text-500">
+              <i class="pi pi-info-circle text-2xl mb-2"></i>
+              <div>No reasoning rounds found in this transcript.</div>
             </div>
+          </TabPanel>
 
-            <!-- "All good" empty state (only when a review exists and is clean) -->
-            <div
-              v-if="harnessReview && !reviewIssues.length && !reviewKbSuggestions.length"
-              class="review-empty"
-            >
-              <i class="pi pi-check-circle text-green-500 mr-1"></i>
-              Clean run — no issues observed, no KB suggestions filed.
-            </div>
-          </template>
-        </Card>
-
-        <!-- ============= Round-by-round timeline ============= -->
-        <div v-if="timelineRounds.length" class="mb-3">
-          <h4 class="m-0 mb-2"><i class="pi pi-clock mr-2 text-green-500"></i>Reasoning Timeline ({{ timelineRounds.length }} turns)</h4>
-          <div v-for="round in timelineRounds" :key="round.idx" class="round-card mb-2">
-            <div class="round-header">
-              <span class="round-label">Turn {{ round.idx }}</span>
-              <span v-if="round.thinking" class="text-xs text-500">
-                <i class="pi pi-lightbulb mr-1"></i>{{ round.thinking }} chars of thinking
-              </span>
-              <span v-if="round.tokens && (round.tokens.input || round.tokens.output)" class="text-xs text-500 ml-2">
-                {{ round.tokens.input || 0 }} in / {{ round.tokens.output || 0 }} out
-              </span>
-              <span v-if="round.latencyMs" class="text-xs text-500 ml-2">
-                {{ round.latencyMs.toFixed(0) }} ms
-              </span>
-            </div>
-            <div v-if="round.text" class="round-text">{{ round.text }}</div>
-            <div v-if="round.toolCalls.length" class="round-tools">
-              <div v-for="(tc, i) in round.toolCalls" :key="i" class="tool-row" :class="{ 'tool-err': tc.isError }">
-                <div class="tool-row-head">
-                  <i :class="tc.isError ? 'pi pi-times-circle text-red-500' : 'pi pi-wrench text-blue-500'" class="mr-1"></i>
-                  <code class="tool-name">{{ tc.name }}</code>
-                  <code class="tool-args">{{ formatToolArgs(tc.args) }}</code>
-                  <span class="text-xs text-500 ml-2">→ {{ tc.returnedChars }} chars{{ tc.isError ? ' (error)' : '' }}</span>
-                  <Button
-                    v-if="tc.returnedContent"
-                    :label="isToolExpanded(round.idx, i) ? 'Hide' : 'Show'"
-                    text
-                    size="small"
-                    class="ml-2"
-                    @click="toggleTool(round.idx, i)"
-                  />
-                </div>
-                <pre v-if="isToolExpanded(round.idx, i) && tc.returnedContent" class="tool-return">{{ tc.returnedContent }}</pre>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ============= Raw events (debug) ============= -->
-        <Accordion :multiple="false">
-          <AccordionTab>
+          <!-- ============= Tab 3: Context & Debug ============= -->
+          <TabPanel>
             <template #header>
-              <span><i class="pi pi-code mr-2 text-500"></i>Raw events ({{ data.events.length }})</span>
+              <div class="flex align-items-center gap-2">
+                <i class="pi pi-database text-purple-500"></i>
+                <span>Context &amp; Raw</span>
+              </div>
             </template>
-            <pre class="raw-events">{{ JSON.stringify(data.events, null, 2) }}</pre>
-          </AccordionTab>
-        </Accordion>
+
+            <div class="pt-3">
+              <!-- KB files -->
+              <div v-if="uniqueKbFiles.length" class="mb-4">
+                <div class="text-sm font-bold mb-2 flex align-items-center gap-2">
+                  <i class="pi pi-book text-blue-500"></i>
+                  Knowledge Base Files Consulted ({{ uniqueKbFiles.length }})
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <code v-for="(f, i) in uniqueKbFiles" :key="i" class="kb-file-tag-new">{{ f }}</code>
+                </div>
+              </div>
+
+              <!-- Prompts -->
+              <Accordion :multiple="true" class="mb-4">
+                <AccordionTab v-if="systemPromptText">
+                  <template #header>
+                    <span><i class="pi pi-cog mr-2 text-purple-500"></i>System Prompt</span>
+                  </template>
+                  <pre class="debug-code-block">{{ systemPromptText }}</pre>
+                </AccordionTab>
+                <AccordionTab v-if="userPromptText">
+                  <template #header>
+                    <span><i class="pi pi-user mr-2 text-blue-500"></i>User Prompt</span>
+                  </template>
+                  <pre class="debug-code-block">{{ userPromptText }}</pre>
+                </AccordionTab>
+              </Accordion>
+
+              <!-- Raw Events -->
+              <Accordion>
+                <AccordionTab>
+                  <template #header>
+                    <span><i class="pi pi-code mr-2 text-500"></i>Raw Events JSON ({{ data.events.length }})</span>
+                  </template>
+                  <pre class="debug-code-block raw-json-box">{{ JSON.stringify(data.events, null, 2) }}</pre>
+                </AccordionTab>
+              </Accordion>
+            </div>
+          </TabPanel>
+        </TabView>
       </div>
     </template>
     </Dialog>
@@ -282,12 +294,14 @@ import Button from 'primevue/button';
 import Message from 'primevue/message';
 import Accordion from 'primevue/accordion';
 import AccordionTab from 'primevue/accordiontab';
+import TabView from 'primevue/tabview';
+import TabPanel from 'primevue/tabpanel';
 import ProgressSpinner from 'primevue/progressspinner';
 import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
 
 export default {
   name: 'AiTranscriptDialog',
-  components: { Dialog, Card, Tag, Button, Message, Accordion, AccordionTab, ProgressSpinner },
+  components: { Dialog, Card, Tag, Button, Message, Accordion, AccordionTab, TabView, TabPanel, ProgressSpinner },
   props: {
     visible: { type: Boolean, default: false },
     resultId: { type: String, required: true },
@@ -600,91 +614,61 @@ export default {
 </style>
 
 <style scoped>
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0.5rem;
-}
-.summary-cell {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 0.5rem 0.75rem;
-}
-.summary-label {
-  font-size: 0.7rem;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.summary-value { font-size: 0.95rem; font-weight: 500; margin-top: 0.15rem; }
+.transcript-content-root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
 
-.verdict-card :deep(.p-card-body) { padding: 0.75rem 1rem; }
-.evidence-chips { display: flex; flex-wrap: wrap; gap: 0.25rem; }
-.evidence-chip {
-  background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe;
-  padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.75rem;
+/* Top Summary Bar */
+.summary-bar { background-color: #f8fafc; border: 1px solid #e2e8f0; }
+.summary-item { border-right: 1px solid #e2e8f0; padding-right: 1rem; }
+.summary-item:last-child { border-right: none; }
+
+/* Timeline / Turns */
+.round-number {
+  background: #3b82f6; color: white; padding: 0.2rem 0.6rem;
+  border-radius: 4px; font-weight: 800; font-size: 0.7rem; letter-spacing: 0.05em;
+}
+.assistant-bubble {
+  background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;
+  border-top-left-radius: 2px; line-height: 1.6; font-size: 0.95rem; color: #1e293b;
+  white-space: pre-wrap;
 }
 
-.prompt-block, .raw-events, .tool-return {
-  background: #1e293b; color: #e2e8f0;
-  padding: 0.6rem; border-radius: 4px;
-  white-space: pre-wrap; word-break: break-word;
-  font-family: 'SF Mono', Monaco, Menlo, Consolas, monospace;
-  font-size: 0.75rem; max-height: 400px; overflow: auto;
+/* Tool Action Cards */
+.tool-action-card {
+  background: #f1f5f9; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden;
+}
+.tool-action-card:hover { border-color: #cbd5e1; }
+.tool-action-err { border-left: 4px solid #ef4444 !important; }
+.tool-name-text { color: #1e40af; }
+.tool-output-block {
+  background: #0f172a; color: #e2e8f0; padding: 0.75rem; border-radius: 4px;
+  font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 0.75rem;
+  max-height: 400px; overflow: auto; white-space: pre-wrap; margin: 0;
 }
 
-.round-card {
-  border: 1px solid #e5e7eb; border-left: 3px solid #3b82f6;
-  border-radius: 4px; padding: 0.5rem 0.75rem; background: #fafbfc;
+/* Insights / Verdict */
+.verdict-card-new { border-top: 4px solid #3b82f6; }
+.evidence-tag-new {
+  background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;
+  padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem;
 }
-.round-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
-.round-label { font-weight: 600; color: #1e40af; }
-.round-text { font-size: 0.85rem; color: #374151; white-space: pre-wrap; margin-bottom: 0.5rem; }
+.review-card-new.review-card-clean { border-top: 4px solid #10b981; }
+.review-card-new.review-card-warn  { border-top: 4px solid #f59e0b; }
+.review-card-new.review-card-info  { border-top: 4px solid #3b82f6; }
+.review-summary-box { background: #fffbeb; border: 1px solid #fef3c7; color: #92400e; font-size: 0.9rem; }
 
-.round-tools { display: flex; flex-direction: column; gap: 0.3rem; }
-.tool-row { background: white; border: 1px solid #e5e7eb; border-radius: 3px; padding: 0.4rem 0.5rem; }
-.tool-row.tool-err { border-left: 3px solid #ef4444; }
-.tool-row-head { display: flex; align-items: center; flex-wrap: wrap; font-size: 0.8rem; }
-.tool-name { font-weight: 600; color: #1e40af; }
-.tool-args { color: #6b7280; margin-left: 0.4rem; font-size: 0.75rem; }
-.tool-return { margin-top: 0.4rem; max-height: 250px; }
+/* Debug / Context */
+.kb-file-tag-new {
+  background: #f1f5f9; border: 1px solid #e2e8f0; padding: 0.1rem 0.4rem;
+  border-radius: 4px; font-size: 0.7rem; margin-right: 0.4rem; margin-bottom: 0.4rem;
+  display: inline-block;
+}
+.debug-code-block {
+  background: #1e293b; color: #cbd5e1; padding: 1rem; border-radius: 6px;
+  font-size: 0.8rem; overflow: auto; white-space: pre-wrap; margin: 0;
+}
+.raw-json-box { max-height: 500px; }
 
-/* ----- AI self-review panel ----- */
-.review-card :deep(.p-card-body) { padding: 0.75rem 1rem; }
-.review-card.review-card-clean   { border-left: 3px solid #10b981; }
-.review-card.review-card-info    { border-left: 3px solid #3b82f6; }
-.review-card.review-card-warn    { border-left: 3px solid #f59e0b; }
-.review-card.review-card-missing { border-left: 3px solid #94a3b8; }
-.review-empty.review-empty-missing {
-  background: #f1f5f9; border-color: #cbd5e1; color: #475569;
-}
-.review-title { font-size: 0.95rem; font-weight: 600; }
-.review-summary {
-  font-size: 0.85rem; color: #374151;
-  background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px;
-  padding: 0.5rem 0.75rem; margin-bottom: 0.6rem;
-}
-.review-section { margin-top: 0.5rem; }
-.review-section-head {
-  font-size: 0.8rem; font-weight: 600; color: #1f2937;
-  display: flex; align-items: center; margin-bottom: 0.3rem;
-}
-.review-item {
-  border: 1px solid #e5e7eb; border-radius: 4px;
-  background: #fafbfc; padding: 0.4rem 0.6rem; margin-bottom: 0.35rem;
-}
-.review-item-head { display: flex; align-items: center; gap: 0.3rem; margin-bottom: 0.2rem; }
-.review-item-path {
-  font-size: 0.75rem; color: #1e40af;
-  background: #eff6ff; padding: 0.05rem 0.35rem; border-radius: 3px;
-}
-.review-item-body { font-size: 0.8rem; color: #374151; }
-.review-item-detail { margin-bottom: 0.15rem; }
-.review-item-suggestion { color: #4b5563; }
-.review-empty {
-  font-size: 0.85rem; color: #047857;
-  background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 4px;
-  padding: 0.5rem 0.75rem;
-}
+/* PrimeVue Overrides for Tabs */
+:deep(.p-tabview-panels) { padding: 0; }
+:deep(.p-tabview-nav) { border-bottom: 1px solid #e2e8f0; }
 </style>
