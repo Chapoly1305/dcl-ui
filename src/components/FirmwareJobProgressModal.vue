@@ -103,136 +103,121 @@
           </div>
         </div>
 
-        <div v-if="!isConformanceJob && !isPollJob">
-          <div class="text-700 font-bold mb-2 ml-1">Pipeline Stages</div>
-          <DataTable :value="stages" responsiveLayout="scroll" class="p-datatable-sm custom-stages-table border-1 surface-border border-round">
-            <Column field="label" header="Stage">
-              <template #body="slotProps">
-                <span class="font-medium">{{ slotProps.data.label || slotProps.data.name }}</span>
-              </template>
-            </Column>
-            <Column field="status" header="Status" headerClass="text-center" bodyClass="text-center">
-              <template #body="slotProps">
-                <Tag :value="statusLabel(slotProps.data.status)" :severity="statusSeverity(slotProps.data.status)" class="w-full" />
-              </template>
-            </Column>
-            <Column field="started_at" header="Started">
-              <template #body="slotProps">
-                <span class="text-600">{{ displayValue(formatTimestamp(slotProps.data.started_at)) }}</span>
-              </template>
-            </Column>
-            <Column field="ended_at" header="Ended">
-              <template #body="slotProps">
-                <span class="text-600">{{ displayValue(formatTimestamp(slotProps.data.ended_at)) }}</span>
-              </template>
-            </Column>
-            <Column field="duration_ms" header="Duration" headerClass="text-right" bodyClass="text-right font-mono">
-              <template #body="slotProps">
-                {{ formatDuration(slotProps.data.duration_ms) }}
-              </template>
-            </Column>
-            <Column field="error" header="Notes/Errors">
-              <template #body="slotProps">
-                <span class="text-red-500 font-medium" v-if="slotProps.data.error">{{ slotProps.data.error }}</span>
-                <span class="text-400" v-else>-</span>
-              </template>
-            </Column>
-          </DataTable>
-        </div>
-
-        <!-- Live AI Activity (collapsible) -->
         <div v-if="!isConformanceJob && !isPollJob" class="mt-4">
-          <div class="flex align-items-center justify-content-between mb-2">
-            <div class="flex align-items-center gap-2">
-              <span class="text-700 font-bold">Live AI Activity</span>
-              <Tag
-                :value="aiStreamSummary"
-                :severity="aiStreamConnected ? 'success' : 'secondary'"
-                class="text-xs"
-              />
-              <span v-if="aiStreamConnected" class="text-500 text-xs">
-                <i class="pi pi-circle-fill text-green-500" style="font-size:0.5rem"></i>
-                streaming
-              </span>
+          <!-- Phase 1 Stages -->
+          <div v-if="phase1Stages.length > 0" class="mb-4">
+            <div class="flex align-items-center justify-content-between mb-2 ml-1">
+              <span class="text-700 font-bold">Phase I: Foundational Extraction</span>
             </div>
-            <Button
-              :label="aiStreamExpanded ? 'Hide Stream' : 'Show Stream'"
-              :icon="aiStreamExpanded ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
-              class="p-button-text p-button-sm"
-              @click="aiStreamExpanded = !aiStreamExpanded"
-            />
-          </div>
-          <div v-if="aiStreamExpanded" class="ai-stream" ref="aiStreamScroller">
-            <div v-if="aiEvents.length === 0" class="ai-stream-empty">
-              No AI activity yet. The pane fills as the pipeline calls models and tools.
-            </div>
-            <div
-              v-for="(ev, idx) in aiEvents"
-              :key="idx"
-              class="ai-event"
-              :class="'ai-event-'+aiEventCategory(ev.event || ev.kind)"
-            >
-              <i :class="aiEventIcon(ev.event || ev.kind) + ' ai-event-icon'" />
-              <span class="ai-event-time">{{ formatStreamTime(ev.timestamp || ev.ts) }}</span>
-              <span class="ai-event-source" v-if="ev.source || ev.tool_name || ev.model">[{{ ev.source || ev.tool_name || ev.model }}]</span>
-              <span class="ai-event-message">{{ buildAiEventMessage(ev) }}</span>
+            <div class="grid">
+              <div class="col-12 md:col-6 lg:col-4" v-for="stage in phase1Stages" :key="stage.name">
+                <Card class="detail-card module-card h-full border-1 surface-border shadow-none">
+                  <template #title>
+                    <div class="flex align-items-center justify-content-between gap-2 flex-wrap mb-1">
+                      <span class="text-base font-semibold" style="line-height:1.2">{{ cleanLabel(stage.label) || stage.name }}</span>
+                      <Tag :value="statusLabel(stage.status)" :severity="statusSeverity(stage.status)" />
+                    </div>
+                  </template>
+                  <template #content>
+                    <div class="text-sm text-500 mb-2">Duration: {{ formatDuration(stage.duration_ms) }}</div>
+                    <div v-if="stage.error" class="text-sm text-red-500 font-medium">{{ stage.error }}</div>
+                  </template>
+                </Card>
+              </div>
             </div>
           </div>
-          <div v-else class="text-500 text-sm ml-2 p-2">
-            {{ aiEvents.length }} event{{ aiEvents.length === 1 ? '' : 's' }} recorded.
-            Click "Show Stream" to watch the AI work in real time.
-          </div>
-        </div>
 
-        <!-- Phase II DAG Section (collapsible) -->
-        <div v-if="hasPhaseIi" class="mt-4">
-          <div class="flex align-items-center justify-content-between mb-2">
-            <div class="flex align-items-center gap-2">
-              <span class="text-700 font-bold">Phase 1 &amp; 2 Details</span>
-              <Tag :value="phaseIiSummary" severity="info" class="text-xs" />
+          <!-- Modular Analysis -->
+          <div v-if="modularStages.length > 0" class="mb-4">
+            <div class="flex align-items-center justify-content-between mb-2 ml-1">
+              <span class="text-700 font-bold">Modular Analysis (AI-Driven)</span>
             </div>
-            <Button
-              :label="phaseIiExpanded ? 'Hide Details' : 'Show Details'"
-              :icon="phaseIiExpanded ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
-              class="p-button-text p-button-sm"
-              @click="phaseIiExpanded = !phaseIiExpanded"
-            />
-          </div>
-          <div v-if="phaseIiExpanded" class="phase2-dag">
-            <div class="phase-divider"><Tag value="Phase 1: Spec Conformance" severity="info" /></div>
-            <div v-for="(tier, ti) in phaseIiTiers" :key="'tier-'+ti" class="dag-tier">
-              <div v-if="isPhaseBoundary(ti)" class="phase-divider mt-3 mb-1">
-                <Tag value="Phase 2: Firmware Analysis" severity="warn" />
-              </div>
-              <div class="dag-tier-label">
-                <Tag :value="'Group '+ti" severity="secondary" class="tier-tag" />
-                <span class="text-400 text-xs ml-2">max {{ tier.max_workers }} parallel</span>
-              </div>
-              <div class="dag-tier-nodes">
-                <div
-                  v-for="sec in tier.sections"
-                  :key="sec.id"
-                  class="dag-node"
-                  :class="'dag-node-'+sectionStatus(sec.id)"
-                  v-tooltip.top="sectionTooltip(sec)"
-                >
-                  <div class="dag-node-name" style="font-weight:600;font-size:0.8rem;color:var(--text-color)">{{ sec.name }}</div>
-                  <Tag
-                    :value="sectionStatus(sec.id)"
-                    :severity="sectionStatusSeverity(sec.id)"
-                    class="dag-node-tag"
-                  />
-                </div>
-              </div>
-              <div v-if="ti < phaseIiTiers.length - 1" class="dag-tier-arrow">
-                <i class="pi pi-arrow-down text-400" />
-                <i class="pi pi-arrow-down text-400" />
-                <i class="pi pi-arrow-down text-400" />
+            <div class="grid">
+              <div class="col-12 md:col-6 lg:col-4" v-for="stage in modularStages" :key="stage.name">
+                <Card class="detail-card module-card h-full border-1 surface-border shadow-none">
+                  <template #title>
+                    <div class="flex align-items-center justify-content-between gap-2 flex-wrap mb-1">
+                      <span class="text-base font-semibold" style="line-height:1.2">{{ cleanLabel(stage.label) || stage.name }}</span>
+                      <Tag :value="statusLabel(stage.status)" :severity="statusSeverity(stage.status)" />
+                    </div>
+                  </template>
+                  <template #content>
+                    <div class="text-sm text-500 mb-2">Duration: {{ formatDuration(stage.duration_ms) }}</div>
+                    <div v-if="stage.error" class="text-sm text-red-500 font-medium mb-2" style="word-break: break-word">{{ stage.error }}</div>
+                    
+                    <Button 
+                      :label="expandedStreams[stage.name] ? 'Hide AI Activity' : 'View AI Activity'"
+                      :icon="expandedStreams[stage.name] ? 'pi pi-chevron-up' : 'pi pi-bolt'"
+                      class="p-button-outlined p-button-sm w-full mt-2"
+                      @click="toggleStream(stage.name)"
+                      v-if="['running', 'done', 'failed', 'needs_review'].includes(stage.status)"
+                    />
+                    <div v-if="expandedStreams[stage.name]" class="ai-stream mt-2" :ref="'stream_' + stage.name">
+                      <div v-if="eventsForStage(stage.name).length === 0" class="ai-stream-empty">
+                        No AI activity yet for this module.
+                      </div>
+                      <div
+                        v-for="(ev, idx) in eventsForStage(stage.name)"
+                        :key="idx"
+                        class="ai-event"
+                        :class="'ai-event-'+aiEventCategory(ev.event || ev.kind)"
+                      >
+                        <i :class="aiEventIcon(ev.event || ev.kind) + ' ai-event-icon'" />
+                        <span class="ai-event-time">{{ formatStreamTime(ev.timestamp || ev.ts) }}</span>
+                        <span class="ai-event-message">{{ buildAiEventMessage(ev) }}</span>
+                      </div>
+                    </div>
+                  </template>
+                </Card>
               </div>
             </div>
           </div>
-          <div v-else class="text-500 text-sm ml-2 p-2">
-            {{ phaseIiSummaryDetail }}
+
+          <!-- Phase 2 Stages -->
+          <div v-if="phase2Stages.length > 0" class="mb-4">
+            <div class="flex align-items-center justify-content-between mb-2 ml-1">
+              <span class="text-700 font-bold">Phase II: Deep Validation</span>
+              <Tag :value="phaseIiSummary" severity="info" class="text-xs" v-if="hasPhaseIi" />
+            </div>
+            <div class="grid">
+              <div class="col-12 md:col-6 lg:col-4" v-for="stage in phase2Stages" :key="stage.name">
+                <Card class="detail-card module-card h-full border-1 surface-border shadow-none">
+                  <template #title>
+                    <div class="flex align-items-center justify-content-between gap-2 flex-wrap mb-1">
+                      <span class="text-base font-semibold" style="line-height:1.2">{{ cleanLabel(stage.label) || stage.name }}</span>
+                      <Tag :value="statusLabel(stage.status)" :severity="statusSeverity(stage.status)" />
+                    </div>
+                  </template>
+                  <template #content>
+                    <div class="text-sm text-500 mb-2">Duration: {{ formatDuration(stage.duration_ms) }}</div>
+                    <div v-if="stage.error" class="text-sm text-red-500 font-medium mb-2" style="word-break: break-word">{{ stage.error }}</div>
+                    
+                    <Button 
+                      v-if="isLlmStage(stage.name) && ['running', 'done', 'failed', 'needs_review'].includes(stage.status)"
+                      :label="expandedStreams[stage.name] ? 'Hide AI Activity' : 'View AI Activity'"
+                      :icon="expandedStreams[stage.name] ? 'pi pi-chevron-up' : 'pi pi-bolt'"
+                      class="p-button-outlined p-button-sm w-full mt-2"
+                      @click="toggleStream(stage.name)"
+                    />
+                    <div v-if="isLlmStage(stage.name) && expandedStreams[stage.name]" class="ai-stream mt-2" :ref="'stream_' + stage.name">
+                      <div v-if="eventsForStage(stage.name).length === 0" class="ai-stream-empty">
+                        No AI activity yet for this module.
+                      </div>
+                      <div
+                        v-for="(ev, idx) in eventsForStage(stage.name)"
+                        :key="idx"
+                        class="ai-event"
+                        :class="'ai-event-'+aiEventCategory(ev.event || ev.kind)"
+                      >
+                        <i :class="aiEventIcon(ev.event || ev.kind) + ' ai-event-icon'" />
+                        <span class="ai-event-time">{{ formatStreamTime(ev.timestamp || ev.ts) }}</span>
+                        <span class="ai-event-message">{{ buildAiEventMessage(ev) }}</span>
+                      </div>
+                    </div>
+                  </template>
+                </Card>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -283,6 +268,7 @@ export default {
       aiEvents: [],
       aiEventSource: null,
       aiStreamRetryHandle: null,
+      expandedStreams: {},
       payload: {
         job: {},
         pipeline: { run_id: null, current_stage: null, percent_complete: 0, stages: [] },
@@ -303,6 +289,15 @@ export default {
     stages() {
       const all = Array.isArray(this.pipeline.stages) ? this.pipeline.stages : [];
       return all.filter(s => s.visible !== false);
+    },
+    phase1Stages() {
+      return this.stages.filter(s => s.label && s.label.includes('[Phase I]'));
+    },
+    modularStages() {
+      return this.stages.filter(s => ['WK_ENC', 'WK_OTA', 'CA'].includes(s.name));
+    },
+    phase2Stages() {
+      return this.stages.filter(s => s.label && s.label.includes('[Phase II]') && !['WK_ENC', 'WK_OTA', 'CA'].includes(s.name));
     },
     phaseIi() {
       return this.payload.phase_ii || null;
@@ -537,15 +532,46 @@ export default {
     },
     pushAiEvent(ev) {
       // Keep a bounded ring buffer so long jobs don't blow up memory.
-      const MAX_EVENTS = 500;
+      const MAX_EVENTS = 1500;
       this.aiEvents.push(ev);
       if (this.aiEvents.length > MAX_EVENTS) {
         this.aiEvents.splice(0, this.aiEvents.length - MAX_EVENTS);
       }
       this.$nextTick(() => {
+        // Global scroller fallback (if still used)
         const el = this.$refs.aiStreamScroller;
         if (el) el.scrollTop = el.scrollHeight;
+        
+        // Per-stage scrollers
+        const stageName = ev.section_id || ev.source;
+        if (stageName) {
+          const streamRef = this.$refs['stream_' + stageName];
+          if (streamRef && streamRef[0]) {
+            streamRef[0].scrollTop = streamRef[0].scrollHeight;
+          }
+        }
       });
+    },
+    toggleStream(stageName) {
+      this.expandedStreams[stageName] = !this.expandedStreams[stageName];
+    },
+    eventsForStage(stageName) {
+      // Sidekick uses "55_sidekick_triage" or similar sometimes, but mostly
+      // section_id or source should match the stage name (e.g. "CA", "N").
+      return this.aiEvents.filter(ev => {
+        return ev.section_id === stageName || ev.source === stageName || 
+          (stageName === 'O' && String(ev.section_id || '').endsWith('sink_re')) ||
+          (stageName === 'N' && String(ev.section_id || '').endsWith('crypto_init')) ||
+          (stageName === 'P' && String(ev.section_id || '').endsWith('telemetry')) ||
+          (stageName === 'CA' && String(ev.section_id || '').endsWith('custom_auth'));
+      });
+    },
+    cleanLabel(label) {
+      return String(label || '').replace(/^\[Phase (I|II)\]\s*/, '');
+    },
+    isLlmStage(stageName) {
+      const s = this.phaseIiSections[stageName];
+      return s && (s.runner === 'llm' || s.runner === 'hybrid');
     },
     formatStreamTime(iso) {
       if (!iso) return '';
