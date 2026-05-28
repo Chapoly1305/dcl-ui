@@ -443,6 +443,13 @@ export default {
 </script>
 
 <style scoped>
+/* Safari: DataTable scroll container creates a stacking context that
+   swallows mouseenter on child elements. translateZ(0) forces the button
+   onto its own compositing layer so Safari delivers pointer events. */
+button[data-pd-tooltip] {
+  transform: translateZ(0);
+}
+
 .firmware-queue-page :deep(.p-tabview-nav) {
   background: transparent;
   border: none;

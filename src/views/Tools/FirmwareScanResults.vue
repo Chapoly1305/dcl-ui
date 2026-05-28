@@ -548,7 +548,7 @@
                         <div v-for="sec in stageSections(stage.name)" :key="sec.id" class="checklist-item" :class="'cl-'+checklistStatus(sec.id)">
                           <div class="cl-header">
                             <span class="cl-name">{{ sec.name }}</span>
-                            <i :class="checklistIcon(sec.id)" :style="{ color: checklistIconColor(sec.id), fontSize: '1.3rem' }" />
+                            <i :class="checklistIcon(sec.id)" :style="{ color: checklistIconColor(sec.id), fontSize: '1.3rem' }" v-tooltip.top="checklistIconTooltip(sec.id)" />
                           </div>
                           <div class="cl-outcome">{{ sec.outcome }}</div>
                           <Button
@@ -907,13 +907,35 @@ export default {
     stageRows() {
       const backendStages = Array.isArray(this.sanitizedReport?.stages) ? this.sanitizedReport.stages : [];
       const byName = new Map(backendStages.map(s => [String(s?.name || ''), s]));
+      const phaseIiResults = this.phaseIiReport?.results || {};
       return DISPLAY_STAGES.map((display) => {
         const linked = display.backend.map(name => byName.get(name)).filter(Boolean);
-        const starts = linked.map(s => s?.started_at).filter(Boolean).sort();
-        const ends = linked.map(s => s?.ended_at).filter(Boolean).sort();
+        const starts = linked.map(s => s?.started_at).filter(Boolean);
+        const ends = linked.map(s => s?.ended_at).filter(Boolean);
+        // Merge Phase II section timing into the envelope so display stages
+        // that include LLM sections (e.g. CA) show the full wall-clock span.
+        for (const sec of (display.sections || [])) {
+          const piResult = phaseIiResults[sec.id];
+          if (piResult) {
+            if (piResult.started_at) starts.push(piResult.started_at);
+            if (piResult.ended_at) ends.push(piResult.ended_at);
+          }
+        }
+        starts.sort();
+        ends.sort();
         const started_at = starts.length ? starts[0] : null;
         const ended_at = ends.length ? ends[ends.length - 1] : null;
         const error = linked.map(s => s?.details?.error).filter(Boolean).join('; ') || null;
+        // Prefer backend-computed duration_ms (microsecond precision from
+        // time.monotonic()) when there is a single backend stage and no Phase
+        // II sections contribute timing to the envelope.
+        const backendDurationMs = linked.length === 1 && linked[0]?.duration_ms != null
+          ? Number(linked[0].duration_ms)
+          : null;
+        const hasPhaseIiTiming = (display.sections || []).some(s => {
+          const r = phaseIiResults[s.id];
+          return r && (r.started_at || r.ended_at);
+        });
         return {
           id: display.id,
           name: display.id,
@@ -921,7 +943,7 @@ export default {
           status: this.aggregateDisplayStatus(display, linked),
           started_at,
           ended_at,
-          duration: this.durationLabel(started_at, ended_at),
+          duration: this.displayDuration(started_at, ended_at, hasPhaseIiTiming ? null : backendDurationMs),
           error,
         };
       });
@@ -940,7 +962,7 @@ export default {
     },
     stagesCompleteCount() {
       const c = this.stageStatusCounts;
-      return c.passed + c.skipped;
+      return c.passed + c.skipped + c.issue + c.review;
     },
     stagesPercent() {
       if (this.stageRows.length === 0) return 0;
@@ -1025,6 +1047,9 @@ export default {
       if (s === 'failed' || s === 'pending') return '#ef4444';
       if (s === 'skipped') return '#9ca3af';
       return '#eab308';
+    },
+    checklistIconTooltip(secId) {
+      return stageStatusBadgeLabel(this.checklistStatus(secId));
     },
     sectionHasTranscript(secId) {
       // A section's run_section() output dict carries `transcript_path` when
@@ -1344,6 +1369,15 @@ export default {
       return `${(n / 1048576).toFixed(1)} MB`;
     },
     durationLabel(startedAt, endedAt) {
+      return this.displayDuration(startedAt, endedAt, null);
+    },
+    displayDuration(startedAt, endedAt, durationMs) {
+      if (durationMs != null && Number.isFinite(durationMs) && durationMs >= 0) {
+        if (durationMs < 1) return `${(durationMs * 1000).toFixed(0)} μs`;
+        if (durationMs < 10) return `${durationMs.toFixed(2)} ms`;
+        if (durationMs < 1000) return `${durationMs.toFixed(0)} ms`;
+        return `${(durationMs / 1000).toFixed(2)} s`;
+      }
       const start = startedAt ? new Date(startedAt) : null;
       const end = endedAt ? new Date(endedAt) : null;
       if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return '-';
@@ -1408,6 +1442,13 @@ export default {
 </script>
 
 <style scoped>
+/* Safari: DataTable scroll container creates a stacking context that
+   swallows mouseenter on child elements. translateZ(0) forces the button
+   onto its own compositing layer so Safari delivers pointer events. */
+button[data-pd-tooltip] {
+  transform: translateZ(0);
+}
+
 /* ---- Page & Card ---- */
 .scan-results-page .results-card,
 .scan-results-page .report-card {
