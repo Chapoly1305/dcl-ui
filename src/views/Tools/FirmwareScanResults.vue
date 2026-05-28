@@ -104,8 +104,9 @@
               <Column field="analyzed_at" header="Analyzed At" sortable headerClass="scan-col-analyzed" bodyClass="scan-col-analyzed">
                 <template #body="slotProps">{{ formatTimestamp(slotProps.data.analyzed_at) }}</template>
               </Column>
-              <Column field="vid" header="VID" headerClass="scan-col-id" bodyClass="scan-col-id" />
-              <Column field="pid" header="PID" headerClass="scan-col-id" bodyClass="scan-col-id" />
+              <Column field="result_id" header="Job ID" headerClass="scan-col-id" bodyClass="scan-col-id">
+                <template #body="slotProps"><code>{{ shortId(slotProps.data.result_id) }}</code></template>
+              </Column>
               <Column field="vendor_name" header="Vendor Name" headerClass="scan-col-name" bodyClass="scan-col-name">
                 <template #body="slotProps">{{ displayValue(slotProps.data.vendor_name) }}</template>
               </Column>
@@ -195,15 +196,15 @@
           <div class="flex align-items-center gap-3 flex-wrap">
             <i class="pi pi-microchip text-blue-500" style="font-size:1.3rem"></i>
             <div>
-              <div class="font-bold text-lg">
-                {{ dclProvenance?.product_name || dclProvenance?.vendor_name || selectedResult.input_firmware_name || 'Firmware Report' }}
-              </div>
+              <div class="font-bold text-lg">{{ bannerTitle }}</div>
               <div class="text-sm text-600 mt-1">
-                <span v-if="dclProvenance?.vendor_name">{{ dclProvenance.vendor_name }} &middot; </span>
-                <span>VID <code>{{ dclProvenance?.vid ?? '?' }}</code></span>
-                <span class="ml-2">PID <code>{{ dclProvenance?.pid ?? '?' }}</code></span>
-                <span v-if="dclProvenance?.software_version" class="ml-2">v<code>{{ dclProvenance.software_version }}</code></span>
-                <span v-if="dclProvenance?.software_version_string" class="ml-2">"{{ dclProvenance.software_version_string }}"</span>
+                <template v-if="dclProvenance?.vid != null || dclProvenance?.pid != null || dclProvenance?.software_version != null || dclProvenance?.software_version_string">
+                  <span v-if="dclProvenance?.vid != null">VID <code>{{ dclProvenance.vid }}</code></span>
+                  <span v-if="dclProvenance?.pid != null" class="ml-2">PID <code>{{ dclProvenance.pid }}</code></span>
+                  <span v-if="dclProvenance?.software_version != null" class="ml-2">v<code>{{ dclProvenance.software_version }}</code></span>
+                  <span v-if="dclProvenance?.software_version_string" class="ml-2">"{{ dclProvenance.software_version_string }}"</span>
+                </template>
+                <span v-else class="text-500">Device identifiers pending DCL lookup</span>
               </div>
               <div class="text-xs text-500 mt-1 flex gap-2 flex-wrap">
                 <span v-if="dclProvenance?.network"><Tag :value="dclProvenance.network" :severity="dclProvenance.network === 'mainnet' ? 'danger' : 'info'" /></span>
@@ -633,45 +634,71 @@ export default {
     phaseIiReport() {
       return this.reportOutputs?.phase_ii || {};
     },
-    // Extract DCL provenance from Phase II Section A, or parse from source_rel_path
+    // Merge DCL provenance from Phase II Section A, filename parse, and backend enrichment
     dclProvenance() {
-      // Try Phase II Section A output
+      const r = this.selectedResult;
+
+      // Phase II Section A DCL records — richest source, use as-is
       const secA = this.checklistResults['A'];
       if (secA && secA.status === 'success' && secA.output && secA.output.dcl_records && secA.output.dcl_records.length > 0) {
-        const r = secA.output.dcl_records[0];
+        const dcl = secA.output.dcl_records[0];
         return {
-          vid: r.vid,
-          pid: r.pid,
-          vendor_name: r.vendor_name || null,
-          product_name: r.product_name || null,
-          software_version: r.software_version,
-          software_version_string: r.software_version_string,
-          block_height: r.block_height,
-          tx_hash: r.tx_hash,
-          network: r.network,
-          release_time: r.release_time,
+          vid: dcl.vid,
+          pid: dcl.pid,
+          vendor_name: dcl.vendor_name || null,
+          product_name: dcl.product_name || null,
+          software_version: dcl.software_version,
+          software_version_string: dcl.software_version_string,
+          block_height: dcl.block_height,
+          tx_hash: dcl.tx_hash,
+          network: dcl.network,
+          release_time: dcl.release_time,
         };
       }
-      // Fallback: parse source_rel_path (otaM_VID_PID_VERSION_TXHASH.bin)
-      const src = this.selectedResult?.source_rel_path;
+
+      // Merge filename parse + backend enrichment (both may contribute different fields)
+      let vid = null, pid = null, swVer = null, txHash = null;
+
+      const src = r?.source_rel_path;
       if (src) {
         const match = String(src).match(/ota[a-z]?_(\d+)_(\d+)_(\d+)_([0-9a-fA-F]{8})/);
         if (match) {
-          return {
-            vid: parseInt(match[1]),
-            pid: parseInt(match[2]),
-            vendor_name: null,
-            product_name: null,
-            software_version: parseInt(match[3]),
-            software_version_string: null,
-            block_height: null,
-            tx_hash: match[4].toUpperCase(),
-            network: this.selectedResult?.source_network || null,
-            release_time: null,
-          };
+          vid = parseInt(match[1]);
+          pid = parseInt(match[2]);
+          swVer = parseInt(match[3]);
+          txHash = match[4].toUpperCase();
         }
       }
-      return null;
+
+      // Backend enrichment fills in vendor/product names and any missing IDs
+      const vendorName = r?.vendor_name || null;
+      const productName = r?.product_name || null;
+      const finalVid = vid ?? r?.vid ?? null;
+      const finalPid = pid ?? r?.pid ?? null;
+
+      if (!vendorName && !productName && finalVid == null && finalPid == null) return null;
+
+      return {
+        vid: finalVid,
+        pid: finalPid,
+        vendor_name: vendorName,
+        product_name: productName,
+        software_version: swVer,
+        software_version_string: null,
+        block_height: r?.block_height ?? null,
+        tx_hash: txHash ?? r?.tx_hash_first8 ?? null,
+        network: r?.source_network || null,
+        release_time: null,
+      };
+    },
+
+    bannerTitle() {
+      const p = this.dclProvenance;
+      if (p?.vendor_name && p?.product_name) return `${p.vendor_name} — ${p.product_name}`;
+      if (p?.product_name) return p.product_name;
+      if (p?.vendor_name) return p.vendor_name;
+      if (this.selectedResult?.result_id) return `Job ${this.shortId(this.selectedResult.result_id)}`;
+      return 'Firmware Report';
     },
 
     checklistResults() {
@@ -1037,6 +1064,10 @@ export default {
       this.selectedResultId = resultId;
       this.detailTabIndex = 0;
       this.reportSidebarVisible = true;
+      // Seed with table row data so banner shows vendor/product immediately
+      if (row) {
+        this.detailPayload = { result: { ...row }, attempts: [] };
+      }
       await this.loadResultDetail(resultId);
     },
     async reloadSelectedDetail() {
@@ -1065,8 +1096,21 @@ export default {
         );
         if (!response.ok) throw new Error(`Result detail request failed (${response.status})`);
         const payload = await response.json();
+        // Merge API response over any seeded row data — preserves vendor/product
+        // fields from the list endpoint when the detail endpoint doesn't include them.
+        const seeded = this.detailPayload?.result;
+        const merged = payload?.result
+          ? { ...payload.result }
+          : null;
+        if (merged && seeded) {
+          for (const field of ['vendor_name', 'product_name', 'vid', 'pid', 'block_height', 'tx_hash_first8']) {
+            if (merged[field] == null && seeded[field] != null) {
+              merged[field] = seeded[field];
+            }
+          }
+        }
         this.detailPayload = {
-          result: payload?.result || null,
+          result: merged,
           attempts: Array.isArray(payload?.attempts) ? payload.attempts : []
         };
       } catch (err) {
