@@ -95,10 +95,15 @@
                     <strong>Reasoning:</strong> {{ data.summary.final_verdict.reasoning }}
                   </div>
                   
-                  <div v-if="evidenceList.length" class="mb-4">
-                    <div class="text-xs font-bold text-500 uppercase mb-2">Evidence strings ({{ evidenceList.length }})</div>
-                    <div class="flex flex-wrap gap-2">
-                      <code v-for="(ev, i) in evidenceList" :key="i" class="evidence-tag-new">{{ ev }}</code>
+                  <div v-if="normalizedEvidence.length" class="mb-4">
+                    <div class="text-xs font-bold text-500 uppercase mb-2">Key Evidence ({{ normalizedEvidence.length }})</div>
+                    <div class="flex flex-column gap-3">
+                      <div v-for="(ev, i) in normalizedEvidence" :key="i" class="evidence-item-new p-2 border-round surface-50 border-1 border-200">
+                        <code class="evidence-content-new block mb-2">{{ ev.content }}</code>
+                        <div v-if="ev.context" class="evidence-context-new text-sm text-600">
+                          <i class="pi pi-info-circle mr-1 text-xs"></i>{{ ev.context }}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -342,6 +347,21 @@ export default {
     evidenceList() {
       const fv = this.data?.summary?.final_verdict;
       return Array.isArray(fv?.evidence_strings) ? fv.evidence_strings : [];
+    },
+    normalizedEvidence() {
+      const fv = this.data?.summary?.final_verdict;
+      // Handle the new rich evidence objects if present
+      if (Array.isArray(fv?.evidence)) {
+        return fv.evidence.map(e => ({
+          content: typeof e === 'object' ? e.content : e,
+          context: typeof e === 'object' ? e.context : null,
+        }));
+      }
+      // Fallback to old evidence_strings
+      if (Array.isArray(fv?.evidence_strings)) {
+        return fv.evidence_strings.map(s => ({ content: s, context: null }));
+      }
+      return [];
     },
     citationList() {
       const fv = this.data?.summary?.final_verdict;
@@ -647,10 +667,13 @@ export default {
 
 /* Insights / Verdict */
 .verdict-card-new { border-top: 4px solid #3b82f6; }
-.evidence-tag-new {
-  background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;
-  padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem;
+.evidence-item-new { background-color: #f8fafc; }
+.evidence-content-new {
+  color: #1e40af; background: #eff6ff; padding: 0.3rem 0.5rem;
+  border-radius: 4px; display: block; border-left: 3px solid #3b82f6;
+  font-size: 0.8rem;
 }
+.evidence-context-new { font-style: italic; }
 .review-card-new.review-card-clean { border-top: 4px solid #10b981; }
 .review-card-new.review-card-warn  { border-top: 4px solid #f59e0b; }
 .review-card-new.review-card-info  { border-top: 4px solid #3b82f6; }
