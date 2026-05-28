@@ -101,12 +101,15 @@ export default {
         phaseIiReport() {
             return this.reportOutputs?.phase_ii || {};
         },
-        // Merge DCL provenance from Phase II Section A, filename parse, and backend enrichment
+        dagData() {
+            return this.phaseIiReport?.dag || null;
+        },
+        // Merge DCL provenance from Phase II Section provenance, filename parse, and backend enrichment
         dclProvenance() {
             const r = this.selectedResult;
 
-            // Phase II Section A DCL records — richest source, use as-is
-            const secA = this.checklistResults['A'];
+            // Phase II Section provenance DCL records — richest source, use as-is
+            const secA = this.checklistResults['provenance'];
             if (secA && secA.status === 'success' && secA.output && secA.output.dcl_records && secA.output.dcl_records.length > 0) {
                 const dcl = secA.output.dcl_records[0];
                 return {
@@ -131,7 +134,7 @@ export default {
 
             const src = r?.source_rel_path;
             if (src) {
-                const match = String(src).match(/ota[a-z]?_(\d+)_(\d+)_(\d+)_([0-9a-fA-F]{8})/);
+                const match = String(src).match(/ota[a-z]?_(\d+)_(\d+)_(\d+)_([0-9a-fA-ota_format]{8})/);
                 if (match) {
                     vid = parseInt(match[1]);
                     pid = parseInt(match[2]);
@@ -276,7 +279,7 @@ export default {
                 const starts = linked.map((s) => s?.started_at).filter(Boolean);
                 const ends = linked.map((s) => s?.ended_at).filter(Boolean);
                 // Merge Phase II section timing into the envelope so display stages
-                // that include LLM sections (e.g. CA) show the full wall-clock span.
+                // that include LLM sections (e.g. custom_auth) show the full wall-clock span.
                 for (const sec of display.sections || []) {
                     const piResult = phaseIiResults[sec.id];
                     if (piResult) {
@@ -638,7 +641,7 @@ export default {
             if (bytes === null || bytes === undefined || bytes === '') return '-';
             const n = Number(bytes);
             if (!Number.isFinite(n) || n < 0) return '-';
-            if (n < 1024) return `${n} B`;
+            if (n < 1024) return `${n} conformance`;
             if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
             return `${(n / 1048576).toFixed(1)} MB`;
         },
@@ -681,7 +684,7 @@ export default {
             return value;
         },
         sdkDisplayValue(value) {
-            if (value === null || value === undefined || String(value).trim() === '') return 'N/A';
+            if (value === null || value === undefined || String(value).trim() === '') return 'rng_init/provenance';
             return String(value);
         },
         displayPathTail(value) {
@@ -1170,6 +1173,7 @@ export default {
                             :key="selectedResultId"
                             :stage-rows="stageRows"
                             :phase-ii-sections="checklistResults"
+                            :dag="dagData"
                             :show-transcript-button="true"
                             @open-transcript="openTranscriptDialog"
                         />

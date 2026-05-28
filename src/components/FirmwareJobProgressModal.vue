@@ -107,6 +107,7 @@
           v-if="!isConformanceJob && !isPollJob"
           :stage-rows="displayStageRows"
           :phase-ii-sections="phaseIiSections"
+          :dag="dagData"
           empty-message="Waiting for pipeline stages..."
         />
 
@@ -219,6 +220,10 @@ export default {
     phaseIiSections() {
       const phaseIi = this.payload.phase_ii;
       return phaseIi ? (phaseIi.sections || {}) : {};
+    },
+    dagData() {
+      const phaseIi = this.payload.phase_ii;
+      return phaseIi ? (phaseIi.dag || null) : null;
     },
     displayStageRows() {
       const backendStages = Array.isArray(this.pipeline.stages) ? this.pipeline.stages : [];

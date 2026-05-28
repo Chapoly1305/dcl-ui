@@ -8,13 +8,37 @@
     <div v-else>
       <div class="flex align-items-center justify-content-between mb-3">
         <span class="text-sm text-600">{{ stagesCompleteCount }} / {{ stageRows.length }} resolved</span>
-        <span class="text-sm text-500">{{ totalPipelineDuration }}</span>
+        <div class="flex align-items-center gap-2">
+          <span v-if="dag" class="text-xs text-500">View:</span>
+          <Button
+            v-if="dag"
+            :label="viewMode === 'timeline' ? 'Timeline' : 'DAG'"
+            :icon="viewMode === 'timeline' ? 'pi pi-sitemap' : 'pi pi-list'"
+            size="small"
+            text
+            @click="toggleViewMode"
+            v-tooltip.top="viewMode === 'timeline' ? 'Switch to DAG dependency graph' : 'Switch to checklist timeline'"
+          />
+          <span class="text-sm text-500">{{ totalPipelineDuration }}</span>
+        </div>
       </div>
       <div class="stage-progress mb-3">
         <div class="stage-progress-fill" :style="{ width: stagesPercent + '%' }"></div>
       </div>
 
-      <div class="text-xs mb-3 flex flex-wrap align-items-center gap-3">
+      <!-- DAG dependency graph view -->
+      <div v-if="dag && viewMode === 'dag'" class="mb-3">
+        <PipelineDagView :dag="dag" :phase-ii-sections="phaseIiSections" />
+        <div class="text-xs text-500 mt-2 flex flex-wrap align-items-center gap-3">
+          <span class="cl-legend"><span class="cl-badge cl-badge-success">PASSED</span> Passed</span>
+          <span class="cl-legend"><span class="cl-badge cl-badge-warning">PENDING</span> Pending</span>
+          <span class="cl-legend"><span class="cl-badge cl-badge-secondary">SKIPPED</span> Skipped</span>
+          <span class="cl-legend"><span class="cl-badge cl-badge-danger">ISSUE</span> Failed</span>
+          <span class="cl-legend"><span class="cl-badge cl-badge-info">REVIEW</span> Needs review</span>
+        </div>
+      </div>
+
+      <div v-if="!dag || viewMode === 'timeline'" class="text-xs mb-3 flex flex-wrap align-items-center gap-3">
         <span class="cl-tally"><span class="cl-dot cl-dot-success"></span> Passed <strong>{{ stageStatusCounts.passed }}</strong></span>
         <span class="cl-tally"><span class="cl-dot cl-dot-secondary"></span> Skipped <strong>{{ stageStatusCounts.skipped }}</strong></span>
         <span class="cl-tally"><span class="cl-dot cl-dot-warning"></span> Pending <strong>{{ stageStatusCounts.pending }}</strong></span>
@@ -30,7 +54,7 @@
         <span class="cl-legend"><span class="cl-badge cl-badge-info">NEEDS REVIEW</span> Needs human review</span>
       </div>
 
-      <div class="stage-timeline">
+      <div v-if="!dag || viewMode === 'timeline'" class="stage-timeline">
         <div v-for="(stage, idx) in stageRows" :key="stage.name" class="stage-node" :class="{ 'stage-last': idx === stageRows.length - 1 }">
           <div class="stage-dot" :class="'stage-dot-' + stageSeverity(stage.status)"></div>
           <div v-if="idx < stageRows.length - 1" class="stage-line"></div>
@@ -79,6 +103,7 @@
 </template>
 
 <script>
+import PipelineDagView from '@/components/PipelineDagView.vue';
 import {
   DISPLAY_STAGES,
   stageSeverity,
@@ -87,6 +112,7 @@ import {
 
 export default {
   name: 'PipelineStageTimeline',
+  components: { PipelineDagView },
   props: {
     stageRows: {
       type: Array,
@@ -95,6 +121,10 @@ export default {
     phaseIiSections: {
       type: Object,
       default: () => ({})
+    },
+    dag: {
+      type: Object,
+      default: null
     },
     showTranscriptButton: {
       type: Boolean,
@@ -108,7 +138,8 @@ export default {
   emits: ['open-transcript'],
   data() {
     return {
-      expandedNodes: {}
+      expandedNodes: {},
+      viewMode: 'timeline'
     };
   },
   computed: {
@@ -148,6 +179,9 @@ export default {
     }
   },
   methods: {
+    toggleViewMode() {
+      this.viewMode = this.viewMode === 'timeline' ? 'dag' : 'timeline';
+    },
     toggleNode(key) {
       const next = { ...this.expandedNodes };
       if (next[key]) {
@@ -217,7 +251,21 @@ export default {
         return 'Not evaluated — run analysis to check';
       }
       if (r.status === 'skipped') {
-        if (sec.runner === 'llm' || sec.runner === 'hybrid') return 'Deferred — LLM analysis not yet configured';
+        if (sec.runner === 'llm' || sec.runner === 'hybrid') {
+          if (r.error && r.error !== 'Skipped: LLM section (code_only mode)') {
+            return String(r.error).substring(0, 160);
+          }
+          return 'Deferred — LLM analysis not yet configured';
+        }
+        // Show the specific reason from the dispatcher or section output
+        const detail = r.output?.detail || r.output?.reason;
+        if (detail) return String(detail).substring(0, 160);
+        if (r.error && !r.error.startsWith('Skipped:')) return String(r.error).substring(0, 160);
+        if (r.error) {
+          // Strip "Skipped: " prefix to show just the reason
+          const reason = String(r.error).replace(/^Skipped:\s*/, '');
+          return `Skipped — ${reason}`;
+        }
         return 'Skipped — dependency not met';
       }
       if (r.status === 'failed') {
