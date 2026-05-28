@@ -2,6 +2,78 @@
   <div class="p-2 scan-results-page">
     <ConfirmDialog />
     <div class="grid">
+
+      <!-- Analysis Pipeline Status (shown when jobs are active, queued, or recently failed) -->
+      <div class="col-12" v-if="analysisStats.outstanding > 0 || analysisStats.failed > 0">
+        <Card class="results-card mb-2">
+          <template #title>
+            <div class="flex align-items-center gap-2">
+              <span>Analysis Pipeline</span>
+              <Badge v-if="analysisStats.outstanding > 0" :value="analysisStats.outstanding" severity="warning" />
+            </div>
+          </template>
+          <template #content>
+            <div class="grid">
+              <div class="col-12 md:col-4" v-for="stat in analysisStatCards" :key="stat.label">
+                <div class="card mb-0 stat-card surface-card border-1 surface-border shadow-1">
+                  <div class="flex justify-content-between mb-1">
+                    <div>
+                      <span class="block text-500 font-medium mb-1 text-xs uppercase">{{ stat.label }}</span>
+                      <div class="text-900 font-bold text-xl">{{ stat.value }}</div>
+                    </div>
+                    <div class="flex align-items-center justify-content-center border-round" :class="stat.iconBg" style="width:2.2rem;height:2.2rem">
+                      <i class="pi text-lg" :class="[stat.icon, stat.iconColor]"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-12 lg:col-6" v-if="analysisJobs.running.length > 0">
+                <Card class="report-card h-full border-1 surface-border shadow-1">
+                  <template #title><span class="text-base font-bold">Active Analysis</span></template>
+                  <template #content>
+                    <DataTable :value="analysisJobs.running" responsiveLayout="scroll" class="p-datatable-sm" :rows="5">
+                      <Column field="job_id" header="ID">
+                        <template #body="slotProps"><code>{{ shortId(slotProps.data.job_id) }}</code></template>
+                      </Column>
+                      <Column field="firmware_sha256" header="SHA-256">
+                        <template #body="slotProps"><code>{{ shortSha(slotProps.data.firmware_sha256) }}</code></template>
+                      </Column>
+                      <Column header="Actions" bodyClass="text-right">
+                        <template #body="slotProps">
+                          <Button icon="pi pi-chart-line" class="p-button-sm p-button-text p-button-rounded" v-tooltip.top="'View Progress'" @click="openJobProgress(slotProps.data.job_id)" />
+                        </template>
+                      </Column>
+                    </DataTable>
+                  </template>
+                </Card>
+              </div>
+
+              <div class="col-12 lg:col-6" v-if="analysisJobs.pending.length > 0">
+                <Card class="report-card h-full border-1 surface-border shadow-1">
+                  <template #title><span class="text-base font-bold">Queued Analysis</span></template>
+                  <template #content>
+                    <DataTable :value="analysisJobs.pending" responsiveLayout="scroll" class="p-datatable-sm" :rows="5">
+                      <Column field="job_id" header="ID">
+                        <template #body="slotProps"><code>{{ shortId(slotProps.data.job_id) }}</code></template>
+                      </Column>
+                      <Column field="firmware_sha256" header="SHA-256">
+                        <template #body="slotProps"><code>{{ shortSha(slotProps.data.firmware_sha256) }}</code></template>
+                      </Column>
+                      <Column header="Actions" bodyClass="text-right">
+                        <template #body="slotProps">
+                          <Button icon="pi pi-chart-line" class="p-button-sm p-button-text p-button-rounded" v-tooltip.top="'View Progress'" @click="openJobProgress(slotProps.data.job_id)" />
+                        </template>
+                      </Column>
+                    </DataTable>
+                  </template>
+                </Card>
+              </div>
+            </div>
+          </template>
+        </Card>
+      </div>
+
       <div class="col-12">
         <Card class="results-card">
           <template #title>
@@ -547,12 +619,21 @@
       :section-id="transcriptSectionId"
       @update:visible="transcriptDialogVisible = $event"
     />
+
+    <FirmwareJobProgressModal
+      :visible="jobProgressDialogVisible"
+      :job-id="jobProgressJobId"
+      :api-base="apiBase"
+      @update:visible="jobProgressDialogVisible = $event"
+    />
+
   </div>
 </template>
 
 <script>
 import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
 import AiTranscriptDialog from '@/components/AiTranscriptDialog.vue';
+import FirmwareJobProgressModal from '@/components/FirmwareJobProgressModal.vue';
 
 // Display config lives in utils/pipelineDisplay.js (shared with the live
 // progress modal). Edit there to rename, add, or reorder stages — every UI
@@ -566,7 +647,7 @@ import {
 
 export default {
   name: 'FirmwareScanResults',
-  components: { AiTranscriptDialog },
+  components: { AiTranscriptDialog, FirmwareJobProgressModal },
   data() {
     const { requestBase } = resolveMatteroverwatchApiBase();
     return {
@@ -614,6 +695,9 @@ export default {
       expandedNodes: {},
       transcriptDialogVisible: false,
       transcriptSectionId: '',
+      jobs: { pending: [], running: [], done: [], failed: [] },
+      jobProgressDialogVisible: false,
+      jobProgressJobId: '',
     };
   },
   computed: {
@@ -621,6 +705,27 @@ export default {
       return this.normalizeNetwork(
         this.$store?.state?.network?.selectedNetwork || this.$store?.state?.network?.defaultNetwork || 'testnet'
       );
+    },
+    analysisJobs() {
+      const filterFn = j => j.job_type === 'analyze' || j.job_type === 'rerun';
+      return {
+        pending: this.jobs.pending.filter(filterFn),
+        running: this.jobs.running.filter(filterFn),
+        done: this.jobs.done.filter(filterFn),
+        failed: this.jobs.failed.filter(filterFn)
+      };
+    },
+    analysisStats() {
+      const { running, pending, done, failed } = this.analysisJobs;
+      return { outstanding: running.length + pending.length, running: running.length, pending: pending.length, done: done.length, failed: failed.length };
+    },
+    analysisStatCards() {
+      const s = this.analysisStats;
+      return [
+        { label: 'Active', value: s.running, icon: 'pi-spin pi-spinner', iconColor: 'text-purple-500', iconBg: 'bg-purple-100' },
+        { label: 'Queued', value: s.pending, icon: 'pi-clock', iconColor: 'text-orange-500', iconBg: 'bg-orange-100' },
+        { label: 'Completed', value: s.done, icon: 'pi-check-circle', iconColor: 'text-green-500', iconBg: 'bg-green-100' }
+      ];
     },
     selectedResult() {
       return this.detailPayload?.result || null;
@@ -855,6 +960,7 @@ export default {
       if (ms < 1000) return `Total: ${ms} ms`;
       return `Total: ${(ms / 1000).toFixed(2)} s`;
     },
+
   },
   methods: {
     toggleNode(key) {
@@ -958,6 +1064,7 @@ export default {
       return key === 'mainnet' || key === 'testnet' ? key : 'testnet';
     },
 
+
     onPage(event) {
       this.pageFirst = event.first;
       this.pageSize = event.rows;
@@ -999,7 +1106,34 @@ export default {
       return params.toString();
     },
     async refreshNow() {
-      await this.loadResults();
+      await Promise.all([this.loadResults(), this.loadJobs()]);
+    },
+    async loadJobs() {
+      if (!this.apiBase) return;
+      try {
+        const query = new URLSearchParams({ network: this.selectedNetwork });
+        const response = await fetch(`${this.apiBase}/api/v1/jobs?${query.toString()}`);
+        if (!response.ok) return;
+        const payload = await response.json();
+        this.jobs = {
+          pending: Array.isArray(payload.pending) ? payload.pending : [],
+          running: Array.isArray(payload.running) ? payload.running : [],
+          done: Array.isArray(payload.done) ? payload.done : [],
+          failed: Array.isArray(payload.failed) ? payload.failed : []
+        };
+      } catch (_) { /* non-critical */ }
+    },
+    openJobProgress(jobId) {
+      if (!jobId) return;
+      this.jobProgressJobId = jobId;
+      this.jobProgressDialogVisible = true;
+    },
+    jobStatusSeverity(status) {
+      const key = String(status || '').toLowerCase();
+      if (key === 'done') return 'success';
+      if (key === 'failed') return 'danger';
+      if (key === 'running') return 'info';
+      return 'warning';
     },
     async loadResults() {
       this.loading = true;
@@ -1258,6 +1392,7 @@ export default {
       if (next === prev) return;
       this.pageFirst = 0;
       this.loadResults();
+      this.loadJobs();
     }
   },
   mounted() {
@@ -1267,6 +1402,7 @@ export default {
       this.tableFiltersExpanded = true;
     }
     this.loadResults();
+    this.loadJobs();
   }
 };
 </script>
@@ -1292,6 +1428,7 @@ export default {
 .scan-results-page :deep(.report-card .p-card-content) {
   padding-top: 0.35rem;
 }
+
 
 .scan-results-page .filters {
   padding: 0.55rem;

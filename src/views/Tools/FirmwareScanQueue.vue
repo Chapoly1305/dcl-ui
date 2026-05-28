@@ -31,90 +31,7 @@
 
       <div class="col-12">
         <TabView v-model:activeIndex="activeTab">
-          <!-- TAB 1: FIRMWARE ANALYSIS -->
-          <TabPanel>
-            <template #header>
-              <i class="pi pi-box mr-2"></i>
-              <span>Firmware Analysis</span>
-              <Badge :value="analysisStats.outstanding" class="ml-2" severity="warning" v-if="analysisStats.outstanding > 0"></Badge>
-            </template>
-            
-            <div class="grid">
-              <div class="col-12 md:col-4" v-for="stat in analysisStatCards" :key="stat.label">
-                <div class="card mb-0 stat-card surface-card border-1 surface-border shadow-1">
-                  <div class="flex justify-content-between mb-1">
-                    <div>
-                      <span class="block text-500 font-medium mb-1 text-xs uppercase">{{ stat.label }}</span>
-                      <div class="text-900 font-bold text-xl">{{ stat.value }}</div>
-                    </div>
-                    <div class="flex align-items-center justify-content-center border-round" :class="stat.iconBg" style="width:2.2rem;height:2.2rem">
-                      <i class="pi text-lg" :class="[stat.icon, stat.iconColor]"></i>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="col-12 lg:col-6">
-                <Card class="jobs-card h-full border-1 surface-border shadow-1">
-                  <template #title><span class="text-lg font-bold">Active Analysis</span></template>
-                  <template #content>
-                    <DataTable :value="analysisJobs.running" responsiveLayout="scroll" class="p-datatable-sm" :rows="5">
-                      <Column field="job_id" header="ID">
-                        <template #body="slotProps">
-                          <code>{{ slotProps.data.job_id.slice(0, 8) }}</code>
-                        </template>
-                      </Column>
-                      <Column field="firmware_sha256" header="SHA-256">
-                        <template #body="slotProps">
-                          <code>{{ shortSha(slotProps.data.firmware_sha256) }}</code>
-                        </template>
-                      </Column>
-                      <Column header="Actions" bodyClass="text-right">
-                        <template #body="slotProps">
-                          <Button icon="pi pi-chart-line" class="p-button-sm p-button-text p-button-rounded" v-tooltip.top="'View Progress'" @click="openJobProgress(slotProps.data.job_id)" />
-                        </template>
-                      </Column>
-                    </DataTable>
-                    <div v-if="analysisJobs.running.length === 0" class="p-3 text-center text-400 italic flex flex-column align-items-center">
-                      <i class="pi pi-play text-2xl mb-2"></i>
-                      <span>No running analysis.</span>
-                    </div>
-                  </template>
-                </Card>
-              </div>
-
-              <div class="col-12 lg:col-6">
-                <Card class="jobs-card h-full border-1 surface-border shadow-1">
-                  <template #title><span class="text-lg font-bold">Queued Analysis</span></template>
-                  <template #content>
-                    <DataTable :value="analysisJobs.pending" responsiveLayout="scroll" class="p-datatable-sm" :rows="5">
-                      <Column field="job_id" header="ID">
-                        <template #body="slotProps">
-                          <code>{{ slotProps.data.job_id.slice(0, 8) }}</code>
-                        </template>
-                      </Column>
-                      <Column field="firmware_sha256" header="SHA-256">
-                        <template #body="slotProps">
-                          <code>{{ shortSha(slotProps.data.firmware_sha256) }}</code>
-                        </template>
-                      </Column>
-                      <Column header="Actions" bodyClass="text-right">
-                        <template #body="slotProps">
-                          <Button icon="pi pi-chart-line" class="p-button-sm p-button-text p-button-rounded" v-tooltip.top="'View Progress'" @click="openJobProgress(slotProps.data.job_id)" />
-                        </template>
-                      </Column>
-                    </DataTable>
-                    <div v-if="analysisJobs.pending.length === 0" class="p-3 text-center text-400 italic flex flex-column align-items-center">
-                      <i class="pi pi-clock text-2xl mb-2"></i>
-                      <span>No queued analysis.</span>
-                    </div>
-                  </template>
-                </Card>
-              </div>
-            </div>
-          </TabPanel>
-
-          <!-- TAB 2: CONFORMANCE VALIDATION -->
+          <!-- TAB 1: CONFORMANCE VALIDATION -->
           <TabPanel>
             <template #header>
               <i class="pi pi-shield mr-2"></i>
@@ -235,7 +152,7 @@
             </div>
           </TabPanel>
 
-          <!-- TAB 3: SOURCE POLLING -->
+          <!-- TAB 2: SOURCE POLLING -->
           <TabPanel>
             <template #header>
               <i class="pi pi-cloud-download mr-2"></i>
@@ -388,15 +305,6 @@ export default {
         this.$store?.state?.network?.selectedNetwork || this.$store?.state?.network?.defaultNetwork || 'testnet'
       );
     },
-    analysisJobs() {
-      const filterFn = j => j.job_type === 'analyze' || j.job_type === 'rerun';
-      return {
-        pending: this.jobs.pending.filter(filterFn),
-        running: this.jobs.running.filter(filterFn),
-        done: this.jobs.done.filter(filterFn),
-        failed: this.jobs.failed.filter(filterFn)
-      };
-    },
     conformanceJobs() {
       const filterFn = j => j.job_type === 'validate_conformance';
       return {
@@ -426,21 +334,6 @@ export default {
           const tb = b.finished_at || b.started_at || b.requested_at || '';
           return String(tb).localeCompare(String(ta));
         });
-    },
-    analysisStats() {
-      const running = this.analysisJobs.running.length;
-      const pending = this.analysisJobs.pending.length;
-      const done = this.analysisJobs.done.length;
-      const failed = this.analysisJobs.failed.length;
-      return { outstanding: running + pending, running, pending, done, failed };
-    },
-    analysisStatCards() {
-      const stats = this.analysisStats;
-      return [
-        { label: 'Active', value: stats.running, icon: 'pi-spin pi-spinner', iconColor: 'text-purple-500', iconBg: 'bg-purple-100' },
-        { label: 'Queued', value: stats.pending, icon: 'pi-clock', iconColor: 'text-orange-500', iconBg: 'bg-orange-100' },
-        { label: 'Completed', value: stats.done, icon: 'pi-check-circle', iconColor: 'text-green-500', iconBg: 'bg-green-100' }
-      ];
     },
     conformanceStatCards() {
       const running = this.conformanceJobs.running.length;
