@@ -478,7 +478,7 @@
                 <span class="cl-tally"><span class="cl-dot cl-dot-success"></span> Passed <strong>{{ stageStatusCounts.passed }}</strong></span>
                 <span class="cl-tally"><span class="cl-dot cl-dot-secondary"></span> Skipped <strong>{{ stageStatusCounts.skipped }}</strong></span>
                 <span class="cl-tally"><span class="cl-dot cl-dot-warning"></span> Pending <strong>{{ stageStatusCounts.pending }}</strong></span>
-                <span class="cl-tally"><span class="cl-dot cl-dot-info"></span> AI review <strong>{{ stageStatusCounts.review }}</strong></span>
+                <span class="cl-tally"><span class="cl-dot cl-dot-info"></span> Needs review <strong>{{ stageStatusCounts.review }}</strong></span>
                 <span class="cl-tally"><span class="cl-dot cl-dot-danger"></span> Issues <strong>{{ stageStatusCounts.issue }}</strong></span>
               </div>
 
@@ -487,7 +487,7 @@
                 <span class="cl-legend"><span class="cl-badge cl-badge-warning">PENDING</span> Not checked yet</span>
                 <span class="cl-legend"><span class="cl-badge cl-badge-secondary">SKIPPED</span> Not applicable</span>
                 <span class="cl-legend"><span class="cl-badge cl-badge-danger">ISSUE</span> Confirmed problem</span>
-                <span class="cl-legend"><span class="cl-badge cl-badge-info">AI REVIEW</span> Needs human review</span>
+                <span class="cl-legend"><span class="cl-badge cl-badge-info">NEEDS REVIEW</span> Needs human review</span>
               </div>
 
               <div class="stage-timeline">

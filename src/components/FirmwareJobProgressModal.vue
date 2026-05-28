@@ -170,12 +170,12 @@
               v-for="(ev, idx) in aiEvents"
               :key="idx"
               class="ai-event"
-              :class="'ai-event-'+aiEventCategory(ev.kind)"
+              :class="'ai-event-'+aiEventCategory(ev.event || ev.kind)"
             >
-              <i :class="aiEventIcon(ev.kind) + ' ai-event-icon'" />
-              <span class="ai-event-time">{{ formatStreamTime(ev.ts) }}</span>
-              <span class="ai-event-source" v-if="ev.source">[{{ ev.source }}]</span>
-              <span class="ai-event-message">{{ ev.message || ev.kind }}</span>
+              <i :class="aiEventIcon(ev.event || ev.kind) + ' ai-event-icon'" />
+              <span class="ai-event-time">{{ formatStreamTime(ev.timestamp || ev.ts) }}</span>
+              <span class="ai-event-source" v-if="ev.source || ev.tool_name || ev.model">[{{ ev.source || ev.tool_name || ev.model }}]</span>
+              <span class="ai-event-message">{{ buildAiEventMessage(ev) }}</span>
             </div>
           </div>
           <div v-else class="text-500 text-sm ml-2 p-2">
@@ -340,7 +340,8 @@ export default {
       const n = this.aiEvents.length;
       if (!n) return this.aiStreamConnected ? 'Listening...' : 'Idle';
       const tail = this.aiEvents[n - 1];
-      return `${n} event${n === 1 ? '' : 's'} · last: ${tail.kind}`;
+      const kind = tail.event || tail.kind || 'unknown';
+      return `${n} event${n === 1 ? '' : 's'} · last: ${kind}`;
     },
     stateLabel() {
       return String(this.summary.state_label || 'Unknown');
@@ -557,11 +558,26 @@ export default {
     },
     aiEventCategory(kind) {
       if (!kind) return 'info';
-      if (kind.startsWith('llm_')) return 'llm';
+      if (kind.startsWith('llm_') || kind === 'assistant_turn') return 'llm';
       if (kind.startsWith('tool_')) return 'tool';
-      if (kind.startsWith('agent_')) return 'agent';
+      if (kind.startsWith('agent_') || kind.startsWith('run_')) return 'agent';
       if (kind.startsWith('sidekick_')) return 'sidekick';
       return 'info';
+    },
+    buildAiEventMessage(ev) {
+      if (ev.message) return ev.message;
+      const k = ev.event || ev.kind || 'unknown';
+      if (k === 'tool_call') {
+        let args = '';
+        try { args = JSON.stringify(ev.tool_args); } catch(_e) {}
+        return `Called ${ev.tool_name} with ${args.length < 50 ? args : args.substring(0, 50) + '...'}`;
+      }
+      if (k === 'tool_result') return `Tool ${ev.tool_name} finished in ${ev.tool_duration_ms || '?'} ms`;
+      if (k === 'llm_call') return `Calling ${ev.model || 'LLM'}`;
+      if (k === 'llm_response') return `LLM response received (${ev.output_tokens || '?'} tokens)`;
+      if (k === 'assistant_turn') return 'Thinking...';
+      if (k === 'run_started') return `Agent started on network ${ev.active_network || 'default'}`;
+      return k.replace(/_/g, ' ');
     },
     aiEventIcon(kind) {
       const cat = this.aiEventCategory(kind);

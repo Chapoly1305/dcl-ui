@@ -74,9 +74,11 @@ export const DISPLAY_STAGES = [
     label: 'Modular Analysis',
     backend: [],
     sections: [
+      { id: 'M', name: 'Secrets / Sensitive Material', desc: 'Byte-scan for PEM private-key headers, Matter cert markers, credentials, and known-weak AES keys embedded in the binary' },
       { id: 'N', name: 'RNG Initialization', desc: 'Verify the firmware seeds its RNG with sufficient entropy before generating session keys and certificates' },
       { id: 'O', name: 'Backdoor', desc: 'Detect suspicious sinks, hardcoded credentials, and undocumented remote-control paths' },
       { id: 'P', name: 'Connectivity', desc: 'Map external network endpoints, OTA provider URLs, and beaconing behavior reachable from the firmware' },
+      { id: 'R', name: 'Supply-chain / Integration Failure', desc: 'Aggregate L/N/M signals to flag known SDK-reuse failure modes (reference signing keys, weak seeds, embedded weak keys)' },
     ],
   },
   {
@@ -110,7 +112,7 @@ export function stageStatusBadgeLabel(status) {
   switch (stageSeverity(status)) {
     case 'success':   return 'PASSED';
     case 'danger':    return 'ISSUE';
-    case 'info':      return 'AI REVIEW';
+    case 'info':      return 'NEEDS REVIEW';
     case 'secondary': return 'SKIPPED';
     case 'warning':   return 'PENDING';
     default:          return String(status || '').toUpperCase();
@@ -125,7 +127,7 @@ export function stageStatusFriendlyLabel(status) {
   switch (stageSeverity(status)) {
     case 'success':   return 'Passed';
     case 'danger':    return 'Issue';
-    case 'info':      return 'AI Review';
+    case 'info':      return 'Needs Review';
     case 'secondary': return 'Skipped';
     case 'warning':   return 'Pending';
     default:          return 'Unknown';
