@@ -151,7 +151,7 @@
               <span v-if="round.thinking" class="text-xs text-500">
                 <i class="pi pi-lightbulb mr-1"></i>{{ round.thinking }} chars of thinking
               </span>
-              <span v-if="round.tokens" class="text-xs text-500 ml-2">
+              <span v-if="round.tokens && (round.tokens.input || round.tokens.output)" class="text-xs text-500 ml-2">
                 {{ round.tokens.input || 0 }} in / {{ round.tokens.output || 0 }} out
               </span>
               <span v-if="round.latencyMs" class="text-xs text-500 ml-2">
@@ -334,23 +334,40 @@ export default {
             }
           }
         } else if (k === 'tool_dispatch') {
-          // Legacy bespoke-loop transcript — attach to most recent round's matching tool call
-          for (let i = rounds.length - 1; i >= 0; i--) {
-            const tc = rounds[i].toolCalls.find(t => t.id === ev.tool_use_id);
-            if (tc) {
-              tc.returnedContent = ev.content || '';
-              tc.returnedChars = ev.returned_chars || (ev.content || '').length;
-              tc.isError = !!ev.is_error;
-              break;
-            }
+          // Find the originating tool_call by ID, OR if the harness can't
+          // surface a tool_use_id (the Claude Agent SDK's MCP handlers
+          // don't expose the originator to the tool body), fall back to
+          // FIFO matching by tool_name against the earliest still-unfilled
+          // tool_call. The agent loop is linear so this is deterministic.
+          const matchById = (toolCalls) =>
+            ev.tool_use_id ? toolCalls.find(t => t.id === ev.tool_use_id) : null;
+          // The assistant_turn records the SDK's full prefixed name
+          // (e.g. "mcp__kb__bn_get_xrefs_to") while tool_dispatch emits the
+          // bare dispatcher name ("bn_get_xrefs_to"). Match by suffix so
+          // both shapes line up.
+          const namesEqual = (a, b) => a === b || a.endsWith(`__${b}`) || b.endsWith(`__${a}`);
+          const matchByName = (toolCalls) =>
+            toolCalls.find(t => namesEqual(t.name, ev.tool_name)
+              && t.returnedChars === 0 && !t.returnedContent);
+          const apply = (tc) => {
+            tc.returnedContent = ev.content || '';
+            tc.returnedChars = ev.returned_chars || (ev.content || '').length;
+            tc.isError = !!ev.is_error;
+          };
+
+          let matched = false;
+          // Walk back through completed rounds first (Legacy bespoke-loop
+          // transcripts dispatch AFTER the assistant_turn that contains
+          // their tool_calls).
+          for (let i = rounds.length - 1; i >= 0 && !matched; i--) {
+            const tc = matchById(rounds[i].toolCalls) || matchByName(rounds[i].toolCalls);
+            if (tc) { apply(tc); matched = true; }
           }
-          if (current) {
-            const tc = current.toolCalls.find(t => t.id === ev.tool_use_id);
-            if (tc) {
-              tc.returnedContent = ev.content || '';
-              tc.returnedChars = ev.returned_chars || (ev.content || '').length;
-              tc.isError = !!ev.is_error;
-            }
+          // Then the round currently being built (PydanticAI / claude_agent
+          // case — tool_dispatch arrives during the same round window).
+          if (!matched && current) {
+            const tc = matchById(current.toolCalls) || matchByName(current.toolCalls);
+            if (tc) apply(tc);
           }
         }
       }
