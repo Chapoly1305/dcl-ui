@@ -139,3 +139,22 @@ export function stageStatusFriendlyLabel(status) {
             return 'Unknown';
     }
 }
+
+// Aggregate a display stage's status from its section cards and linked backend
+// stages. Priority: danger > info > warning > success > secondary. If every
+// contributor is skipped, surface as skipped.
+export function aggregateDisplayStatus(display, linkedBackendStages, sectionResults) {
+    const sectionSeverities = (display.sections || []).map((def) => {
+        const r = (sectionResults || {})[def.id];
+        return stageSeverity(r ? r.status : 'pending');
+    });
+    const backendSeverities = linkedBackendStages.map((s) => stageSeverity(s?.status || ''));
+    const all = [...sectionSeverities, ...backendSeverities];
+    if (!all.length) return 'pending';
+    if (all.includes('danger')) return 'issue';
+    if (all.includes('info')) return 'needs_review';
+    if (all.every((s) => s === 'secondary')) return 'skipped';
+    if (all.includes('warning')) return 'pending';
+    if (all.includes('success')) return 'passed';
+    return 'pending';
+}
