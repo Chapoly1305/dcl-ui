@@ -3,18 +3,19 @@
     <ConfirmDialog />
     <div class="grid">
 
-      <!-- Analysis Pipeline Status (shown when jobs are active, queued, or recently failed) -->
-      <div class="col-12" v-if="analysisStats.outstanding > 0 || analysisStats.failed > 0">
+      <!-- Analysis Pipeline Status -->
+      <div class="col-12">
         <Card class="results-card mb-2">
           <template #title>
             <div class="flex align-items-center gap-2">
               <span>Analysis Pipeline</span>
               <Badge v-if="analysisStats.outstanding > 0" :value="analysisStats.outstanding" severity="warning" />
+              <Badge v-if="analysisStats.failed > 0" :value="analysisStats.failed" severity="danger" />
             </div>
           </template>
           <template #content>
             <div class="grid">
-              <div class="col-12 md:col-4" v-for="stat in analysisStatCards" :key="stat.label">
+              <div class="col-12 md:col-3" v-for="stat in analysisStatCards" :key="stat.label">
                 <div class="card mb-0 stat-card surface-card border-1 surface-border shadow-1">
                   <div class="flex justify-content-between mb-1">
                     <div>
@@ -26,48 +27,6 @@
                     </div>
                   </div>
                 </div>
-              </div>
-
-              <div class="col-12 lg:col-6" v-if="analysisJobs.running.length > 0">
-                <Card class="report-card h-full border-1 surface-border shadow-1">
-                  <template #title><span class="text-base font-bold">Active Analysis</span></template>
-                  <template #content>
-                    <DataTable :value="analysisJobs.running" responsiveLayout="scroll" class="p-datatable-sm" :rows="5">
-                      <Column field="job_id" header="ID">
-                        <template #body="slotProps"><code>{{ shortId(slotProps.data.job_id) }}</code></template>
-                      </Column>
-                      <Column field="firmware_sha256" header="SHA-256">
-                        <template #body="slotProps"><code>{{ shortSha(slotProps.data.firmware_sha256) }}</code></template>
-                      </Column>
-                      <Column header="Actions" bodyClass="text-right">
-                        <template #body="slotProps">
-                          <Button icon="pi pi-chart-line" class="p-button-sm p-button-text p-button-rounded" v-tooltip.top="'View Progress'" @click="openJobProgress(slotProps.data.job_id)" />
-                        </template>
-                      </Column>
-                    </DataTable>
-                  </template>
-                </Card>
-              </div>
-
-              <div class="col-12 lg:col-6" v-if="analysisJobs.pending.length > 0">
-                <Card class="report-card h-full border-1 surface-border shadow-1">
-                  <template #title><span class="text-base font-bold">Queued Analysis</span></template>
-                  <template #content>
-                    <DataTable :value="analysisJobs.pending" responsiveLayout="scroll" class="p-datatable-sm" :rows="5">
-                      <Column field="job_id" header="ID">
-                        <template #body="slotProps"><code>{{ shortId(slotProps.data.job_id) }}</code></template>
-                      </Column>
-                      <Column field="firmware_sha256" header="SHA-256">
-                        <template #body="slotProps"><code>{{ shortSha(slotProps.data.firmware_sha256) }}</code></template>
-                      </Column>
-                      <Column header="Actions" bodyClass="text-right">
-                        <template #body="slotProps">
-                          <Button icon="pi pi-chart-line" class="p-button-sm p-button-text p-button-rounded" v-tooltip.top="'View Progress'" @click="openJobProgress(slotProps.data.job_id)" />
-                        </template>
-                      </Column>
-                    </DataTable>
-                  </template>
-                </Card>
               </div>
             </div>
           </template>
@@ -177,7 +136,7 @@
                 <template #body="slotProps">{{ formatTimestamp(slotProps.data.analyzed_at) }}</template>
               </Column>
               <Column field="result_id" header="Job ID" headerClass="scan-col-id" bodyClass="scan-col-id">
-                <template #body="slotProps"><code>{{ shortId(slotProps.data.result_id) }}</code></template>
+                <template #body="slotProps"><code>{{ shortId(slotProps.data.result_id || slotProps.data.job_id) }}</code></template>
               </Column>
               <Column field="vendor_name" header="Vendor Name" headerClass="scan-col-name" bodyClass="scan-col-name">
                 <template #body="slotProps">{{ displayValue(slotProps.data.vendor_name) }}</template>
@@ -199,25 +158,48 @@
               <Column header="Actions" headerClass="scan-col-actions" bodyClass="scan-col-actions">
                 <template #body="slotProps">
                   <div class="flex align-items-center gap-2">
-                    <Button
-                      icon="pi pi-file"
-                      class="p-button-sm p-button-text"
-                      v-tooltip.top="'View rendered report'"
-                      @click.stop="openReport(slotProps.data)"
-                    />
-                    <Button
-                      icon="pi pi-external-link"
-                      class="p-button-sm p-button-text"
-                      v-tooltip.top="slotProps.data.firmware_sha256 ? 'Open firmware detail' : 'Firmware SHA missing'"
-                      :disabled="!slotProps.data.firmware_sha256"
-                      @click.stop="openFirmwareDetail(slotProps.data)"
-                    />
-                    <Button
-                      icon="pi pi-trash"
-                      class="p-button-sm p-button-text p-button-danger"
-                      v-tooltip.top="'Delete result'"
-                      @click.stop="confirmDelete(slotProps.data)"
-                    />
+                    <template v-if="slotProps.data.status === 'running' || slotProps.data.status === 'pending'">
+                      <Button
+                        icon="pi pi-chart-line"
+                        class="p-button-sm p-button-text"
+                        v-tooltip.top="'View Progress'"
+                        @click.stop="openJobProgress(slotProps.data.job_id)"
+                      />
+                      <Button
+                        icon="pi pi-stop-circle"
+                        class="p-button-sm p-button-text p-button-warning"
+                        v-tooltip.top="'Stop Job'"
+                        @click.stop="confirmStopJob(slotProps.data.job_id)"
+                      />
+                      <Button
+                        icon="pi pi-trash"
+                        class="p-button-sm p-button-text p-button-danger"
+                        v-tooltip.top="'Delete Job'"
+                        @click.stop="confirmDeleteJob(slotProps.data.job_id)"
+                      />
+                    </template>
+                    <template v-else>
+                      <Button
+                        icon="pi pi-file"
+                        class="p-button-sm p-button-text"
+                        v-tooltip.top="'View rendered report'"
+                        :disabled="!slotProps.data.result_id"
+                        @click.stop="openReport(slotProps.data)"
+                      />
+                      <Button
+                        icon="pi pi-external-link"
+                        class="p-button-sm p-button-text"
+                        v-tooltip.top="slotProps.data.firmware_sha256 ? 'Open firmware detail' : 'Firmware SHA missing'"
+                        :disabled="!slotProps.data.firmware_sha256"
+                        @click.stop="openFirmwareDetail(slotProps.data)"
+                      />
+                      <Button
+                        icon="pi pi-trash"
+                        class="p-button-sm p-button-text p-button-danger"
+                        v-tooltip.top="'Delete result'"
+                        @click.stop="confirmDelete(slotProps.data)"
+                      />
+                    </template>
                   </div>
                 </template>
               </Column>
@@ -724,7 +706,8 @@ export default {
       return [
         { label: 'Active', value: s.running, icon: 'pi-spin pi-spinner', iconColor: 'text-purple-500', iconBg: 'bg-purple-100' },
         { label: 'Queued', value: s.pending, icon: 'pi-clock', iconColor: 'text-orange-500', iconBg: 'bg-orange-100' },
-        { label: 'Completed', value: s.done, icon: 'pi-check-circle', iconColor: 'text-green-500', iconBg: 'bg-green-100' }
+        { label: 'Completed', value: s.done, icon: 'pi-check-circle', iconColor: 'text-green-500', iconBg: 'bg-green-100' },
+        { label: 'Failed', value: s.failed, icon: 'pi-exclamation-circle', iconColor: 'text-red-500', iconBg: 'bg-red-100' }
       ];
     },
     selectedResult() {
@@ -1309,6 +1292,52 @@ export default {
         this.selectedResultId = '';
         this.detailPayload = { result: null, attempts: [] };
         await this.loadResults();
+      } catch (err) {
+        this.$toast?.add({ severity: 'error', summary: 'Delete failed', detail: err instanceof Error ? err.message : 'Unknown error', life: 5000 });
+      }
+    },
+    confirmStopJob(jobId) {
+      if (!jobId) return;
+      this.$confirm.require({
+        message: `Stop job ${this.shortId(jobId)}?`,
+        header: 'Confirm Stop',
+        icon: 'pi pi-exclamation-triangle',
+        acceptClass: 'p-button-warning',
+        acceptLabel: 'Stop',
+        rejectLabel: 'Cancel',
+        accept: () => this.doStopJob(jobId),
+      });
+    },
+    async doStopJob(jobId) {
+      if (!this.apiBase) return;
+      try {
+        const response = await fetch(`${this.apiBase}/api/v1/jobs/${encodeURIComponent(jobId)}/stop`, { method: 'POST' });
+        if (!response.ok) throw new Error(`Stop failed (${response.status})`);
+        this.$toast?.add({ severity: 'success', summary: 'Job stopped', detail: `Job ${this.shortId(jobId)} has been stopped.`, life: 3000 });
+        await this.refreshNow();
+      } catch (err) {
+        this.$toast?.add({ severity: 'error', summary: 'Stop failed', detail: err instanceof Error ? err.message : 'Unknown error', life: 5000 });
+      }
+    },
+    confirmDeleteJob(jobId) {
+      if (!jobId) return;
+      this.$confirm.require({
+        message: `Delete job record ${this.shortId(jobId)}?`,
+        header: 'Confirm Delete',
+        icon: 'pi pi-exclamation-triangle',
+        acceptClass: 'p-button-danger',
+        acceptLabel: 'Delete',
+        rejectLabel: 'Cancel',
+        accept: () => this.doDeleteJob(jobId),
+      });
+    },
+    async doDeleteJob(jobId) {
+      if (!this.apiBase) return;
+      try {
+        const response = await fetch(`${this.apiBase}/api/v1/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error(`Delete failed (${response.status})`);
+        this.$toast?.add({ severity: 'success', summary: 'Job deleted', detail: `Job record ${this.shortId(jobId)} has been removed.`, life: 3000 });
+        await this.refreshNow();
       } catch (err) {
         this.$toast?.add({ severity: 'error', summary: 'Delete failed', detail: err instanceof Error ? err.message : 'Unknown error', life: 5000 });
       }
