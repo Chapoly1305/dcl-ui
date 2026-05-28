@@ -478,6 +478,15 @@
                             <i :class="checklistIcon(sec.id)" :style="{ color: checklistIconColor(sec.id), fontSize: '1.3rem' }" />
                           </div>
                           <div class="cl-outcome">{{ sec.outcome }}</div>
+                          <Button
+                            v-if="sectionHasTranscript(sec.id)"
+                            label="View AI transcript"
+                            icon="pi pi-comments"
+                            text
+                            size="small"
+                            class="cl-transcript-btn mt-1"
+                            @click.stop="openTranscriptDialog(sec.id)"
+                          />
                         </div>
                       </div>
                       <div v-else class="text-xs text-400 italic">No checks defined for this stage.</div>
@@ -529,11 +538,20 @@
         </TabView>
       </div>
     </Sidebar>
+
+    <AiTranscriptDialog
+      v-if="selectedResultId"
+      :visible="transcriptDialogVisible"
+      :result-id="selectedResultId"
+      :section-id="transcriptSectionId"
+      @update:visible="transcriptDialogVisible = $event"
+    />
   </div>
 </template>
 
 <script>
 import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
+import AiTranscriptDialog from '@/components/AiTranscriptDialog.vue';
 
 // Display config lives in utils/pipelineDisplay.js (shared with the live
 // progress modal). Edit there to rename, add, or reorder stages — every UI
@@ -547,6 +565,7 @@ import {
 
 export default {
   name: 'FirmwareScanResults',
+  components: { AiTranscriptDialog },
   data() {
     const { requestBase } = resolveMatteroverwatchApiBase();
     return {
@@ -591,7 +610,9 @@ export default {
       tableFiltersExpanded: false,
       detailTabIndex: 0,
       reportSidebarVisible: false,
-      expandedNodes: {}
+      expandedNodes: {},
+      transcriptDialogVisible: false,
+      transcriptSectionId: '',
     };
   },
   computed: {
@@ -871,6 +892,18 @@ export default {
       if (s === 'failed' || s === 'pending') return '#ef4444';
       if (s === 'skipped') return '#9ca3af';
       return '#eab308';
+    },
+    sectionHasTranscript(secId) {
+      // A section's run_section() output dict carries `transcript_path` when
+      // the LLM agent emitted a transcript (currently CA; future N/O/R will too).
+      // Surface a "View AI transcript" button on those cards.
+      const r = this.checklistResults[secId];
+      const path = r?.output?.transcript_path;
+      return typeof path === 'string' && path.length > 0;
+    },
+    openTranscriptDialog(secId) {
+      this.transcriptSectionId = secId;
+      this.transcriptDialogVisible = true;
     },
     checklistOutcome(sec) {
       const r = this.checklistResults[sec.id];
