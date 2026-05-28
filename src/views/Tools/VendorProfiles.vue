@@ -54,6 +54,8 @@
               :totalRecords="totalCount"
               :sortField="uiSortField"
               :sortOrder="sortOrder"
+              v-model:expandedRows="expandedRows"
+              dataKey="vendor_name"
               responsiveLayout="scroll"
               @page="onPage"
               @sort="onSort"
@@ -95,34 +97,19 @@
               <Column header="Actions" style="min-width:80px">
                 <template #body="slotProps">
                   <Button
-                    icon="pi pi-chevron-down"
+                    :icon="expandedRows.includes(slotProps.data.vendor_name) ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
                     class="p-button-sm p-button-text"
-                    v-tooltip.top="expandedVendor === slotProps.data.vendor_name ? 'Collapse' : 'Expand devices'"
-                    @click="toggleExpand(slotProps.data.vendor_name)"
+                    v-tooltip.top="expandedRows.includes(slotProps.data.vendor_name) ? 'Collapse' : 'Expand devices'"
+                    @click="toggleExpand(slotProps.data)"
                   />
                 </template>
               </Column>
-            </DataTable>
-
-            <div v-if="!loading && !error && totalCount === 0" class="flex flex-column align-items-center justify-content-center p-5 text-500">
-              <i class="pi pi-briefcase text-4xl mb-3"></i>
-              <span class="text-lg">No vendor profiles found. Seed device profiles first.</span>
-            </div>
-
-            <!-- Expanded vendor detail -->
-            <div v-if="expandedVendor" class="mt-3">
-              <Card>
-                <template #title>
-                  <div class="flex align-items-center justify-content-between">
-                    <span>{{ expandedVendor }} — Devices</span>
-                    <Button icon="pi pi-times" class="p-button-text p-button-sm p-button-rounded" @click="expandedVendor = null; expandedDevices = []" />
-                  </div>
-                </template>
-                <template #content>
-                  <div v-if="expandedLoading" class="flex justify-content-center p-3">
+              <template #expansion="slotProps">
+                <div class="p-3">
+                  <div v-if="expandedLoading[slotProps.data.vendor_name]" class="flex justify-content-center p-3">
                     <i class="pi pi-spin pi-spinner text-2xl text-500"></i>
                   </div>
-                  <DataTable v-else :value="expandedDevices" responsiveLayout="scroll" class="p-datatable-sm">
+                  <DataTable v-else :value="expandedDevices[slotProps.data.vendor_name] || []" responsiveLayout="scroll" class="p-datatable-sm">
                     <Column field="vid" header="VID" />
                     <Column field="pid" header="PID" />
                     <Column field="product_name" header="Product Name" />
@@ -142,8 +129,13 @@
                       </template>
                     </Column>
                   </DataTable>
-                </template>
-              </Card>
+                </div>
+              </template>
+            </DataTable>
+
+            <div v-if="!loading && !error && totalCount === 0" class="flex flex-column align-items-center justify-content-center p-5 text-500">
+              <i class="pi pi-briefcase text-4xl mb-3"></i>
+              <span class="text-lg">No vendor profiles found. Seed device profiles first.</span>
             </div>
           </template>
         </Card>
@@ -172,9 +164,9 @@ export default {
       filtersExpanded: false,
       filters: { q: '' },
       vendorStats: { total_vendors: 0, total_devices: 0, total_analyzed: 0, avg_devices_per_vendor: 0, analyzed_coverage_pct: 0 },
-      expandedVendor: null,
-      expandedDevices: [],
-      expandedLoading: false,
+      expandedRows: [],
+      expandedDevices: {},
+      expandedLoading: {},
     };
   },
   computed: {
@@ -195,8 +187,8 @@ export default {
     selectedNetwork(next, prev) {
       if (next === prev) return;
       this.pageFirst = 0;
-      this.expandedVendor = null;
-      this.expandedDevices = [];
+      this.expandedRows = [];
+      this.expandedDevices = {};
       this.loadProfiles();
     },
   },
@@ -266,25 +258,30 @@ export default {
         return value;
       }
     },
-    async toggleExpand(vendorName) {
-      if (this.expandedVendor === vendorName) {
-        this.expandedVendor = null;
-        this.expandedDevices = [];
+    toggleExpand(rowData) {
+      const key = rowData.vendor_name;
+      const idx = this.expandedRows.indexOf(key);
+      if (idx >= 0) {
+        this.expandedRows.splice(idx, 1);
         return;
       }
-      this.expandedVendor = vendorName;
-      this.expandedDevices = [];
-      this.expandedLoading = true;
+      this.expandedRows.push(key);
+      this.loadDevicesForVendor(key);
+    },
+    async loadDevicesForVendor(vendorName) {
+      if (this.expandedDevices[vendorName] && this.expandedDevices[vendorName].length > 0) return;
+      this.expandedDevices[vendorName] = [];
+      this.expandedLoading[vendorName] = true;
       try {
         const resp = await fetch(`${this.apiBase}/api/v1/profiling/vendors/${encodeURIComponent(vendorName)}?network=${this.selectedNetwork}`);
         if (resp.ok) {
           const data = await resp.json();
-          this.expandedDevices = Array.isArray(data.devices) ? data.devices : [];
+          this.expandedDevices[vendorName] = Array.isArray(data.devices) ? data.devices : [];
         }
       } catch {
-        this.expandedDevices = [];
+        this.expandedDevices[vendorName] = [];
       } finally {
-        this.expandedLoading = false;
+        this.expandedLoading[vendorName] = false;
       }
     },
   },

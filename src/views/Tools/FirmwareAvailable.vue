@@ -76,10 +76,6 @@
                   <InputText v-model="filters.blockHeight" class="w-full p-inputtext-sm" placeholder="Contains..." @keyup.enter="applyFilters" />
                 </div>
                 <div class="col-6 md:col-2 pt-0">
-                  <label class="filter-label">TxHash (First 8)</label>
-                  <InputText v-model="filters.txHashFirst8" class="w-full p-inputtext-sm" placeholder="Contains..." @keyup.enter="applyFilters" />
-                </div>
-                <div class="col-6 md:col-2 pt-0">
                   <label class="filter-label">Conformance</label>
                   <Dropdown
                     v-model="filters.formalityConformance"
@@ -164,16 +160,9 @@
               <Column field="pid" header="PID" sortable></Column>
               <Column field="vendorName" header="Vendor Name" sortable></Column>
               <Column field="productName" header="Product Name" sortable></Column>
-              <Column field="softwareVersion" header="Software Version" sortable></Column>
-              <Column field="softwareVersionString" header="Software Version String" sortable></Column>
               <Column field="releaseTime" header="Release Time" sortable>
                 <template #body="slotProps">
                   {{ displayValue(formatReleaseTime(slotProps.data.releaseTime)) }}
-                </template>
-              </Column>
-              <Column field="txHash" header="TxHash (First 8)">
-                <template #body="slotProps">
-                  <code>{{ displayValue(txHashFirst8(slotProps.data.txHash)) }}</code>
                 </template>
               </Column>
               <Column field="isDownloaded" header="Downloaded" headerClass="text-center" bodyClass="text-center">
@@ -348,11 +337,8 @@ export default {
         pid: '',
         vendorName: '',
         productName: '',
-        softwareVersion: '',
-        softwareVersionString: '',
         releaseTime: '',
         blockHeight: '',
-        txHashFirst8: '',
         formalityConformance: null,
         isDownloaded: null,
         analysisStatus: null
@@ -393,10 +379,6 @@ export default {
         vendor_name: 'vendor_name',
         productName: 'product_name',
         product_name: 'product_name',
-        softwareVersion: 'software_version',
-        software_version: 'software_version',
-        softwareVersionString: 'software_version_string',
-        software_version_string: 'software_version_string',
         blockHeight: 'block_height',
         block_height: 'block_height',
         formalityConformance: 'formality_conformance',
@@ -418,11 +400,8 @@ export default {
         ['pid', this.filters.pid],
         ['vendor_name', this.filters.vendorName],
         ['product_name', this.filters.productName],
-        ['software_version', this.filters.softwareVersion],
-        ['software_version_string', this.filters.softwareVersionString],
         ['release_time', this.filters.releaseTime],
         ['block_height', this.filters.blockHeight],
-        ['tx_hash_first8', this.filters.txHashFirst8],
         ['formality_conformance', this.filters.formalityConformance],
         ['is_downloaded', this.filters.isDownloaded],
         ['analysis_status', this.filters.analysisStatus]
@@ -481,11 +460,8 @@ export default {
           pid: item.pid,
           vendorName: item.vendor_name || '',
           productName: item.product_name || '',
-          softwareVersion: item.software_version,
-          softwareVersionString: item.software_version_string || '',
           releaseTime: item.release_time || null,
           blockHeight: item.block_height,
-          txHash: item.tx_hash_first8 || '',
           firmwareSha256: item.firmware_sha256 || '',
           isDownloaded: Boolean(item.is_downloaded),
           analysisLatestStatus: this.normalizeAnalysisStatus(item.analysis_latest_status),

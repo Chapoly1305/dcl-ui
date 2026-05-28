@@ -10,7 +10,7 @@
 // (FirmwareJobProgressModal.vue) import from here. Add a new stage / card
 // by editing DISPLAY_STAGES — every UI surface picks it up.
 //
-// A backend stage is "hidden" iff no DISPLAY_STAGES entry lists it in its
+// provenance backend stage is "hidden" iff no DISPLAY_STAGES entry lists it in its
 // `backend` array. That's how IDA Headless / Sidekick / Capability Recovery
 // stay out of the timeline without an explicit denylist.
 
@@ -20,39 +20,39 @@ export const DISPLAY_STAGES = [
         label: 'OTA Image Parse',
         backend: ['matter_ota'],
         sections: [
-            { id: 'E', name: 'Manifest-layer Integrity', desc: 'Verify OtaChecksum from DCL matches actual downloaded image' },
-            { id: 'F', name: 'Matter OTA Image Format', desc: 'Magic number check, TLV parse, and header field validation' },
-            { id: 'G', name: 'Image Digest / Payload Extraction', desc: 'Extract payload from Matter wrapper, verify ImageDigest' }
+            { id: 'manifest_integrity', name: 'Manifest-layer Integrity', desc: 'Verify OtaChecksum from DCL matches actual downloaded image' },
+            { id: 'ota_format', name: 'Matter OTA Image Format', desc: 'Magic number check, TLV parse, and header field validation' },
+            { id: 'payload_extraction', name: 'Image Digest / Payload Extraction', desc: 'Extract payload from Matter wrapper, verify ImageDigest' }
         ]
     },
     {
         id: 'chipset',
         label: 'Identify Chipset',
         backend: ['chipset_identify'],
-        sections: [{ id: 'H', name: 'Payload Type / Firmware Orientation', desc: 'Identify file type, architecture, platform, and load segments' }]
+        sections: [{ id: 'chipset_identify', name: 'Payload Type / Firmware Orientation', desc: 'Identify file type, architecture, platform, and load segments' }]
     },
     {
         id: 'firmware_encryption',
         label: 'Firmware Encryption',
         backend: ['chipset_identify'],
         sections: [
-            { id: 'I', name: 'Encryption Detection', desc: 'Global + sliding-window Shannon entropy, encryption detection' },
-            { id: 'WK_ENC', name: 'Weak Key Test', desc: 'Probe known-weak keys when encryption is confirmed; skipped if firmware is not encrypted' }
+            { id: 'entropy', name: 'Encryption Detection', desc: 'Global + sliding-window Shannon entropy, encryption detection' },
+            { id: 'weak_key_enc', name: 'Weak Key Test', desc: 'Probe known-weak keys when encryption is confirmed; skipped if firmware is not encrypted' }
         ]
     },
     {
         id: 'extract_executable',
         label: 'Extract Executable',
         backend: ['extract_executable'],
-        sections: [{ id: 'Q', name: 'Non-firmware Payload / Contamination', desc: 'Detect non-firmware artifacts (config, certs, backups, debug)' }]
+        sections: [{ id: 'non_firmware', name: 'Non-firmware Payload / Contamination', desc: 'Detect non-firmware artifacts (config, certs, backups, debug)' }]
     },
     {
         id: 'ota_authenticity',
         label: 'OTA Authenticity',
         backend: ['secure_boot_authenticity'],
         sections: [
-            { id: 'L', name: 'Secure Boot', desc: 'Signed-update evidence, signature validation, public-key pinning' },
-            { id: 'WK_OTA', name: 'Weak Key Test', desc: 'Probe known-weak / factory-default signing keys; flag if the OTA signature can be forged with a published key' }
+            { id: 'secure_boot', name: 'Secure Boot', desc: 'Signed-update evidence, signature validation, public-key pinning' },
+            { id: 'weak_key_ota', name: 'Weak Key Test', desc: 'Probe known-weak / factory-default signing keys; flag if the OTA signature can be forged with a published key' }
         ]
     },
     {
@@ -61,7 +61,7 @@ export const DISPLAY_STAGES = [
         backend: ['capability_recovery', 'sdk_version'],
         sections: [
             { id: 'CAP_RECOVERY', name: 'Capability Recovery', desc: 'Recover and normalize capability evidence from firmware artifacts' },
-            { id: 'K', name: 'Matter SDK / Specification Baseline', desc: 'Recover SpecVer from Basic Information cluster, SDK branch estimate' }
+            { id: 'sdk_baseline', name: 'Matter SDK / Specification Baseline', desc: 'Recover SpecVer from Basic Information cluster, SDK branch estimate' }
         ]
     },
     {
@@ -69,19 +69,19 @@ export const DISPLAY_STAGES = [
         label: 'Modular Analysis',
         backend: [],
         sections: [
-            { id: 'CA', name: 'Custom Authenticity Validation', desc: 'Reverse-engineered authenticity check; skipped if Secure Boot is enforced with a strong key' },
-            { id: 'M', name: 'Secrets / Sensitive Material', desc: 'Byte-scan for PEM private-key headers, Matter cert markers, credentials, and known-weak AES keys embedded in the binary' },
-            { id: 'N', name: 'RNG Initialization', desc: 'Verify the firmware seeds its RNG with sufficient entropy before generating session keys and certificates' },
-            { id: 'O', name: 'Backdoor', desc: 'Detect suspicious sinks, hardcoded credentials, and undocumented remote-control paths' },
-            { id: 'P', name: 'Connectivity', desc: 'Map external network endpoints, OTA provider URLs, and beaconing behavior reachable from the firmware' },
-            { id: 'R', name: 'Supply-chain / Integration Failure', desc: 'Aggregate L/N/M signals to flag known SDK-reuse failure modes (reference signing keys, weak seeds, embedded weak keys)' }
+            { id: 'custom_auth', name: 'Custom Authenticity Validation', desc: 'AI-driven: decompiles OTA apply spine, traces crypto gating, classifies authenticity. Transcript available.' },
+            { id: 'secrets', name: 'Secrets / Sensitive Material', desc: 'AI-enriched: byte-scans for embedded secrets, then LLM disambiguates real keys from library refs and hex tables' },
+            { id: 'rng_init', name: 'RNG Initialization', desc: 'AI-enriched: string-scans for entropy sources, then LLM traces init paths through decompiled code to confirm HW RNG' },
+            { id: 'backdoor', name: 'Backdoor', desc: 'AI-driven: decompiles candidate sinks, traces data flow, assesses exploitability, discovers missed backdoor patterns' },
+            { id: 'connectivity', name: 'Connectivity', desc: 'AI-enriched: extracts endpoints, then LLM researches unclassified URLs/IPs for privacy risk and C2 indicators' },
+            { id: 'supply_chain', name: 'Supply-chain / Integration Failure', desc: 'AI-enriched: aggregates secure_boot/rng_init/secrets/sdk_baseline signals, then LLM identifies SDK-reuse patterns and recommends remediation' }
         ]
     },
     {
         id: 'finalize',
         label: 'Final Report',
         backend: ['finalize'],
-        sections: [{ id: 'S', name: 'Scoring / Prioritization / Triage', desc: 'Aggregate conformance + security scores, assign P0-P3 priority' }]
+        sections: [{ id: 'scoring', name: 'Scoring / Prioritization / Triage', desc: 'Aggregate conformance + security scores, assign P0-P3 priority' }]
     }
 ];
 

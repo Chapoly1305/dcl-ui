@@ -575,9 +575,33 @@ export default {
     },
     verdictBadgeSeverity(verdict) {
       if (!verdict) return 'secondary';
+      // Generic: any overall_risk at critical/high → danger
+      if (verdict.overall_risk === 'critical' || verdict.overall_risk === 'high') return 'danger';
+      if (verdict.overall_risk === 'medium') return 'warning';
+      if (verdict.overall_risk === 'low' || verdict.overall_risk === 'none') return 'success';
+      // CA-specific: has_custom_validation is positive
       if (verdict.has_custom_validation) return 'success';
-      if (verdict.category === 'no-check') return 'danger';
-      if (verdict.category === 'indeterminate') return 'info';
+      // Backdoor-specific: has_backdoor
+      if (verdict.has_backdoor) return 'danger';
+      // Secrets-specific: has_private_key or has_weak_crypto_key
+      if (verdict.has_private_key || verdict.has_weak_crypto_key) return 'danger';
+      if (verdict.has_exposed_credential) return 'warning';
+      // RNG-specific: hw_rng_confirmed is positive, weak_seed_detected is danger
+      if (verdict.hw_rng_confirmed) return 'success';
+      if (verdict.weak_seed_detected) return 'danger';
+      // Connectivity-specific: has_suspicious_endpoints
+      if (verdict.has_suspicious_endpoints) return 'danger';
+      if (verdict.has_privacy_concern) return 'warning';
+      // Category field (CA, backdoor findings)
+      if (verdict.category === 'no-check' || verdict.category === 'backdoor'
+          || verdict.category === 'hardcoded-credential' || verdict.category === 'command-injection'
+          || verdict.category === 'auth-bypass') return 'danger';
+      if (verdict.category === 'indeterminate' || verdict.category === 'weak-check'
+          || verdict.category === 'unclassified_residual') return 'info';
+      if (verdict.category === 'benign_cert_only' || verdict.category === 'false_positive'
+          || verdict.category === 'clean_integration' || verdict.category === 'no-issue'
+          || verdict.category === 'crypto-soft' || verdict.category === 'crypto-hw'
+          || verdict.category === 'compare-and-gate' || verdict.category === 'bootloader-enforces') return 'success';
       return 'secondary';
     },
     formatElapsed(ms) {
