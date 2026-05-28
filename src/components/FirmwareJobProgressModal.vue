@@ -106,9 +106,9 @@
         <div v-if="!isConformanceJob && !isPollJob">
           <div class="text-700 font-bold mb-2 ml-1">Pipeline Stages</div>
           <DataTable :value="stages" responsiveLayout="scroll" class="p-datatable-sm custom-stages-table border-1 surface-border border-round">
-            <Column field="name" header="Stage">
+            <Column field="label" header="Stage">
               <template #body="slotProps">
-                <span class="font-medium">{{ stageLabel(slotProps.data.name) }}</span>
+                <span class="font-medium">{{ slotProps.data.label || slotProps.data.name }}</span>
               </template>
             </Column>
             <Column field="status" header="Status" headerClass="text-center" bodyClass="text-center">
@@ -251,8 +251,6 @@
 
 <script>
 import {
-  isToolStage,
-  labelForBackendStage,
   stageSeverity as sharedStageSeverity,
   stageStatusFriendlyLabel,
 } from '@/utils/pipelineDisplay';
@@ -303,11 +301,8 @@ export default {
       return this.payload.summary || { state_label: 'Unknown', message: '' };
     },
     stages() {
-      // Tool/enabler stages have no pass-fail verdict of their own and are
-      // hidden from the timeline. The hide set is derived from the shared
-      // DISPLAY_STAGES config — see utils/pipelineDisplay.js.
       const all = Array.isArray(this.pipeline.stages) ? this.pipeline.stages : [];
-      return all.filter(s => !isToolStage(s?.name));
+      return all.filter(s => s.visible !== false);
     },
     phaseIi() {
       return this.payload.phase_ii || null;
@@ -442,7 +437,6 @@ export default {
       if (text.length <= 16) return text;
       return `${text.slice(0, 8)}...${text.slice(-8)}`;
     },
-    stageLabel(name) { return labelForBackendStage(name); },
     statusLabel(status) { return stageStatusFriendlyLabel(status); },
     statusSeverity(status) { return sharedStageSeverity(status); },
     stateSeverity(status) {
@@ -459,8 +453,13 @@ export default {
     formatDuration(value) {
       const ms = Number(value);
       if (!Number.isFinite(ms) || ms < 0) return '-';
-      if (ms < 1000) return `${ms} ms`;
-      return `${(ms / 1000).toFixed(2)}s`;
+      // Sub-ms stages (e.g. finalize ~60 μs, secure_boot_authenticity ~500 μs)
+      // genuinely ran — render them as microseconds so the table doesn't
+      // imply they were skipped.
+      if (ms < 1) return `${(ms * 1000).toFixed(0)} μs`;
+      if (ms < 10) return `${ms.toFixed(2)} ms`;
+      if (ms < 1000) return `${ms.toFixed(0)} ms`;
+      return `${(ms / 1000).toFixed(2)} s`;
     },
     displayValue(value) {
       if (value === null || value === undefined || value === '') return '-';

@@ -18,7 +18,7 @@ export const DISPLAY_STAGES = [
   {
     id: 'ota_image',
     label: 'OTA Image Parse',
-    backend: ['10_matter_ota'],
+    backend: ['matter_ota'],
     sections: [
       { id: 'E', name: 'Manifest-layer Integrity', desc: 'Verify OtaChecksum from DCL matches actual downloaded image' },
       { id: 'F', name: 'Matter OTA Image Format', desc: 'Magic number check, TLV parse, and header field validation' },
@@ -28,7 +28,7 @@ export const DISPLAY_STAGES = [
   {
     id: 'chipset',
     label: 'Identify Chipset',
-    backend: ['20_chipset_identify'],
+    backend: ['chipset_identify'],
     sections: [
       { id: 'H', name: 'Payload Type / Firmware Orientation', desc: 'Identify file type, architecture, platform, and load segments' },
     ],
@@ -36,7 +36,7 @@ export const DISPLAY_STAGES = [
   {
     id: 'firmware_encryption',
     label: 'Firmware Encryption',
-    backend: ['20_chipset_identify'],
+    backend: ['chipset_identify'],
     sections: [
       { id: 'I', name: 'Encryption Detection', desc: 'Global + sliding-window Shannon entropy, encryption detection' },
       { id: 'WK_ENC', name: 'Weak Key Test', desc: 'Probe known-weak keys when encryption is confirmed; skipped if firmware is not encrypted' },
@@ -45,7 +45,7 @@ export const DISPLAY_STAGES = [
   {
     id: 'extract_executable',
     label: 'Extract Executable',
-    backend: ['30_extract_executable'],
+    backend: ['extract_executable'],
     sections: [
       { id: 'Q', name: 'Non-firmware Payload / Contamination', desc: 'Detect non-firmware artifacts (config, certs, backups, debug)' },
     ],
@@ -53,7 +53,7 @@ export const DISPLAY_STAGES = [
   {
     id: 'ota_authenticity',
     label: 'OTA Authenticity',
-    backend: ['45_secure_boot_authenticity'],
+    backend: ['secure_boot_authenticity'],
     sections: [
       { id: 'L', name: 'Secure Boot', desc: 'Signed-update evidence, signature validation, public-key pinning' },
       { id: 'WK_OTA', name: 'Weak Key Test', desc: 'Probe known-weak / factory-default signing keys; flag if the OTA signature can be forged with a published key' },
@@ -63,8 +63,9 @@ export const DISPLAY_STAGES = [
   {
     id: 'sdk_version',
     label: 'SDK Version Recovery',
-    backend: ['60_sdk_version'],
+    backend: ['capability_recovery', 'sdk_version'],
     sections: [
+      { id: 'CAP_RECOVERY', name: 'Capability Recovery', desc: 'Recover and normalize capability evidence from firmware artifacts' },
       { id: 'K', name: 'Matter SDK / Specification Baseline', desc: 'Recover SpecVer from Basic Information cluster, SDK branch estimate' },
     ],
   },
@@ -81,32 +82,12 @@ export const DISPLAY_STAGES = [
   {
     id: 'finalize',
     label: 'Final Report',
-    backend: ['90_finalize'],
+    backend: ['finalize'],
     sections: [
       { id: 'S', name: 'Scoring / Prioritization / Triage', desc: 'Aggregate conformance + security scores, assign P0-P3 priority' },
     ],
   },
 ];
-
-// Derived: every backend stage name that is currently surfaced somewhere.
-const _VISIBLE_BACKEND = new Set(
-  DISPLAY_STAGES.flatMap(d => d.backend || [])
-);
-
-// True iff the backend stage is a tool / enabler that the UI should hide.
-export function isToolStage(name) {
-  return !_VISIBLE_BACKEND.has(String(name || ''));
-}
-
-// Friendly label for a raw backend stage name. Falls back to the raw name
-// (with the legacy `NN_` prefix stripped) if no display stage owns it.
-export function labelForBackendStage(name) {
-  const key = String(name || '');
-  for (const d of DISPLAY_STAGES) {
-    if ((d.backend || []).includes(key)) return d.label;
-  }
-  return key.replace(/^\d+_/, '').replace(/_/g, ' ') || '-';
-}
 
 // Map any raw status string to one of the five canonical PrimeVue severities.
 //   success    → green PASSED
