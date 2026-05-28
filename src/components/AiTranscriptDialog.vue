@@ -168,14 +168,14 @@
                   <span class="text-xs text-500 ml-2">→ {{ tc.returnedChars }} chars{{ tc.isError ? ' (error)' : '' }}</span>
                   <Button
                     v-if="tc.returnedContent"
-                    :label="tc.showContent ? 'Hide' : 'Show'"
+                    :label="isToolExpanded(round.idx, i) ? 'Hide' : 'Show'"
                     text
                     size="small"
                     class="ml-2"
-                    @click="tc.showContent = !tc.showContent"
+                    @click="toggleTool(round.idx, i)"
                   />
                 </div>
-                <pre v-if="tc.showContent && tc.returnedContent" class="tool-return">{{ tc.returnedContent }}</pre>
+                <pre v-if="isToolExpanded(round.idx, i) && tc.returnedContent" class="tool-return">{{ tc.returnedContent }}</pre>
               </div>
             </div>
           </div>
@@ -221,6 +221,10 @@ export default {
       loading: false,
       error: '',
       data: null,
+      // Mutating a flag on the computed result's child objects doesn't
+      // trigger re-renders, so track tool-row expansion in this reactive
+      // map keyed by "<roundIdx>:<toolCallIdx>".
+      expandedTools: {},
     };
   },
   computed: {
@@ -288,7 +292,6 @@ export default {
               isError: false,
               returnedChars: 0,
               returnedContent: '',
-              showContent: false,
             });
           }
         } else if (k === 'pydantic_ai_message') {
@@ -305,7 +308,6 @@ export default {
                   isError: false,
                   returnedChars: 0,
                   returnedContent: '',
-                  showContent: false,
                 });
               }
             }
@@ -383,12 +385,27 @@ export default {
   methods: {
     onVisibleChange(v) {
       this.$emit('update:visible', v);
+      if (!v) this.expandedTools = {};  // reset expansions when closing
+    },
+    isToolExpanded(roundIdx, toolIdx) {
+      return !!this.expandedTools[`${roundIdx}:${toolIdx}`];
+    },
+    toggleTool(roundIdx, toolIdx) {
+      const key = `${roundIdx}:${toolIdx}`;
+      // Use a fresh object so Vue treats it as a new value (assigning a
+      // property on the existing object would still mutate without
+      // triggering reactivity in some setups).
+      this.expandedTools = {
+        ...this.expandedTools,
+        [key]: !this.expandedTools[key],
+      };
     },
     async fetchTranscript() {
       if (!this.resultId || !this.sectionId) return;
       this.loading = true;
       this.error = '';
       this.data = null;
+      this.expandedTools = {};
       const url = `${this.apiBase}/api/v1/results/${encodeURIComponent(this.resultId)}/sections/${encodeURIComponent(this.sectionId)}/transcript`;
       try {
         const r = await fetch(url);
