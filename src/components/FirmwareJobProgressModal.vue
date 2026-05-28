@@ -103,41 +103,82 @@
           </div>
         </div>
 
+        <!-- Pipeline Stages — timeline + checklist cards (matches scan-results Stages tab) -->
         <div v-if="!isConformanceJob && !isPollJob">
-          <div class="text-700 font-bold mb-2 ml-1">Pipeline Stages</div>
-          <DataTable :value="stages" responsiveLayout="scroll" class="p-datatable-sm custom-stages-table border-1 surface-border border-round">
-            <Column field="label" header="Stage">
-              <template #body="slotProps">
-                <span class="font-medium">{{ slotProps.data.label || slotProps.data.name }}</span>
-              </template>
-            </Column>
-            <Column field="status" header="Status" headerClass="text-center" bodyClass="text-center">
-              <template #body="slotProps">
-                <Tag :value="statusLabel(slotProps.data.status)" :severity="statusSeverity(slotProps.data.status)" class="w-full" />
-              </template>
-            </Column>
-            <Column field="started_at" header="Started">
-              <template #body="slotProps">
-                <span class="text-600">{{ displayValue(formatTimestamp(slotProps.data.started_at)) }}</span>
-              </template>
-            </Column>
-            <Column field="ended_at" header="Ended">
-              <template #body="slotProps">
-                <span class="text-600">{{ displayValue(formatTimestamp(slotProps.data.ended_at)) }}</span>
-              </template>
-            </Column>
-            <Column field="duration_ms" header="Duration" headerClass="text-right" bodyClass="text-right font-mono">
-              <template #body="slotProps">
-                {{ formatDuration(slotProps.data.duration_ms) }}
-              </template>
-            </Column>
-            <Column field="error" header="Notes/Errors">
-              <template #body="slotProps">
-                <span class="text-red-500 font-medium" v-if="slotProps.data.error">{{ slotProps.data.error }}</span>
-                <span class="text-400" v-else>-</span>
-              </template>
-            </Column>
-          </DataTable>
+          <div v-if="displayStageRows.length > 0">
+            <div class="flex align-items-center justify-content-between mb-3">
+              <span class="text-sm text-600">{{ stagesCompleteCount }} / {{ displayStageRows.length }} resolved</span>
+              <span class="text-sm text-500">{{ totalPipelineDuration }}</span>
+            </div>
+            <div class="stage-progress mb-3">
+              <div class="stage-progress-fill" :style="{ width: stagesPercent + '%' }"></div>
+            </div>
+
+            <div class="text-xs mb-3 flex flex-wrap align-items-center gap-3">
+              <span class="cl-tally"><span class="cl-dot cl-dot-success"></span> Passed <strong>{{ stageStatusCounts.passed }}</strong></span>
+              <span class="cl-tally"><span class="cl-dot cl-dot-secondary"></span> Skipped <strong>{{ stageStatusCounts.skipped }}</strong></span>
+              <span class="cl-tally"><span class="cl-dot cl-dot-warning"></span> Pending <strong>{{ stageStatusCounts.pending }}</strong></span>
+              <span class="cl-tally"><span class="cl-dot cl-dot-info"></span> Needs review <strong>{{ stageStatusCounts.review }}</strong></span>
+              <span class="cl-tally"><span class="cl-dot cl-dot-danger"></span> Issues <strong>{{ stageStatusCounts.issue }}</strong></span>
+            </div>
+
+            <div class="text-xs text-500 mb-3 flex flex-wrap align-items-center gap-3">
+              <span class="cl-legend"><span class="cl-badge cl-badge-success">PASSED</span> Passed / OK</span>
+              <span class="cl-legend"><span class="cl-badge cl-badge-warning">PENDING</span> Not checked yet</span>
+              <span class="cl-legend"><span class="cl-badge cl-badge-secondary">SKIPPED</span> Not applicable</span>
+              <span class="cl-legend"><span class="cl-badge cl-badge-danger">ISSUE</span> Confirmed problem</span>
+              <span class="cl-legend"><span class="cl-badge cl-badge-info">NEEDS REVIEW</span> Needs human review</span>
+            </div>
+
+            <div class="stage-timeline">
+              <div v-for="(stage, idx) in displayStageRows" :key="stage.name" class="stage-node" :class="{ 'stage-last': idx === displayStageRows.length - 1 }">
+                <div class="stage-dot" :class="'stage-dot-' + stageSeverity(stage.status)"></div>
+                <div v-if="idx < displayStageRows.length - 1" class="stage-line"></div>
+                <div class="stage-body">
+                  <div class="flex align-items-center justify-content-between gap-2 stage-summary" @click="toggleNode('stage-' + stage.name)">
+                    <div class="flex align-items-center gap-1">
+                      <i class="pi text-xs stage-chevron" :class="isExpanded('stage-' + stage.name) ? 'pi-chevron-down' : 'pi-chevron-right'" />
+                      <span class="font-medium text-sm">{{ stage.label }}</span>
+                      <Tag :value="stageStatusLabel(stage.status)" :severity="stageSeverity(stage.status)" class="ml-1" />
+                    </div>
+                    <span class="text-xs text-500">{{ stage.duration }}</span>
+                  </div>
+                  <div v-if="stage.error && !isExpanded('stage-' + stage.name)" class="stage-error mt-1">
+                    <i class="pi pi-exclamation-triangle text-xs mr-1"></i>
+                    <span class="text-xs">{{ stage.error }}</span>
+                  </div>
+                  <!-- Expanded: metadata + section cards -->
+                  <div v-if="isExpanded('stage-' + stage.name)" class="stage-expanded mt-2">
+                    <div class="stage-meta text-xs text-500 mb-3 flex flex-wrap gap-x-3 gap-y-1">
+                      <span><strong>Status:</strong> {{ stage.status }}</span>
+                      <span><strong>Duration:</strong> {{ stage.duration }}</span>
+                      <span v-if="stage.started_at"><strong>Started:</strong> {{ formatTimestamp(stage.started_at) }}</span>
+                      <span v-if="stage.ended_at"><strong>Ended:</strong> {{ formatTimestamp(stage.ended_at) }}</span>
+                    </div>
+                    <div v-if="stage.error" class="stage-error mb-2">
+                      <i class="pi pi-exclamation-triangle text-xs mr-1"></i>
+                      <span class="text-xs">{{ stage.error }}</span>
+                    </div>
+
+                    <!-- Section checklist cards -->
+                    <div v-if="stageSections(stage.name).length > 0" class="checklist-grid">
+                      <div v-for="sec in stageSections(stage.name)" :key="sec.id" class="checklist-item" :class="'cl-' + checklistStatus(sec.id)">
+                        <div class="cl-header">
+                          <span class="cl-name">{{ sec.name }}</span>
+                          <i :class="checklistIcon(sec.id)" :style="{ color: checklistIconColor(sec.id), fontSize: '1.3rem' }" v-tooltip.top="checklistIconTooltip(sec.id)" />
+                        </div>
+                        <div class="cl-outcome">{{ checklistOutcome(sec) }}</div>
+                      </div>
+                    </div>
+                    <div v-else class="text-xs text-400 italic">No checks defined for this stage.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-500 text-sm p-3 text-center">
+            <i class="pi pi-info-circle mr-2"></i>Waiting for pipeline stages...
+          </div>
         </div>
 
         <!-- Live AI Activity (collapsible) -->
@@ -183,58 +224,6 @@
             Click "Show Stream" to watch the AI work in real time.
           </div>
         </div>
-
-        <!-- Phase II DAG Section (collapsible) -->
-        <div v-if="hasPhaseIi" class="mt-4">
-          <div class="flex align-items-center justify-content-between mb-2">
-            <div class="flex align-items-center gap-2">
-              <span class="text-700 font-bold">Phase 1 &amp; 2 Details</span>
-              <Tag :value="phaseIiSummary" severity="info" class="text-xs" />
-            </div>
-            <Button
-              :label="phaseIiExpanded ? 'Hide Details' : 'Show Details'"
-              :icon="phaseIiExpanded ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
-              class="p-button-text p-button-sm"
-              @click="phaseIiExpanded = !phaseIiExpanded"
-            />
-          </div>
-          <div v-if="phaseIiExpanded" class="phase2-dag">
-            <div class="phase-divider"><Tag value="Phase 1: Spec Conformance" severity="info" /></div>
-            <div v-for="(tier, ti) in phaseIiTiers" :key="'tier-'+ti" class="dag-tier">
-              <div v-if="isPhaseBoundary(ti)" class="phase-divider mt-3 mb-1">
-                <Tag value="Phase 2: Firmware Analysis" severity="warn" />
-              </div>
-              <div class="dag-tier-label">
-                <Tag :value="'Group '+ti" severity="secondary" class="tier-tag" />
-                <span class="text-400 text-xs ml-2">max {{ tier.max_workers }} parallel</span>
-              </div>
-              <div class="dag-tier-nodes">
-                <div
-                  v-for="sec in tier.sections"
-                  :key="sec.id"
-                  class="dag-node"
-                  :class="'dag-node-'+sectionStatus(sec.id)"
-                  v-tooltip.top="sectionTooltip(sec)"
-                >
-                  <div class="dag-node-name" style="font-weight:600;font-size:0.8rem;color:var(--text-color)">{{ sec.name }}</div>
-                  <Tag
-                    :value="sectionStatus(sec.id)"
-                    :severity="sectionStatusSeverity(sec.id)"
-                    class="dag-node-tag"
-                  />
-                </div>
-              </div>
-              <div v-if="ti < phaseIiTiers.length - 1" class="dag-tier-arrow">
-                <i class="pi pi-arrow-down text-400" />
-                <i class="pi pi-arrow-down text-400" />
-                <i class="pi pi-arrow-down text-400" />
-              </div>
-            </div>
-          </div>
-          <div v-else class="text-500 text-sm ml-2 p-2">
-            {{ phaseIiSummaryDetail }}
-          </div>
-        </div>
       </div>
     </div>
 
@@ -251,8 +240,10 @@
 
 <script>
 import {
+  DISPLAY_STAGES,
   stageSeverity as sharedStageSeverity,
   stageStatusFriendlyLabel,
+  stageStatusBadgeLabel,
 } from '@/utils/pipelineDisplay';
 
 export default {
@@ -277,12 +268,12 @@ export default {
       error: null,
       lastUpdatedAt: null,
       pollHandle: null,
-      phaseIiExpanded: false,
       aiStreamExpanded: true,
       aiStreamConnected: false,
       aiEvents: [],
       aiEventSource: null,
       aiStreamRetryHandle: null,
+      expandedNodes: {},
       payload: {
         job: {},
         pipeline: { run_id: null, current_stage: null, percent_complete: 0, stages: [] },
@@ -300,41 +291,80 @@ export default {
     summary() {
       return this.payload.summary || { state_label: 'Unknown', message: '' };
     },
-    stages() {
-      const all = Array.isArray(this.pipeline.stages) ? this.pipeline.stages : [];
-      return all.filter(s => s.visible !== false);
-    },
-    phaseIi() {
-      return this.payload.phase_ii || null;
-    },
-    hasPhaseIi() {
-      return this.phaseIi && this.phaseIi.dag && Array.isArray(this.phaseIi.dag.tiers);
-    },
-    phaseIiTiers() {
-      if (!this.hasPhaseIi) return [];
-      return this.phaseIi.dag.tiers;
-    },
     phaseIiSections() {
-      return this.phaseIi ? (this.phaseIi.sections || {}) : {};
+      const phaseIi = this.payload.phase_ii;
+      return phaseIi ? (phaseIi.sections || {}) : {};
     },
-    phaseIiSummary() {
-      if (!this.hasPhaseIi) return '';
-      const sections = this.phaseIiSections;
-      const total = Object.keys(sections).length;
-      if (total === 0) return 'Pending';
-      const done = Object.values(sections).filter(s => s.status === 'success' || s.status === 'done').length;
-      const running = Object.values(sections).filter(s => s.status === 'running').length;
-      const failed = Object.values(sections).filter(s => s.status === 'failed').length;
-      if (running > 0) return `${done}/${total} done, ${running} running`;
-      if (failed > 0) return `${done}/${total} done, ${failed} failed`;
-      return `${done}/${total} sections`;
+    displayStageRows() {
+      const backendStages = Array.isArray(this.pipeline.stages) ? this.pipeline.stages : [];
+      const byName = new Map(backendStages.map((s) => [String(s?.name || ''), s]));
+      const phaseIiResults = this.phaseIiSections;
+      return DISPLAY_STAGES.map((display) => {
+        const linked = display.backend.map((name) => byName.get(name)).filter(Boolean);
+        const starts = linked.map((s) => s?.started_at).filter(Boolean);
+        const ends = linked.map((s) => s?.ended_at).filter(Boolean);
+        for (const sec of display.sections || []) {
+          const piResult = phaseIiResults[sec.id];
+          if (piResult) {
+            if (piResult.started_at) starts.push(piResult.started_at);
+            if (piResult.ended_at) ends.push(piResult.ended_at);
+          }
+        }
+        starts.sort();
+        ends.sort();
+        const started_at = starts.length ? starts[0] : null;
+        const ended_at = ends.length ? ends[ends.length - 1] : null;
+        const error = linked.map((s) => s?.details?.error || s?.error).filter(Boolean).join('; ') || null;
+        const backendDurationMs = linked.length === 1 && linked[0]?.duration_ms != null ? Number(linked[0].duration_ms) : null;
+        const hasPhaseIiTiming = (display.sections || []).some((s) => {
+          const r = phaseIiResults[s.id];
+          return r && (r.started_at || r.ended_at);
+        });
+        return {
+          id: display.id,
+          name: display.id,
+          label: display.label,
+          status: this.aggregateDisplayStatus(display, linked),
+          started_at,
+          ended_at,
+          duration: this.displayDuration(started_at, ended_at, hasPhaseIiTiming ? null : backendDurationMs),
+          error
+        };
+      });
     },
-    phaseIiSummaryDetail() {
-      if (!this.hasPhaseIi) return '';
-      const sections = this.phaseIiSections;
-      const statuses = Object.entries(sections).map(([id, s]) => `${id}:${s.status}`).join(', ');
-      const pct = this.phaseIi ? this.phaseIi.percent_complete : 0;
-      return `${pct}% complete. Sections: ${statuses || 'none yet'}`;
+    stageStatusCounts() {
+      const counts = { passed: 0, pending: 0, skipped: 0, issue: 0, review: 0 };
+      for (const s of this.displayStageRows) {
+        const sev = this.stageSeverity(s.status);
+        if (sev === 'success') counts.passed += 1;
+        else if (sev === 'warning') counts.pending += 1;
+        else if (sev === 'secondary') counts.skipped += 1;
+        else if (sev === 'danger') counts.issue += 1;
+        else if (sev === 'info') counts.review += 1;
+      }
+      return counts;
+    },
+    stagesCompleteCount() {
+      const c = this.stageStatusCounts;
+      return c.passed + c.skipped + c.issue + c.review;
+    },
+    stagesPercent() {
+      if (this.displayStageRows.length === 0) return 0;
+      return Math.round((this.stagesCompleteCount / this.displayStageRows.length) * 100);
+    },
+    totalPipelineDuration() {
+      const rows = this.displayStageRows;
+      if (rows.length === 0) return '';
+      const first = rows[0]?.started_at;
+      const last = rows[rows.length - 1]?.ended_at;
+      if (!first || !last) return '';
+      const start = new Date(first);
+      const end = new Date(last);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return '';
+      const ms = end.getTime() - start.getTime();
+      if (ms < 0) return '';
+      if (ms < 1000) return `Total: ${ms} ms`;
+      return `Total: ${(ms / 1000).toFixed(2)} s`;
     },
     aiStreamSummary() {
       const n = this.aiEvents.length;
@@ -439,11 +469,12 @@ export default {
       return `${text.slice(0, 8)}...${text.slice(-8)}`;
     },
     statusLabel(status) { return stageStatusFriendlyLabel(status); },
-    statusSeverity(status) { return sharedStageSeverity(status); },
+    stageSeverity(status) { return sharedStageSeverity(status); },
     stateSeverity(status) {
-      // Job-level state (running / done / failed / pending) — narrower than
-      // section status, but use the same severity mapping for consistency.
       return sharedStageSeverity(status);
+    },
+    stageStatusLabel(status) {
+      return stageStatusBadgeLabel(status);
     },
     formatTimestamp(value) {
       if (!value) return '';
@@ -451,49 +482,119 @@ export default {
       if (Number.isNaN(dt.getTime())) return String(value);
       return dt.toLocaleString();
     },
-    formatDuration(value) {
-      const ms = Number(value);
-      if (!Number.isFinite(ms) || ms < 0) return '-';
-      // Sub-ms stages (e.g. finalize ~60 μs, secure_boot_authenticity ~500 μs)
-      // genuinely ran — render them as microseconds so the table doesn't
-      // imply they were skipped.
-      if (ms < 1) return `${(ms * 1000).toFixed(0)} μs`;
-      if (ms < 10) return `${ms.toFixed(2)} ms`;
-      if (ms < 1000) return `${ms.toFixed(0)} ms`;
+    displayDuration(startedAt, endedAt, durationMs) {
+      if (durationMs != null && Number.isFinite(durationMs) && durationMs >= 0) {
+        if (durationMs < 1) return `${(durationMs * 1000).toFixed(0)} μs`;
+        if (durationMs < 10) return `${durationMs.toFixed(2)} ms`;
+        if (durationMs < 1000) return `${durationMs.toFixed(0)} ms`;
+        return `${(durationMs / 1000).toFixed(2)} s`;
+      }
+      const start = startedAt ? new Date(startedAt) : null;
+      const end = endedAt ? new Date(endedAt) : null;
+      if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return '-';
+      const ms = end.getTime() - start.getTime();
+      if (ms < 0) return '-';
+      if (ms < 1000) return `${ms} ms`;
       return `${(ms / 1000).toFixed(2)} s`;
     },
     displayValue(value) {
       if (value === null || value === undefined || value === '') return '-';
       return value;
     },
-    sectionStatus(sectionId) {
-      const s = this.phaseIiSections[sectionId];
-      return s ? s.status : 'pending';
-    },
-    sectionStatusSeverity(sectionId) {
-      return sharedStageSeverity(this.sectionStatus(sectionId));
-    },
-    sectionTooltip(sec) {
-      const s = this.phaseIiSections[sec.id];
-      const status = s ? s.status : 'pending';
-      const runner = sec.runner || 'code';
-      let tip = `${sec.id}: ${sec.name}\nStatus: ${status}\nRunner: ${runner}`;
-      if (s && s.error) tip += `\nError: ${s.error.substring(0, 120)}`;
-      return tip;
-    },
-    isPhaseBoundary(ti) {
-      // Phase 2 starts at the first tier where sections have phase=2
-      const tier = this.phaseIiTiers[ti];
-      if (!tier || !tier.sections || !tier.sections.length) return false;
-      const sec = tier.sections[0];
-      if (sec.phase === 2) {
-        // Only show the divider at the FIRST phase-2 tier
-        if (ti === 0) return false;
-        const prevTier = this.phaseIiTiers[ti - 1];
-        const prevSec = prevTier?.sections?.[0];
-        return !prevSec || prevSec.phase !== 2;
+    toggleNode(key) {
+      const next = { ...this.expandedNodes };
+      if (next[key]) {
+        delete next[key];
+      } else {
+        next[key] = true;
       }
-      return false;
+      this.expandedNodes = next;
+    },
+    isExpanded(key) {
+      return !!this.expandedNodes[key];
+    },
+    aggregateDisplayStatus(display, linkedBackendStages) {
+      const sectionSeverities = display.sections.map((def) => {
+        const r = this.phaseIiSections[def.id];
+        return this.stageSeverity(r ? r.status : 'pending');
+      });
+      const backendSeverities = linkedBackendStages.map((s) => this.stageSeverity(s?.status || ''));
+      const all = [...sectionSeverities, ...backendSeverities];
+      if (!all.length) return 'pending';
+      if (all.includes('danger')) return 'issue';
+      if (all.includes('info')) return 'needs_review';
+      if (all.every((s) => s === 'secondary')) return 'skipped';
+      if (all.includes('warning')) return 'pending';
+      if (all.includes('success')) return 'passed';
+      return 'pending';
+    },
+    stageSections(displayId) {
+      const display = DISPLAY_STAGES.find((d) => d.id === displayId);
+      if (!display) return [];
+      return display.sections.map((def) => {
+        const result = this.phaseIiSections[def.id] || null;
+        const status = result ? result.status : 'pending';
+        return {
+          ...def,
+          result,
+          status,
+          outcome: status === 'pending' ? def.desc : this.checklistOutcome({ id: def.id, runner: result?.runner || 'code' })
+        };
+      });
+    },
+    checklistStatus(secId) {
+      const r = this.phaseIiSections[secId];
+      if (!r) return 'pending';
+      return r.status || 'pending';
+    },
+    checklistIcon(secId) {
+      const s = this.checklistStatus(secId);
+      if (s === 'success' || s === 'done') return 'pi pi-check-circle';
+      if (s === 'failed') return 'pi pi-times-circle';
+      if (s === 'skipped') return 'pi pi-minus-circle';
+      if (s === 'running') return 'pi pi-spin pi-spinner';
+      return 'pi pi-exclamation-triangle';
+    },
+    checklistIconColor(secId) {
+      const s = this.checklistStatus(secId);
+      if (s === 'success' || s === 'done') return '#22c55e';
+      if (s === 'failed') return '#ef4444';
+      if (s === 'skipped') return '#9ca3af';
+      if (s === 'running') return '#3b82f6';
+      return '#eab308';
+    },
+    checklistIconTooltip(secId) {
+      return stageStatusBadgeLabel(this.checklistStatus(secId));
+    },
+    checklistOutcome(sec) {
+      const r = this.phaseIiSections[sec.id];
+      if (!r) {
+        if (sec.runner === 'llm') return 'Not evaluated — LLM analysis not yet configured';
+        if (sec.runner === 'hybrid') return 'Not evaluated — hybrid analysis pending';
+        return 'Not evaluated — run analysis to check';
+      }
+      if (r.status === 'skipped') {
+        if (sec.runner === 'llm' || sec.runner === 'hybrid') return 'Deferred — LLM analysis not yet configured';
+        return 'Skipped — dependency not met';
+      }
+      if (r.status === 'failed') {
+        const detail = r.output?.detail || r.output?.verdict;
+        if (detail) return String(detail).substring(0, 160);
+        return r.error ? r.error.substring(0, 120) : 'Check failed';
+      }
+      if (r.status === 'needs_review') {
+        const detail = r.output?.detail || r.output?.verdict;
+        if (detail) return String(detail).substring(0, 160);
+        return 'Needs review — analysis surfaced an inconclusive signal';
+      }
+      if (r.status === 'success' || r.status === 'done') {
+        const output = r.output || {};
+        const keys = Object.keys(output).filter((k) => !k.startsWith('_')).slice(0, 3);
+        if (keys.length === 0) return 'Passed';
+        return `Verified: ${keys.join(', ')}`;
+      }
+      if (r.status === 'running') return 'In progress...';
+      return 'Not evaluated';
     },
     openAiStream() {
       const id = String(this.jobId || '').trim();
@@ -517,8 +618,6 @@ export default {
         });
         es.addEventListener('error', () => {
           this.aiStreamConnected = false;
-          // Browser will normally auto-retry; we don't manually reopen unless
-          // the connection stays dropped — keep handle around so retry uses it.
         });
       } catch (_err) {
         this.aiStreamConnected = false;
@@ -536,7 +635,6 @@ export default {
       this.aiStreamConnected = false;
     },
     pushAiEvent(ev) {
-      // Keep a bounded ring buffer so long jobs don't blow up memory.
       const MAX_EVENTS = 500;
       this.aiEvents.push(ev);
       if (this.aiEvents.length > MAX_EVENTS) {
@@ -605,100 +703,209 @@ button[data-pd-tooltip] {
 .job-progress-content .summary-row {
   margin-bottom: 0.45rem;
 }
-.custom-stages-table :deep(.p-datatable-thead > tr > th) {
-  background: #f9fafb;
+
+/* ---- Stage Progress Bar ---- */
+.stage-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+.stage-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: #22c55e;
+  transition: width 0.3s ease;
 }
 
-/* Phase II DAG */
-.phase2-dag {
-  border: 1px solid var(--surface-border, #dee2e6);
-  border-radius: 8px;
-  padding: 16px;
-  background: var(--surface-ground, #f8f9fa);
-  max-height: 500px;
-  overflow-y: auto;
-}
-.dag-tier {
-  display: flex;
-  flex-direction: column;
+/* ---- Status tallies and legend pills ---- */
+.cl-tally {
+  display: inline-flex;
   align-items: center;
-  margin-bottom: 4px;
+  gap: 0.35rem;
+  color: #334155;
 }
-.dag-tier-label {
-  display: flex;
+.cl-tally strong {
+  color: #0f172a;
+  font-weight: 700;
+  margin-left: 0.15rem;
+}
+.cl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.cl-dot-success { background: #22c55e; }
+.cl-dot-danger { background: #ef4444; }
+.cl-dot-info { background: #3b82f6; }
+.cl-dot-warning { background: #f59e0b; }
+.cl-dot-secondary { background: #9ca3af; }
+
+.cl-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  margin-right: 0.35rem;
+  line-height: 1.4;
+}
+.cl-badge-success { background: #dcfce7; color: #15803d; }
+.cl-badge-danger { background: #fee2e2; color: #b91c1c; }
+.cl-badge-info { background: #dbeafe; color: #1d4ed8; }
+.cl-badge-warning { background: #fef9c3; color: #a16207; }
+.cl-badge-secondary { background: #f3f4f6; color: #4b5563; }
+.cl-legend {
+  font-size: 0.85rem;
+  display: inline-flex;
   align-items: center;
-  margin-bottom: 6px;
+  gap: 3px;
 }
-.tier-tag {
-  font-size: 0.8rem;
+
+/* ---- Stage Timeline ---- */
+.stage-timeline {
+  position: relative;
 }
-.dag-tier-nodes {
+.stage-node {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  position: relative;
+  padding-bottom: 0.7rem;
+}
+.stage-node.stage-last {
+  padding-bottom: 0;
+}
+.stage-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-top: 3px;
+  flex-shrink: 0;
+  z-index: 1;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px currentColor;
+}
+.stage-line {
+  position: absolute;
+  left: 5px;
+  top: 18px;
+  width: 2px;
+  height: calc(100% - 8px);
+  background: #e5e7eb;
+  z-index: 0;
+}
+.stage-body {
+  flex: 1;
+  min-width: 0;
+}
+.stage-dot-success { color: #22c55e; background: #22c55e; }
+.stage-dot-danger { color: #ef4444; background: #ef4444; }
+.stage-dot-info { color: #3b82f6; background: #3b82f6; }
+.stage-dot-warning { color: #f59e0b; background: #f59e0b; }
+.stage-dot-secondary { color: #9ca3af; background: #9ca3af; }
+
+/* Expand/collapse */
+.stage-chevron {
+  flex-shrink: 0;
+  font-size: 0.7rem !important;
+  color: #6b7280;
+  transition: transform 0.15s ease;
+}
+.stage-summary {
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background 0.1s ease;
+}
+.stage-summary:hover {
+  background: #f3f4f6;
+}
+.stage-expanded {
+  margin-top: 8px;
+}
+.stage-meta {
+  opacity: 0.85;
+  line-height: 1.6;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
+  column-gap: 1.5rem;
+  row-gap: 0.25rem;
 }
-.dag-node {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 2px solid var(--surface-border, #dee2e6);
-  background: #fff;
-  min-width: 100px;
-  max-width: 150px;
-  transition: transform 0.15s, box-shadow 0.15s;
-  cursor: default;
-}
-.dag-node:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-.dag-node-name {
-  font-size: 0.78rem;
-  color: var(--text-color-secondary, #6c757d);
-  text-align: center;
-  line-height: 1.3;
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.stage-meta > span {
   white-space: nowrap;
 }
-.dag-node-tag {
-  transform: scale(0.75);
-  transform-origin: center;
-  margin-top: 2px;
+.stage-meta > span strong {
+  margin-right: 0.35rem;
 }
-.phase-divider {
-  display: flex;
-  justify-content: center;
-  padding: 2px 0;
+.stage-error {
+  padding: 0.35rem 0.5rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #991b1b;
 }
-.dag-tier-arrow {
+
+/* ---- Checklist cards ---- */
+.checklist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+.checklist-item {
+  border: 1px solid var(--surface-border, #dee2e6);
+  border-radius: 10px;
+  padding: 20px 22px;
+  background: #fff;
+}
+.checklist-item.cl-success,
+.checklist-item.cl-done {
+  border-left: 4px solid #22c55e;
+}
+.checklist-item.cl-failed {
+  border-left: 4px solid #ef4444;
+  background: #fef2f2;
+}
+.checklist-item.cl-needs_review {
+  border-left: 4px solid #3b82f6;
+  background: #eff6ff;
+}
+.checklist-item.cl-running {
+  border-left: 4px solid #3b82f6;
+}
+.checklist-item.cl-skipped {
+  opacity: 0.6;
+  border-left: 4px solid #9ca3af;
+}
+.checklist-item.cl-pending {
+  border-left: 4px solid #f59e0b;
+  opacity: 0.85;
+}
+.cl-header {
   display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   gap: 6px;
-  justify-content: center;
-  padding: 4px 0;
-  opacity: 0.5;
+  margin-bottom: 6px;
+}
+.cl-name {
+  font-size: 0.78rem;
+  color: var(--text-color-secondary, #6c757d);
+  margin-bottom: 0;
+  line-height: 1.3;
+}
+.cl-outcome {
+  font-size: 0.82rem;
+  color: var(--text-color-secondary, #6c757d);
+  line-height: 1.4;
+  border-top: 1px solid var(--surface-ground, #f8f9fa);
+  padding-top: 8px;
 }
 
-/* Status-based border colors — aligned with the 5-state palette. */
-.dag-node-success,
-.dag-node-done           { border-color: #86efac; background: #f0fdf4; } /* green PASSED */
-.dag-node-failed,
-.dag-node-issue          { border-color: #fca5a5; background: #fef2f2; } /* red ISSUE */
-.dag-node-needs_review,
-.dag-node-review,
-.dag-node-uncertain      { border-color: #93c5fd; background: #eff6ff; } /* blue AI REVIEW */
-.dag-node-pending,
-.dag-node-not_checked,
-.dag-node-running        { border-color: #fcd34d; background: #fffbeb; } /* yellow PENDING */
-.dag-node-skipped,
-.dag-node-not_applicable { border-color: #dee2e6; background: #f8f9fa; opacity: 0.6; } /* gray SKIPPED */
-.dag-node-pending { border-color: var(--surface-d, #dee2e6); background: #fff; }
-
-/* Live AI Activity pane */
+/* ---- Live AI Activity pane ---- */
 .ai-stream {
   border: 1px solid var(--surface-border, #dee2e6);
   border-radius: 8px;
@@ -742,13 +949,13 @@ button[data-pd-tooltip] {
   word-break: break-word;
   min-width: 0;
 }
-.ai-event-llm      { border-left-color: #60a5fa; }   /* blue */
+.ai-event-llm      { border-left-color: #60a5fa; }
 .ai-event-llm .ai-event-icon      { color: #60a5fa; }
-.ai-event-tool     { border-left-color: #fbbf24; }   /* amber */
+.ai-event-tool     { border-left-color: #fbbf24; }
 .ai-event-tool .ai-event-icon     { color: #fbbf24; }
-.ai-event-agent    { border-left-color: #a78bfa; }   /* purple */
+.ai-event-agent    { border-left-color: #a78bfa; }
 .ai-event-agent .ai-event-icon    { color: #a78bfa; }
-.ai-event-sidekick { border-left-color: #34d399; }   /* green */
+.ai-event-sidekick { border-left-color: #34d399; }
 .ai-event-sidekick .ai-event-icon { color: #34d399; }
 .ai-event-info     { border-left-color: #64748b; }
 .ai-event-info .ai-event-icon     { color: #94a3b8; }
