@@ -1,12 +1,16 @@
 <template>
-  <Dialog
-    :visible="visible"
-    :modal="true"
-    :closable="true"
-    :dismissable-mask="true"
-    :style="{ width: '80rem', maxWidth: '96vw' }"
-    @update:visible="onVisibleChange"
-  >
+  <Teleport to="body">
+    <Dialog
+      :visible="visible"
+      :modal="true"
+      :closable="true"
+      :dismissable-mask="true"
+      append-to="body"
+      :base-z-index="20000"
+      class="ai-transcript-dialog-root"
+      :style="{ width: '80rem', maxWidth: '96vw' }"
+      @update:visible="onVisibleChange"
+    >
     <template #header>
       <div class="flex align-items-center gap-2">
         <i class="pi pi-comments text-blue-500"></i>
@@ -188,7 +192,8 @@
         </Accordion>
       </div>
     </template>
-  </Dialog>
+    </Dialog>
+  </Teleport>
 </template>
 
 <script>
@@ -408,6 +413,16 @@ export default {
   },
 };
 </script>
+
+<!-- Global (unscoped) style: the dialog is teleported to <body>, so scoped
+     styles wouldn't reach it. Force z-index above the parent Sidebar (which
+     itself sits at ~11000 in this app). -->
+<style>
+.ai-transcript-dialog-root.p-dialog,
+.p-dialog-mask:has(> .ai-transcript-dialog-root) {
+  z-index: 20100 !important;
+}
+</style>
 
 <style scoped>
 .summary-grid {
