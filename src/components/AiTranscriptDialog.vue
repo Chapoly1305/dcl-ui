@@ -48,7 +48,7 @@
             </div>
           </div>
           <div class="summary-cell">
-            <div class="summary-label">Rounds</div>
+            <div class="summary-label">Assistant turns</div>
             <div class="summary-value">{{ data.summary.rounds }}</div>
           </div>
           <div class="summary-cell">
@@ -142,12 +142,90 @@
           </AccordionTab>
         </Accordion>
 
+        <!-- ============= AI self-review (under User prompt) ============= -->
+        <Card class="mb-3 review-card" :class="reviewCardSeverityClass">
+          <template #title>
+            <div class="flex align-items-center gap-2 review-title">
+              <i class="pi pi-comment text-amber-500"></i>
+              <span>AI Self-Review &amp; KB Suggestions</span>
+              <Tag
+                :value="reviewSummaryLabel"
+                :severity="reviewSummarySeverity"
+                class="ml-2"
+              />
+            </div>
+          </template>
+          <template #content>
+            <!-- Placeholder for runs whose verdict predates harness_review -->
+            <div v-if="!harnessReview" class="review-empty review-empty-missing">
+              <i class="pi pi-info-circle text-blue-500 mr-1"></i>
+              No self-review submitted for this run. Runs predating the
+              <code>harness_review</code> schema (or transcripts written before
+              the verdict pydantic model added the field) won't have one — re-run
+              the section to capture it.
+            </div>
+
+            <!-- One-line summary the model wrote -->
+            <div v-if="harnessReview" class="review-summary">{{ harnessReview.summary || '(no summary)' }}</div>
+
+            <!-- Reactive issues observed during the run -->
+            <div v-if="reviewIssues.length" class="review-section">
+              <div class="review-section-head">
+                <i class="pi pi-exclamation-triangle text-orange-500 mr-1"></i>
+                Issues observed ({{ reviewIssues.length }})
+              </div>
+              <div v-for="(it, i) in reviewIssues" :key="`iss-${i}`" class="review-item">
+                <div class="review-item-head">
+                  <i :class="issueCategoryIcon(it.category)" class="mr-1"></i>
+                  <Tag :value="it.category || 'other'" :severity="issueCategorySeverity(it.category)" />
+                </div>
+                <div class="review-item-body">
+                  <div class="review-item-detail"><strong>What:</strong> {{ it.detail }}</div>
+                  <div v-if="it.suggestion" class="review-item-suggestion">
+                    <strong>Fix idea:</strong> {{ it.suggestion }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Proactive KB-quality suggestions -->
+            <div v-if="reviewKbSuggestions.length" class="review-section">
+              <div class="review-section-head">
+                <i class="pi pi-book text-blue-500 mr-1"></i>
+                Suggested KB improvements ({{ reviewKbSuggestions.length }})
+                <span class="text-xs text-500 ml-2">— suggestions only; the team reviews before adopting</span>
+              </div>
+              <div v-for="(s, i) in reviewKbSuggestions" :key="`kb-${i}`" class="review-item">
+                <div class="review-item-head">
+                  <Tag :value="s.kind || 'amend'" :severity="suggestionKindSeverity(s.kind)" />
+                  <code class="review-item-path ml-2">{{ s.path }}</code>
+                </div>
+                <div class="review-item-body">
+                  <div class="review-item-detail"><strong>Change:</strong> {{ s.suggestion }}</div>
+                  <div v-if="s.rationale" class="review-item-suggestion">
+                    <strong>Why:</strong> {{ s.rationale }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- "All good" empty state (only when a review exists and is clean) -->
+            <div
+              v-if="harnessReview && !reviewIssues.length && !reviewKbSuggestions.length"
+              class="review-empty"
+            >
+              <i class="pi pi-check-circle text-green-500 mr-1"></i>
+              Clean run — no issues observed, no KB suggestions filed.
+            </div>
+          </template>
+        </Card>
+
         <!-- ============= Round-by-round timeline ============= -->
         <div v-if="timelineRounds.length" class="mb-3">
-          <h4 class="m-0 mb-2"><i class="pi pi-clock mr-2 text-green-500"></i>Reasoning Timeline ({{ timelineRounds.length }} rounds)</h4>
+          <h4 class="m-0 mb-2"><i class="pi pi-clock mr-2 text-green-500"></i>Reasoning Timeline ({{ timelineRounds.length }} turns)</h4>
           <div v-for="round in timelineRounds" :key="round.idx" class="round-card mb-2">
             <div class="round-header">
-              <span class="round-label">Round {{ round.idx }}</span>
+              <span class="round-label">Turn {{ round.idx }}</span>
               <span v-if="round.thinking" class="text-xs text-500">
                 <i class="pi pi-lightbulb mr-1"></i>{{ round.thinking }} chars of thinking
               </span>
@@ -254,6 +332,40 @@ export default {
     citationList() {
       const fv = this.data?.summary?.final_verdict;
       return Array.isArray(fv?.kb_citations) ? fv.kb_citations : [];
+    },
+    harnessReview() {
+      const hr = this.data?.summary?.final_verdict?.harness_review;
+      if (!hr || typeof hr !== 'object') return null;
+      return hr;
+    },
+    reviewIssues() {
+      const arr = this.harnessReview?.issues;
+      return Array.isArray(arr) ? arr : [];
+    },
+    reviewKbSuggestions() {
+      const arr = this.harnessReview?.kb_suggestions;
+      return Array.isArray(arr) ? arr : [];
+    },
+    reviewSummaryLabel() {
+      if (!this.harnessReview) return 'not submitted';
+      const s = (this.harnessReview.summary || '').trim().toLowerCase();
+      if (s === 'all good' && !this.reviewIssues.length && !this.reviewKbSuggestions.length) {
+        return 'clean run';
+      }
+      const n = this.reviewIssues.length + this.reviewKbSuggestions.length;
+      return `${n} item${n === 1 ? '' : 's'} flagged`;
+    },
+    reviewSummarySeverity() {
+      if (!this.harnessReview) return 'secondary';
+      if (this.reviewIssues.length) return 'warning';
+      if (this.reviewKbSuggestions.length) return 'info';
+      return 'success';
+    },
+    reviewCardSeverityClass() {
+      if (!this.harnessReview) return 'review-card-missing';
+      if (this.reviewIssues.length) return 'review-card-warn';
+      if (this.reviewKbSuggestions.length) return 'review-card-info';
+      return 'review-card-clean';
     },
     timelineRounds() {
       // Reconstruct one "round" per assistant turn / ModelResponse message.
@@ -444,6 +556,35 @@ export default {
       if (typeof args === 'string') return `(${args})`;
       try { return `(${JSON.stringify(args)})`; } catch { return '(?)'; }
     },
+    issueCategoryIcon(cat) {
+      switch (cat) {
+        case 'tool_malfunction': return 'pi pi-wrench text-red-500';
+        case 'tool_missing':     return 'pi pi-question-circle text-orange-500';
+        case 'kb_gap':           return 'pi pi-book text-blue-500';
+        case 'prompt_ambiguity': return 'pi pi-comment text-purple-500';
+        case 'binary_artifact':  return 'pi pi-file text-gray-500';
+        default:                 return 'pi pi-circle text-gray-500';
+      }
+    },
+    issueCategorySeverity(cat) {
+      switch (cat) {
+        case 'tool_malfunction': return 'danger';
+        case 'tool_missing':     return 'warning';
+        case 'kb_gap':           return 'info';
+        case 'prompt_ambiguity': return 'warning';
+        case 'binary_artifact':  return 'secondary';
+        default:                 return 'secondary';
+      }
+    },
+    suggestionKindSeverity(kind) {
+      switch (kind) {
+        case 'add':      return 'success';
+        case 'amend':    return 'info';
+        case 'clarify':  return 'info';
+        case 'remove':   return 'danger';
+        default:         return 'secondary';
+      }
+    },
   },
 };
 </script>
@@ -508,4 +649,42 @@ export default {
 .tool-name { font-weight: 600; color: #1e40af; }
 .tool-args { color: #6b7280; margin-left: 0.4rem; font-size: 0.75rem; }
 .tool-return { margin-top: 0.4rem; max-height: 250px; }
+
+/* ----- AI self-review panel ----- */
+.review-card :deep(.p-card-body) { padding: 0.75rem 1rem; }
+.review-card.review-card-clean   { border-left: 3px solid #10b981; }
+.review-card.review-card-info    { border-left: 3px solid #3b82f6; }
+.review-card.review-card-warn    { border-left: 3px solid #f59e0b; }
+.review-card.review-card-missing { border-left: 3px solid #94a3b8; }
+.review-empty.review-empty-missing {
+  background: #f1f5f9; border-color: #cbd5e1; color: #475569;
+}
+.review-title { font-size: 0.95rem; font-weight: 600; }
+.review-summary {
+  font-size: 0.85rem; color: #374151;
+  background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px;
+  padding: 0.5rem 0.75rem; margin-bottom: 0.6rem;
+}
+.review-section { margin-top: 0.5rem; }
+.review-section-head {
+  font-size: 0.8rem; font-weight: 600; color: #1f2937;
+  display: flex; align-items: center; margin-bottom: 0.3rem;
+}
+.review-item {
+  border: 1px solid #e5e7eb; border-radius: 4px;
+  background: #fafbfc; padding: 0.4rem 0.6rem; margin-bottom: 0.35rem;
+}
+.review-item-head { display: flex; align-items: center; gap: 0.3rem; margin-bottom: 0.2rem; }
+.review-item-path {
+  font-size: 0.75rem; color: #1e40af;
+  background: #eff6ff; padding: 0.05rem 0.35rem; border-radius: 3px;
+}
+.review-item-body { font-size: 0.8rem; color: #374151; }
+.review-item-detail { margin-bottom: 0.15rem; }
+.review-item-suggestion { color: #4b5563; }
+.review-empty {
+  font-size: 0.85rem; color: #047857;
+  background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+}
 </style>
