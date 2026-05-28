@@ -35,7 +35,10 @@ export const DISPLAY_STAGES = [
         id: 'firmware_encryption',
         label: 'Firmware Encryption',
         backend: ['chipset_identify'],
-        sections: [{ id: 'I', name: 'Encryption Detection', desc: 'Global + sliding-window Shannon entropy, encryption detection' }]
+        sections: [
+            { id: 'I', name: 'Encryption Detection', desc: 'Global + sliding-window Shannon entropy, encryption detection' },
+            { id: 'WK_ENC', name: 'Weak Key Test', desc: 'Probe known-weak keys when encryption is confirmed; skipped if firmware is not encrypted' }
+        ]
     },
     {
         id: 'extract_executable',
@@ -47,7 +50,10 @@ export const DISPLAY_STAGES = [
         id: 'ota_authenticity',
         label: 'OTA Authenticity',
         backend: ['secure_boot_authenticity'],
-        sections: [{ id: 'L', name: 'Secure Boot', desc: 'Signed-update evidence, signature validation, public-key pinning' }]
+        sections: [
+            { id: 'L', name: 'Secure Boot', desc: 'Signed-update evidence, signature validation, public-key pinning' },
+            { id: 'WK_OTA', name: 'Weak Key Test', desc: 'Probe known-weak / factory-default signing keys; flag if the OTA signature can be forged with a published key' }
+        ]
     },
     {
         id: 'sdk_version',
@@ -63,8 +69,6 @@ export const DISPLAY_STAGES = [
         label: 'Modular Analysis',
         backend: [],
         sections: [
-            { id: 'WK_ENC', name: 'Weak Key Test (Encryption)', desc: 'Probe known-weak keys when encryption is confirmed; skipped if firmware is not encrypted' },
-            { id: 'WK_OTA', name: 'Weak Key Test (OTA)', desc: 'Probe known-weak / factory-default signing keys; flag if the OTA signature can be forged with a published key' },
             { id: 'CA', name: 'Custom Authenticity Validation', desc: 'Reverse-engineered authenticity check; skipped if Secure Boot is enforced with a strong key' },
             { id: 'M', name: 'Secrets / Sensitive Material', desc: 'Byte-scan for PEM private-key headers, Matter cert markers, credentials, and known-weak AES keys embedded in the binary' },
             { id: 'N', name: 'RNG Initialization', desc: 'Verify the firmware seeds its RNG with sufficient entropy before generating session keys and certificates' },

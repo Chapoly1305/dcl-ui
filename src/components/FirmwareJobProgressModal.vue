@@ -55,10 +55,10 @@ export default {
             return this.stages.filter((s) => s.label && s.label.includes('[Phase I]'));
         },
         modularStages() {
-            return this.stages.filter((s) => ['WK_ENC', 'WK_OTA', 'CA', 'M', 'N', 'O', 'P', 'R'].includes(s.name));
+            return this.stages.filter((s) => ['CA', 'M', 'N', 'O', 'P', 'R'].includes(s.name));
         },
         phase2Stages() {
-            return this.stages.filter((s) => s.label && s.label.includes('[Phase II]') && !['WK_ENC', 'WK_OTA', 'CA', 'M', 'N', 'O', 'P', 'R'].includes(s.name));
+            return this.stages.filter((s) => s.label && s.label.includes('[Phase II]') && !['CA', 'M', 'N', 'O', 'P', 'R'].includes(s.name));
         },
         phaseIi() {
             return this.payload.phase_ii || null;
@@ -369,13 +369,17 @@ export default {
             return 'info';
         },
         buildAiEventMessage(ev) {
-          if (ev.message) return ev.message;
-          const k = ev.event || ev.kind || 'unknown';
-          if (k === 'tool_call') {
-            let args = '';
-            try { args = JSON.stringify(ev.tool_args); } catch(_e) { args = '{}'; }
-            return `Called ${ev.tool_name} with ${args.length < 50 ? args : args.substring(0, 50) + '...'}`;
-          }
+            if (ev.message) return ev.message;
+            const k = ev.event || ev.kind || 'unknown';
+            if (k === 'tool_call') {
+                let args = '';
+                try {
+                    args = JSON.stringify(ev.tool_args);
+                } catch (_e) {
+                    args = '{}';
+                }
+                return `Called ${ev.tool_name} with ${args.length < 50 ? args : args.substring(0, 50) + '...'}`;
+            }
             if (k === 'tool_result') return `Tool ${ev.tool_name} finished in ${ev.tool_duration_ms || '?'} ms`;
             if (k === 'llm_call') return `Calling ${ev.model || 'LLM'}`;
             if (k === 'llm_response') return `LLM response received (${ev.output_tokens || '?'} tokens)`;
