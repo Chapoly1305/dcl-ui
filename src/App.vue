@@ -63,6 +63,7 @@ export default {
                         { label: 'Available Firmware', icon: 'pi pi-fw pi-box', to: '/firmware-security/available-firmware' },
                         { label: 'Scan Queue', icon: 'pi pi-fw pi-clock', to: '/firmware-security/scan-queue' },
                         { label: 'Scan Results', icon: 'pi pi-fw pi-chart-line', to: '/firmware-security/scan-results' },
+                        { label: 'AI Suggestions Review', icon: 'pi pi-fw pi-comments', to: '/firmware-security/ai-suggestions' },
                         { label: 'Device Profiles', icon: 'pi pi-fw pi-cog', to: '/firmware-security/device-profiles' },
                         { label: 'Vendor Profiles', icon: 'pi pi-fw pi-briefcase', to: '/firmware-security/vendor-profiles' },
                         { label: 'Webhook Settings', icon: 'pi pi-fw pi-bell', to: '/firmware-security/webhook-settings' }
