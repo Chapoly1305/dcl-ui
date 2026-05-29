@@ -26,16 +26,9 @@
         <div class="stage-progress-fill" :style="{ width: stagesPercent + '%' }"></div>
       </div>
 
-      <!-- DAG dependency graph view -->
+      <!-- DAG dependency graph view (shares the single status legend below) -->
       <div v-if="dag && viewMode === 'dag'" class="mb-3">
-        <PipelineDagView :dag="dag" :phase-ii-sections="phaseIiSections" />
-        <div class="text-xs text-500 mt-2 flex flex-wrap align-items-center gap-3">
-          <span class="cl-legend"><span class="cl-badge cl-badge-success">PASSED</span> Passed</span>
-          <span class="cl-legend"><span class="cl-badge cl-badge-warning">PENDING</span> Pending</span>
-          <span class="cl-legend"><span class="cl-badge cl-badge-secondary">SKIPPED</span> Skipped</span>
-          <span class="cl-legend"><span class="cl-badge cl-badge-danger">ISSUE</span> Failed</span>
-          <span class="cl-legend"><span class="cl-badge cl-badge-info">REVIEW</span> Needs review</span>
-        </div>
+        <PipelineDagView :dag="dag" :phase-ii-sections="phaseIiSections" :backend-stages="backendStages" />
       </div>
 
       <div v-if="!dag || viewMode === 'timeline'" class="text-xs mb-3 flex flex-wrap align-items-center gap-3">
@@ -117,7 +110,7 @@
 <script>
 import PipelineDagView from '@/components/PipelineDagView.vue';
 import {
-  DISPLAY_STAGES,
+  displayStagesRef,
   stageSeverity,
   stageStatusBadgeLabel,
 } from '@/utils/pipelineDisplay';
@@ -228,7 +221,7 @@ export default {
       return map;
     },
     stageSections(displayId) {
-      const display = DISPLAY_STAGES.find((d) => d.id === displayId);
+      const display = displayStagesRef.value.find((d) => d.id === displayId);
       if (!display) return [];
       const backendMap = this.backendStageByName();
       return display.sections.map((def) => {

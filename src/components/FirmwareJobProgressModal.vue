@@ -203,7 +203,7 @@
 </template>
 
 <script>
-import { DISPLAY_STAGES, aggregateDisplayStatus, stageSeverity } from '@/utils/pipelineDisplay';
+import { displayStagesRef, loadPipeline, aggregateDisplayStatus, stageSeverity } from '@/utils/pipelineDisplay';
 import PipelineStageTimeline from '@/components/PipelineStageTimeline.vue';
 
 export default {
@@ -263,7 +263,7 @@ export default {
       const backendStages = Array.isArray(this.pipeline.stages) ? this.pipeline.stages : [];
       const byName = new Map(backendStages.map((s) => [String(s?.name || ''), s]));
       const phaseIiResults = this.phaseIiSections;
-      return DISPLAY_STAGES.map((display) => {
+      return displayStagesRef.value.map((display) => {
         const linked = display.backend.map((name) => byName.get(name)).filter(Boolean);
         const starts = linked.map((s) => s?.started_at).filter(Boolean);
         const ends = linked.map((s) => s?.ended_at).filter(Boolean);
@@ -331,6 +331,7 @@ export default {
       immediate: true,
       handler(next) {
         if (next) {
+          loadPipeline(this.apiBase);
           this.loadProgress();
           this.startPolling();
           this.openAiStream();

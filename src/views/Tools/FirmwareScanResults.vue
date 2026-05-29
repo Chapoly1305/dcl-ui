@@ -7,7 +7,7 @@ import BatchRunsTab from '@/components/BatchRunsTab.vue';
 // Display config lives in utils/pipelineDisplay.js (shared with the live
 // progress modal). Edit there to rename, add, or reorder stages — every UI
 // surface picks up the change.
-import { DISPLAY_STAGES, aggregateDisplayStatus } from '@/utils/pipelineDisplay';
+import { displayStagesRef, loadPipeline, aggregateDisplayStatus } from '@/utils/pipelineDisplay';
 import PipelineStageTimeline from '@/components/PipelineStageTimeline.vue';
 
 export default {
@@ -276,7 +276,7 @@ export default {
             const backendStages = Array.isArray(this.sanitizedReport?.stages) ? this.sanitizedReport.stages : [];
             const byName = new Map(backendStages.map((s) => [String(s?.name || ''), s]));
             const phaseIiResults = this.phaseIiReport?.results || {};
-            return DISPLAY_STAGES.map((display) => {
+            return displayStagesRef.value.map((display) => {
                 const linked = display.backend.map((name) => byName.get(name)).filter(Boolean);
                 const starts = linked.map((s) => s?.started_at).filter(Boolean);
                 const ends = linked.map((s) => s?.ended_at).filter(Boolean);
@@ -715,6 +715,7 @@ export default {
         }
     },
     mounted() {
+        loadPipeline(this.apiBase);
         const initialQuery = String(this.$route?.query?.q || '').trim();
         if (initialQuery) {
             this.filters.q = initialQuery;

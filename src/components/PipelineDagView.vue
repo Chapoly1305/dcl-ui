@@ -5,8 +5,9 @@
       :nodes-draggable="false"
       :nodes-connectable="false"
       :fit-view-on-init="true"
+      :min-zoom="0.2"
+      :max-zoom="1.5"
       class="dag-flow"
-      :default-viewport="{ zoom: 0.85 }"
       @node-click="onNodeClick"
       @pane-click="selectedNodeId = null"
     >
@@ -15,7 +16,7 @@
           class="dag-node-flat" 
           :class="[
             'dag-node-status-' + data.severity,
-            { 'path-active': isPathActive(id), 'path-dimmed': !!selectedNodeId && !isPathActive(id) }
+            { 'path-active': isPathActive(id) }
           ]"
         >
           <div class="dag-node-main">
@@ -35,12 +36,12 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { VueFlow, useVueFlow } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
 import dagre from 'dagre';
-import { DISPLAY_STAGES, stageSeverity } from '@/utils/pipelineDisplay';
+import { stageSeverity, pipelineSummaryRef } from '@/utils/pipelineDisplay';
 
 const props = defineProps({
   dag: {
@@ -50,10 +51,17 @@ const props = defineProps({
   phaseIiSections: {
     type: Object,
     default: () => ({})
+  },
+  // Raw Phase I backend stages (keyed by name) so ctx_stage / synthetic nodes
+  // in the unified graph can show their real status, not just pending.
+  backendStages: {
+    type: Array,
+    default: () => []
   }
 });
 
 const { fitView } = useVueFlow();
+const container = ref(null);
 const elements = ref([]);
 const selectedNodeId = ref(null);
 const activePathIds = ref(new Set());
@@ -112,10 +120,12 @@ const updateActivePath = (targetId) => {
       const isActive = active.has(el.id);
       return {
         ...el,
-        style: { 
-          stroke: isActive ? '#0969da' : (selectedNodeId.value ? '#d0d7de44' : '#d0d7de'), 
+        // Highlight the selected node's dependency chain in blue; leave every
+        // other edge in normal light grey (no fading) so nothing looks hidden.
+        style: {
+          stroke: isActive ? '#0969da' : '#d0d7de',
           strokeWidth: isActive ? 2.5 : 1.5,
-          opacity: (selectedNodeId.value && !isActive) ? 0.3 : 1
+          opacity: 1
         },
         animated: isActive
       };
@@ -157,140 +167,155 @@ const shortVerdict = (status) => {
   return m[status] || '';
 };
 
-// Simplified graph processing: Filter only visible nodes and reduce redundant edges
-const layoutGraph = (dag) => {
-  const rawEdges = dag.edges || [];
-  
-  // 1. Define nodes visible to the user
-  const visibleIds = new Set();
-  const idToMeta = {};
-  
-  DISPLAY_STAGES.forEach(ds => {
-    ds.sections.forEach(sec => {
-      visibleIds.add(sec.id);
-      idToMeta[sec.id] = { label: sec.name, groupLabel: ds.label };
-    });
-  });
-  
-  // Add common starting points
-  ['provenance', 'acquisition'].forEach(id => {
-    visibleIds.add(id);
-    idToMeta[id] = { label: id.charAt(0).toUpperCase() + id.slice(1), groupLabel: 'Input' };
+const NODE_W = 210;
+const NODE_H = 40;
+
+// Resolve the graph source. Prefer the registry-derived pipeline summary (the
+// whole grouped pipeline — single source of truth via /api/v1/pipeline/
+// components), and fall back to the Phase-II `dag` prop for older reports that
+// only carry the section tiers.
+const resolveSource = () => {
+  const summary = pipelineSummaryRef.value;
+  if (summary && Array.isArray(summary.components) && summary.components.length) {
+    const idToLabel = {};
+    const nodeIds = [];
+    for (const c of summary.components) {
+      if (c.visible === false) continue;
+      idToLabel[c.id] = c.label || c.id;
+      nodeIds.push(c.id);
+    }
+    return { nodeIds, idToLabel, rawEdges: summary.edges || [] };
+  }
+  const tiers = (props.dag && props.dag.tiers) || [];
+  const idToLabel = {};
+  const nodeIds = [];
+  tiers.forEach((tier) => (tier.sections || []).forEach((sec) => {
+    if (idToLabel[sec.id] !== undefined) return;
+    idToLabel[sec.id] = sec.name || sec.id;
+    nodeIds.push(sec.id);
+  }));
+  return { nodeIds, idToLabel, rawEdges: (props.dag && props.dag.edges) || [] };
+};
+
+// Status for a node: Phase II section result wins, else the matching Phase I
+// backend stage (ctx_stage / synthetic), else pending.
+const statusOf = (id) => {
+  const r = props.phaseIiSections[id];
+  if (r && r.status) return r.status;
+  const b = (props.backendStages || []).find((s) => s && s.name === id);
+  return (b && b.status) ? b.status : 'pending';
+};
+
+const layoutGraph = () => {
+  const { nodeIds, idToLabel, rawEdges } = resolveSource();
+  if (nodeIds.length === 0) return [];
+  const known = new Set(nodeIds);
+
+  // Edges — keep only those between known nodes, de-duped, no self-loops.
+  const seen = new Set();
+  const edges = [];
+  rawEdges.forEach((e) => {
+    if (!Array.isArray(e) || e.length !== 2) return;
+    const [u, v] = e;
+    if (u === v || !known.has(u) || !known.has(v)) return;
+    const key = `${u}->${v}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    edges.push([u, v]);
   });
 
-  // 2. Map reachability through hidden nodes
+  // 3. Transitive reduction — drop A->C when A reaches C through another child.
   const adj = {};
-  rawEdges.forEach(([u, v]) => {
+  edges.forEach(([u, v]) => {
     if (!adj[u]) adj[u] = [];
     adj[u].push(v);
   });
-
-  const finalEdges = new Set();
-  const memo = {};
-  const getVisibleDescendants = (u) => {
-    if (memo[u]) return memo[u];
-    const results = new Set();
-    const children = adj[u] || [];
-    for (const v of children) {
-      if (visibleIds.has(v)) {
-        results.add(v);
-      } else {
-        getVisibleDescendants(v).forEach(d => results.add(d));
-      }
-    }
-    return memo[u] = results;
-  };
-
-  visibleIds.forEach(u => {
-    getVisibleDescendants(u).forEach(v => {
-      finalEdges.add(`${u}->${v}`);
-    });
-  });
-
-  // 3. Transitive Reduction (remove redundant edges like A->C if A->B->C exists)
-  const edgesArray = Array.from(finalEdges).map(e => e.split('->'));
-  const visibleAdj = {};
-  edgesArray.forEach(([u, v]) => {
-    if (!visibleAdj[u]) visibleAdj[u] = [];
-    visibleAdj[u].push(v);
-  });
-
-  const isReachableLongWay = (start, target, current, visited) => {
-    if (current === target) return true;
-    if (visited.has(current)) return false;
-    visited.add(current);
-    const children = visibleAdj[current] || [];
-    for (const child of children) {
-      if (isReachableLongWay(start, target, child, visited)) return true;
+  const reaches = (start, target) => {
+    const stack = [...(adj[start] || [])];
+    const visited = new Set();
+    while (stack.length) {
+      const n = stack.pop();
+      if (n === target) return true;
+      if (visited.has(n)) continue;
+      visited.add(n);
+      (adj[n] || []).forEach((c) => stack.push(c));
     }
     return false;
   };
+  const reduced = edges.filter(
+    ([u, v]) => !(adj[u] || []).some((mid) => mid !== v && reaches(mid, v))
+  );
 
-  const reducedEdges = edgesArray.filter(([u, v]) => {
-    const others = (visibleAdj[u] || []).filter(child => child !== v);
-    for (const startNode of others) {
-      if (isReachableLongWay(startNode, v, startNode, new Set())) return false;
-    }
-    return true;
-  });
-
-  // 4. Dagre Layout
+  // 4. Dagre left-to-right layered layout.
   const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: 'LR', nodesep: 60, ranksep: 120 });
+  g.setGraph({ rankdir: 'LR', nodesep: 22, ranksep: 80, marginx: 20, marginy: 20 });
   g.setDefaultEdgeLabel(() => ({}));
+  nodeIds.forEach((id) => g.setNode(id, { width: NODE_W, height: NODE_H }));
+  reduced.forEach(([u, v]) => g.setEdge(u, v));
+  dagre.layout(g);
 
-  const flowNodes = [];
-  visibleIds.forEach(id => {
-    const meta = idToMeta[id];
-    const result = props.phaseIiSections[id] || null;
-    const status = result ? result.status : 'pending';
-    const severity = stageSeverity(status);
-
-    g.setNode(id, { width: 180, height: 44 });
-    flowNodes.push({
+  const flowNodes = nodeIds.map((id) => {
+    const n = g.node(id);
+    const status = statusOf(id);
+    return {
       id,
       type: 'stage',
       data: {
-        label: meta.label,
+        label: idToLabel[id],
         status,
-        severity,
+        severity: stageSeverity(status),
         verdict: shortVerdict(status),
       },
-      position: { x: 0, y: 0 }
-    });
-  });
-
-  reducedEdges.forEach(([u, v]) => {
-    g.setEdge(u, v);
-  });
-
-  dagre.layout(g);
-
-  const positionedNodes = flowNodes.map(node => {
-    const n = g.node(node.id);
-    return {
-      ...node,
-      position: { x: n.x - 90, y: n.y - 22 }
+      position: { x: n.x - NODE_W / 2, y: n.y - NODE_H / 2 },
     };
   });
 
-  const flowEdges = reducedEdges.map(([u, v]) => ({
+  const flowEdges = reduced.map(([u, v]) => ({
     id: `e-${u}-${v}`,
     source: u,
     target: v,
     style: { stroke: '#d0d7de', strokeWidth: 1.5 },
   }));
 
-  return [...positionedNodes, ...flowEdges];
+  return [...flowNodes, ...flowEdges];
 };
 
-watch(() => [props.dag, props.phaseIiSections], () => {
-  elements.value = layoutGraph(props.dag);
-  setTimeout(() => fitView(), 50);
+// Fit the whole graph into view with a little padding. Deferred so VueFlow has
+// measured node sizes first. Robust to the DAG view living inside a tab that is
+// hidden (zero-size) on first render — the ResizeObserver re-fits once it gets
+// real dimensions.
+const refit = () => {
+  nextTick(() => setTimeout(() => fitView({ padding: 0.12 }), 60));
+};
+
+let resizeObserver = null;
+
+watch(() => [props.dag, props.phaseIiSections, props.backendStages, pipelineSummaryRef.value], () => {
+  elements.value = layoutGraph();
+  refit();
 }, { deep: true, immediate: true });
 
 onMounted(() => {
-  setTimeout(() => fitView(), 100);
+  refit();
+  if (container.value && typeof ResizeObserver !== 'undefined') {
+    let prevW = 0;
+    resizeObserver = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width || 0;
+      // Only re-fit when the pane actually (re)gains width — avoids a fit loop.
+      if (w > 0 && Math.abs(w - prevW) > 1) {
+        prevW = w;
+        refit();
+      }
+    });
+    resizeObserver.observe(container.value);
+  }
+});
+
+onUnmounted(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
 });
 </script>
 
@@ -301,7 +326,9 @@ onMounted(() => {
 
 .pipeline-dag-view {
   width: 100%;
-  height: 500px;
+  height: 68vh;
+  min-height: 540px;
+  max-height: 820px;
   background: #ffffff;
   border: 1px solid #d0d7de;
   border-radius: 6px;
@@ -340,16 +367,12 @@ onMounted(() => {
   border-color: #8c959f;
 }
 
-/* Path Highlighting Styles */
+/* Path Highlighting Styles — selecting a node traces its dependency chain in
+   blue. Other nodes stay fully visible (no dimming), so nothing looks hidden. */
 .dag-node-flat.path-active {
   border-color: #0969da;
   box-shadow: 0 0 0 1px #0969da;
   z-index: 10;
-}
-
-.dag-node-flat.path-dimmed {
-  opacity: 0.3;
-  filter: grayscale(0.5);
 }
 
 .dag-node-main {

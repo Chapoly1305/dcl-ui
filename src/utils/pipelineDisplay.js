@@ -14,124 +14,84 @@
 // lists it in its `backend` array. After build_databases got its own group,
 // the only Phase I stage that stays hidden is the `meta` intake stage (plus
 // the Phase II Sidekick helpers) — no explicit denylist needed.
+//
+// NOTE: DISPLAY_STAGES below is the static fallback. At runtime the backend
+// registry (/api/v1/pipeline/components) is the single source of truth — see
+// `displayStagesRef` + `loadPipeline()` at the bottom of this file.
+
+import { shallowRef } from 'vue';
 
 export const DISPLAY_STAGES = [
     {
-        id: 'ota_image',
-        label: 'OTA Image Parse',
-        backend: ['matter_ota'],
+        id: 'intake',
+        label: 'OTA / Payload Intake',
+        backend: ['meta', 'matter_ota'],
         sections: [
-            { id: 'manifest_integrity', name: 'Manifest-layer Integrity', desc: 'Verify OtaChecksum from DCL matches actual downloaded image' },
-            { id: 'ota_format', name: 'Matter OTA Image Format', desc: 'Magic number check, TLV parse, and header field validation' },
-            { id: 'payload_extraction', name: 'Image Digest / Payload Extraction', desc: 'Extract payload from Matter wrapper, verify ImageDigest' }
+            { id: 'manifest_integrity', name: 'Manifest-layer Integrity', desc: 'Base64 decode OtaChecksum, recompute whole-file hash, compare with DCL declaration' },
+            { id: 'ota_format', name: 'Matter OTA Image Format', desc: 'Magic number check, TLV parse, header field validation, cross-reference with DCL fields' },
+            { id: 'payload_extraction', name: 'Image-layer Digest / Payload Extraction', desc: 'Extract payload from Matter wrapper, verify ImageDigest, compute payload SHA-256' },
+            { id: 'matter_ota', name: 'Matter OTA Detection', desc: 'Detect + peel the Matter OTA wrapper; emit the inner payload.' },
         ]
     },
     {
-        id: 'chipset',
-        label: 'Identify Chipset',
-        backend: ['chipset_identify'],
-        sections: [{ id: 'chipset_identify', name: 'Payload Type / Firmware Orientation', desc: 'Identify file type, architecture, platform, and load segments' }]
-    },
-    {
-        id: 'firmware_encryption',
-        label: 'Firmware Encryption',
-        backend: ['chipset_identify'],
+        id: 'classify',
+        label: 'Payload Classification',
+        backend: ['chipset_identify', 'secure_boot_authenticity'],
         sections: [
-            { id: 'entropy', name: 'Encryption Detection', desc: 'Global + sliding-window Shannon entropy, encryption detection' },
-            { id: 'weak_key_enc', name: 'Weak Key Test', desc: 'Probe known-weak keys when encryption is confirmed; skipped if firmware is not encrypted' }
+            { id: 'chipset_identify', name: 'Payload Type / Firmware Orientation', desc: 'File type, architecture, platform/vendor identification, load base, segment recovery' },
+            { id: 'entropy', name: 'Entropy / Encryption / Compression', desc: 'Global + sliding-window Shannon entropy, opacity cutoff (7.60 bits/byte), compression detection' },
+            { id: 'secure_boot', name: 'Secure Boot / OTA Authenticity', desc: 'Signed-update evidence, default/test key detection, pre-install authenticity path analysis' },
+            { id: 'weak_key_enc', name: 'Firmware Encryption — Weak Key Test', desc: 'Probe known-weak / factory-default encryption keys against an encrypted firmware payload' },
+            { id: 'weak_key_ota', name: 'OTA Authenticity — Weak Key Test', desc: 'Probe known-weak / factory-default OTA signing keys against the captured signature' },
+            { id: 'chipset_inference', name: 'Chipset Inference (Deterministic)', desc: 'Aggregate Phase I chipset plugin candidates to produce a confirmed / inferred / unknown verdict with KB family mapping' },
+            { id: 'chipset_inference_ai', name: 'Chipset Inference (AI-assisted)', desc: 'LLM-based chipset identification fallback; only runs when deterministic inference is not confirmed' },
         ]
     },
     {
-        id: 'extract_executable',
-        label: 'Extract Executable',
-        backend: ['extract_executable'],
-        sections: [{ id: 'non_firmware', name: 'Non-firmware Payload / Contamination', desc: 'Detect non-firmware artifacts (config, certs, backups, debug)' }]
-    },
-    {
-        id: 'disassembly_db',
-        label: 'Disassembly Databases',
-        // Maps to the Phase I `build_databases` stage (formerly the hidden
-        // `ida_headless` stage). This is the long pole — IDA recovery + FLIRT
-        // and the Binary Ninja .bndb seed run here (~tens of seconds), so it
-        // needs its own timeline row instead of being attributed to an
-        // earlier group. Runs after Extract Executable because it consumes the
-        // extracted ELF, and skips automatically when the payload is encrypted
-        // or otherwise unsupported (executable_supported=false).
-        //
-        // `build_databases` provides the group's aggregate wall-clock; the two
-        // synthetic per-builder rows (ida_database / binja_database, derived by
-        // derive_database_cards) are listed too so aggregateDisplayStatus —
-        // which only resolves section cards against this group's own backend —
-        // can read each card's status, mirroring how the sdk_version group
-        // lists `capability_recovery`.
-        backend: ['build_databases', 'ida_database', 'binja_database'],
+        id: 're_setup',
+        label: 'Executable Recovery + Decompiler DB',
+        backend: ['extract_executable', 'build_databases'],
         sections: [
-            // One card per builder. Their IDs match the synthetic stage rows
-            // the backend derives from the build_databases stage details
-            // (see derive_database_cards in stage_build_databases.py), so
-            // aggregateDisplayStatus / checklistOutcome resolve each card's
-            // status by name — the same Phase-I shuttle mechanism as the
-            // capability_recovery card. The group is just a container: add
-            // another { id, name, desc } here (and a tuple in
-            // DATABASE_CARD_META) to represent a further builder.
-            { id: 'ida_database', name: 'IDA Database', desc: 'Build the pristine IDA .i64 — cold recovery pass (endpoints, defaults, dynamic spec-version) plus FLIRT signature matching against the chipset family' },
-            { id: 'binja_database', name: 'Binary Ninja Database', desc: 'Build / seed the content-addressed Binary Ninja .bndb cache so downstream AI + Sidekick RE reuse it instead of re-analysing the ELF; needs only Binary Ninja (not the Sidekick plugin) — skipped when Binary Ninja is unavailable' }
+            { id: 'extract_executable', name: 'Extract Executable', desc: 'Extract the chipset executable (ELF / ARM-vector bin) from the payload.' },
+            { id: 'non_firmware', name: 'Non-firmware Payload / Pipeline Contamination', desc: 'Classify non-firmware artifacts (JSON/CBOR/config/credential/backup), detect pipeline contamination' },
+            { id: 'sidekick_triage', name: 'Sidekick Deep RE / Triage', desc: 'BNQL semantic queries + Sidekick agent triage over the Binary Ninja .bndb; classifies candidate functions (auth-bypass, command handlers, OTA handlers). Reuses the .bndb built in Phase I.' },
+            { id: 'ida_database', name: 'IDA Database', desc: 'Pristine IDA .i64 — recovery pass + FLIRT signature matching.' },
+            { id: 'binja_database', name: 'Binary Ninja Database', desc: 'Content-addressed Binary Ninja .bndb cache for downstream RE.' },
         ]
     },
     {
-        id: 'ota_authenticity',
-        label: 'OTA Authenticity',
-        backend: ['secure_boot_authenticity'],
-        sections: [
-            { id: 'secure_boot', name: 'Secure Boot', desc: 'Signed-update evidence, signature validation, public-key pinning' },
-            { id: 'weak_key_ota', name: 'Weak Key Test', desc: 'Probe known-weak / factory-default signing keys; flag if the OTA signature can be forged with a published key' }
-        ]
-    },
-    {
-        id: 'sdk_version',
-        label: 'SDK Version Recovery',
+        id: 'sdk_capability',
+        label: 'SDK / Capability Baseline',
         backend: ['capability_recovery', 'sdk_version'],
         sections: [
-            // This card mirrors the Phase I `capability_recovery` stage,
-            // not a Phase II section — the ID must match the backend
-            // stage name so the lookups in PipelineStageTimeline.vue
-            // and `aggregateDisplayStatus` can find its status.
-            { id: 'capability_recovery', name: 'Capability Recovery', desc: 'Recover and normalize capability evidence from firmware artifacts' },
-            { id: 'sdk_baseline', name: 'Matter SDK / Specification Baseline', desc: 'Recover SpecVer from Basic Information cluster, SDK branch estimate' }
+            { id: 'capability_recovery', name: 'Capability Recovery', desc: 'Recover endpoints / clusters / attribute defaults from the IDA outputs.' },
+            { id: 'sdk_baseline', name: 'Matter SDK / Specification Baseline', desc: 'Recover SpecVer from Basic Information cluster or heuristic fallback; SDK branch estimate' },
         ]
     },
     {
-        id: 'sidekick_re',
-        label: 'Sidekick Deep RE',
-        // Phase II section (no Phase I backend stage). Runs after the Binary
-        // Ninja database is built (depends on the .bndb), then BNQL queries +
-        // agent triage. The Modular Analysis AI cards wait for this when it
-        // runs, and proceed without it when it is skipped/disabled/unavailable.
-        backend: [],
-        sections: [
-            { id: 'sidekick_triage', name: 'Sidekick Triage', desc: 'BNQL semantic queries + Sidekick agent triage over the Binary Ninja .bndb — classifies candidate functions (auth-bypass, command/OTA handlers); reuses the .bndb from the Disassembly Databases step. Skipped when Sidekick is disabled or unavailable.' }
-        ]
-    },
-    {
-        id: 'modular_analysis',
+        id: 'analysis',
         label: 'Modular Analysis',
         backend: [],
         sections: [
-            { id: 'custom_auth', name: 'Custom Authenticity Validation', desc: 'AI-driven: decompiles OTA apply spine, traces crypto gating, classifies authenticity. Transcript available.' },
-            { id: 'secrets', name: 'Secrets / Sensitive Material', desc: 'AI-enriched: byte-scans for embedded secrets, then LLM disambiguates real keys from library refs and hex tables' },
-            { id: 'rng_init', name: 'RNG Initialization', desc: 'AI-enriched: string-scans for entropy sources, then LLM traces init paths through decompiled code to confirm HW RNG' },
-            { id: 'backdoor', name: 'Backdoor', desc: 'AI-driven: decompiles candidate sinks, traces data flow, assesses exploitability, discovers missed backdoor patterns' },
-            { id: 'connectivity', name: 'Connectivity', desc: 'AI-enriched: extracts endpoints, then LLM researches unclassified URLs/IPs for privacy risk and C2 indicators' },
-            { id: 'supply_chain', name: 'Supply-chain / Integration Failure', desc: 'AI-enriched: aggregates secure_boot/rng_init/secrets/sdk_baseline signals, then LLM identifies SDK-reuse patterns and recommends remediation' }
+            { id: 'secrets', name: 'Secrets / Sensitive Material Scan', desc: 'AI-enriched byte-scan for embedded secrets; disambiguates real keys from library refs, hex tables, and benign certs' },
+            { id: 'rng_init', name: 'RNG / Crypto Initialization', desc: 'AI-enriched RNG audit; traces entropy init through decompiled code to confirm HW source vs deterministic seed' },
+            { id: 'custom_auth', name: 'Custom Authenticity Validation', desc: 'AI-driven vendor-rolled signature verification; decompiles OTA apply spine, traces crypto gating, produces transcript' },
+            { id: 'backdoor', name: 'Vendor Implementation / Sink-driven RE', desc: 'AI-driven backdoor detection; decompiles candidate sinks, traces data flow, assesses exploitability, discovers missed patterns' },
+            { id: 'connectivity', name: 'Vendor-cloud Telemetry / Privacy', desc: 'AI-enriched endpoint audit; researches unclassified endpoints, assesses privacy risk, flags C2 indicators' },
+            { id: 'lineage', name: 'Version Lineage / Cross-network / Regression', desc: 'Version chain analysis, testnet/mainnet cross-reference, binary/strings diff, regression detection' },
+            { id: 'supply_chain', name: 'Supply-chain / Integration Failure', desc: 'AI-enriched aggregation of secure_boot/rng_init/secrets/sdk_baseline signals; identifies SDK-reuse patterns, assesses key-reuse potential, recommends remediation' },
         ]
     },
     {
-        id: 'finalize',
+        id: 'report',
         label: 'Final Report',
         backend: ['finalize'],
-        sections: [{ id: 'scoring', name: 'Scoring / Prioritization / Triage', desc: 'Aggregate conformance + security scores, assign P0-P3 priority' }]
-    }
+        sections: [
+            { id: 'scoring', name: 'Scoring / Prioritization / Triage', desc: 'Conformance score, security score, manual RE priority (P0-P3), final report assembly' },
+        ]
+    },
 ];
+
 
 // Map any raw status string to one of the five canonical PrimeVue severities.
 //   success    → green PASSED
@@ -218,4 +178,99 @@ export function aggregateDisplayStatus(display, linkedBackendStages, sectionResu
     if (all.includes('warning')) return 'pending';
     if (all.includes('success')) return 'passed';
     return 'pending';
+}
+
+// ---------------------------------------------------------------------------
+// Registry-derived pipeline structure.
+//
+// The backend `/api/v1/pipeline/components` endpoint (build_pipeline_summary in
+// section_registry.py) is the single source of truth for groups, components,
+// and dependencies. These helpers turn that payload into the shapes the UI
+// already consumes — so DISPLAY_STAGES (above) can become a runtime-derived
+// fallback rather than a hand-maintained duplicate. `DISPLAY_STAGES` is kept as
+// the static fallback used until/if the fetch resolves.
+// ---------------------------------------------------------------------------
+
+// Transform a pipeline summary into the DISPLAY_STAGES shape (groups → cards).
+// The `conformance` group (paper Phase I / DCL spec) is excluded from the
+// firmware-analysis timeline + DAG, matching the curated design.
+export function buildDisplayStages(summary) {
+    const groups = (summary && summary.groups ? summary.groups : []).filter((g) => g.id !== 'conformance');
+    const comps = (summary && summary.components) ? summary.components : [];
+    const byGroup = {};
+    for (const c of comps) {
+        if (!byGroup[c.group]) byGroup[c.group] = [];
+        byGroup[c.group].push(c);
+    }
+    return groups.map((g) => {
+        const members = (byGroup[g.id] || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+        return {
+            id: g.id,
+            label: g.label,
+            // ctx_stage components carry the Phase-I-style status/timing the
+            // timeline reads from `backend-stages`.
+            backend: members.filter((c) => c.kind === 'ctx_stage').map((c) => c.id),
+            sections: members
+                .filter((c) => c.visible !== false)
+                .map((c) => ({ id: c.id, name: c.label, desc: c.description })),
+        };
+    });
+}
+
+// Transform the dependency edges into the group→[prerequisite groups] map the
+// batch builder's ensurePrerequisites uses (so it is no longer hand-maintained).
+export function buildPrereqs(summary) {
+    const comps = (summary && summary.components) ? summary.components : [];
+    const groupOf = {};
+    for (const c of comps) groupOf[c.id] = c.group;
+    const deps = {};
+    for (const edge of (summary && summary.edges ? summary.edges : [])) {
+        const [u, v] = edge;
+        const gu = groupOf[u];
+        const gv = groupOf[v];
+        if (!gu || !gv || gu === gv || gu === 'conformance' || gv === 'conformance') continue;
+        if (!deps[gv]) deps[gv] = new Set();
+        deps[gv].add(gu);
+    }
+    const out = {};
+    for (const k of Object.keys(deps)) out[k] = [...deps[k]];
+    return out;
+}
+
+// Fetch the registry-driven pipeline summary from the backend.
+export async function fetchPipelineSummary(apiBase) {
+    const res = await fetch(`${apiBase}/api/v1/pipeline/components`);
+    if (!res.ok) throw new Error(`pipeline components fetch failed (${res.status})`);
+    return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Reactive pipeline store — the single source the UI consumes at runtime.
+//
+// Initialized to the static DISPLAY_STAGES (so the UI renders immediately and
+// degrades gracefully if the backend is unreachable). `loadPipeline(apiBase)`
+// fetches the registry once and swaps in the derived groups + prerequisite map.
+// Consumers read `displayStagesRef.value` / `pipelinePrereqsRef.value`; because
+// these are refs, Vue computeds re-run when the fetch resolves.
+// ---------------------------------------------------------------------------
+export const displayStagesRef = shallowRef(DISPLAY_STAGES);
+export const pipelineSummaryRef = shallowRef(null);
+export const pipelinePrereqsRef = shallowRef(null);
+
+let _pipelineLoaded = false;
+
+export async function loadPipeline(apiBase) {
+    if (_pipelineLoaded || !apiBase) return;
+    try {
+        const summary = await fetchPipelineSummary(apiBase);
+        const stages = buildDisplayStages(summary);
+        if (Array.isArray(stages) && stages.length) {
+            pipelineSummaryRef.value = summary;
+            displayStagesRef.value = stages;
+            pipelinePrereqsRef.value = buildPrereqs(summary);
+            _pipelineLoaded = true;
+        }
+    } catch (_e) {
+        // Backend unreachable / older build — keep the static fallback.
+    }
 }

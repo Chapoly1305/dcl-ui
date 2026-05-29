@@ -263,7 +263,7 @@
 <script>
 import FirmwareJobProgressModal from '@/components/FirmwareJobProgressModal.vue';
 import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
-import { DISPLAY_STAGES } from '@/utils/pipelineDisplay';
+import { displayStagesRef, pipelinePrereqsRef, loadPipeline } from '@/utils/pipelineDisplay';
 
 export default {
   name: 'BatchAnalysis',
@@ -300,17 +300,21 @@ export default {
         sections: [], 
         target: 'selected', 
         force: false,
-        activeStages: DISPLAY_STAGES.filter(s => s.id !== 'modular_analysis').map(s => s.id)
+        activeStages: displayStagesRef.value.filter(s => s.id !== 'analysis').map(s => s.id)
       },
       confirmVisible: false,
       builderVisible: false,
       estimate: null,
       progressDialogVisible: false,
-      progressJobId: '',
-      pipelineStages: DISPLAY_STAGES
+      progressJobId: ''
     };
   },
   computed: {
+    // Registry-derived pipeline groups (single source of truth). Reactive: when
+    // loadPipeline() resolves, this recomputes and the builder re-renders.
+    pipelineStages() {
+      return displayStagesRef.value;
+    },
     selectedNetwork() {
       const key = String(
         this.$store?.state?.network?.selectedNetwork || this.$store?.state?.network?.defaultNetwork || 'testnet'
@@ -430,22 +434,16 @@ export default {
       }
     },
     ensurePrerequisites(stageId) {
-      const deps = {
+      // Prefer the registry-derived group prerequisites (single source of
+      // truth, from /api/v1/pipeline/components edges); fall back to this
+      // static map only until the fetch resolves / if the backend is older.
+      const deps = pipelinePrereqsRef.value || {
         'chipset': ['ota_image'],
         'firmware_encryption': ['chipset'],
         'extract_executable': ['chipset'],
-        // Building the IDA/Binary Ninja databases needs the extracted ELF.
         'disassembly_db': ['extract_executable'],
         'ota_authenticity': ['ota_image'],
-        // Sidekick deep RE runs on the Binary Ninja .bndb from disassembly_db.
-        // NB: the modular AI sections only *softly* wait for Sidekick (they run
-        // without it), so Sidekick is intentionally NOT a prerequisite of
-        // modular_analysis — selecting AI cards must not force Sidekick on.
         'sidekick_re': ['disassembly_db'],
-        // capability_recovery (under sdk_version) reads the IDA recovery
-        // outputs, and the modular AI sections decompile via the IDA/Binja
-        // databases — both depend on the disassembly_db group, not just the
-        // raw extraction.
         'sdk_version': ['disassembly_db'],
         'modular_analysis': ['disassembly_db'],
         'finalize': ['ota_image', 'chipset', 'extract_executable']
@@ -462,14 +460,14 @@ export default {
         this.run.sections = [];
         this.run.analysis = 'default';
       } else if (name === 'chipset') {
-        this.run.activeStages = ['ota_image', 'chipset'];
+        this.run.activeStages = ['intake', 'classify'];
         this.run.sections = ['chipset_identify', 'manifest_integrity', 'ota_format', 'payload_extraction'];
         this.run.analysis = 'chipset_scan';
       } else if (name === 'standard') {
-        this.run.activeStages = this.pipelineStages.filter(s => s.id !== 'modular_analysis').map(s => s.id);
+        this.run.activeStages = this.pipelineStages.filter(s => s.id !== 'analysis').map(s => s.id);
         this.run.sections = [];
         this.pipelineStages.forEach(s => {
-          if (s.id !== 'modular_analysis') {
+          if (s.id !== 'analysis') {
             s.sections.forEach(sec => this.run.sections.push(sec.id));
           }
         });
@@ -638,7 +636,16 @@ export default {
   watch: {
     selectedNetwork() { this.pageFirst = 0; this.selectedRows = []; this.loadInventory(); }
   },
-  mounted() { this.loadMeta(); this.loadInventory(); }
+  async mounted() {
+    // Pull the registry-derived pipeline groups, then seed the default stage
+    // selection from them (group ids differ from the static fallback).
+    await loadPipeline(this.metadataApiBase);
+    this.run.activeStages = this.pipelineStages
+      .filter(s => s.id !== 'analysis')
+      .map(s => s.id);
+    this.loadMeta();
+    this.loadInventory();
+  }
 };
 </script>
 
