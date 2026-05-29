@@ -89,6 +89,18 @@
                     <span class="cl-name">{{ sec.name }}</span>
                     <i :class="checklistIcon(sec.id)" :style="{ color: checklistIconColor(sec.id), fontSize: '1.3rem' }" v-tooltip.top="checklistIconTooltip(sec.id)" />
                   </div>
+                  <div v-if="sectionAlgoChips(sec.id).length > 0" class="cl-algo-chips">
+                    <span
+                      v-for="(chip, ci) in sectionAlgoChips(sec.id)"
+                      :key="`${sec.id}-chip-${ci}`"
+                      class="cl-algo-chip"
+                      :class="`cl-algo-chip-${chip.kind}`"
+                      v-tooltip.top="chip.tooltip"
+                    >
+                      <span class="cl-algo-chip-label">{{ chip.label }}</span>
+                      <span class="cl-algo-chip-value">{{ chip.value }}</span>
+                    </span>
+                  </div>
                   <div class="cl-outcome">{{ sec.outcome }}</div>
                   <Button v-if="showTranscriptButton && sectionHasTranscript(sec.id)" label="View AI transcript" icon="pi pi-comments" text size="small" class="cl-transcript-btn mt-1" @click.stop="$emit('open-transcript', sec.id)" />
                 </div>
@@ -121,6 +133,14 @@ export default {
     phaseIiSections: {
       type: Object,
       default: () => ({})
+    },
+    // Raw Phase I backend stages keyed by stage name. Used to look up
+    // status / details for section cards that mirror a Phase I shuttle
+    // (e.g. `capability_recovery`) rather than a Phase II section.
+    // Optional — if empty, shuttle cards fall through to "pending".
+    backendStages: {
+      type: Array,
+      default: () => []
     },
     dag: {
       type: Object,
@@ -200,15 +220,29 @@ export default {
     stageStatusLabel(status) {
       return stageStatusBadgeLabel(status);
     },
+    backendStageByName() {
+      const map = {};
+      for (const s of this.backendStages || []) {
+        if (s && s.name) map[String(s.name)] = s;
+      }
+      return map;
+    },
     stageSections(displayId) {
       const display = DISPLAY_STAGES.find((d) => d.id === displayId);
       if (!display) return [];
+      const backendMap = this.backendStageByName();
       return display.sections.map((def) => {
+        // Phase II section result wins; for Phase-I shuttle cards
+        // (e.g. `capability_recovery`) fall back to the backend stage
+        // of the same name so the card surfaces its real status
+        // instead of orphan "pending".
         const result = this.phaseIiSections[def.id] || null;
-        const status = result ? result.status : 'pending';
+        const backend = backendMap[def.id] || null;
+        const status = result?.status || backend?.status || 'pending';
         return {
           ...def,
           result,
+          backend,
           status,
           outcome: status === 'pending' ? def.desc : this.checklistOutcome({ id: def.id, runner: result?.runner || 'code' })
         };
@@ -216,8 +250,10 @@ export default {
     },
     checklistStatus(secId) {
       const r = this.phaseIiSections[secId];
-      if (!r) return 'pending';
-      return r.status || 'pending';
+      if (r) return r.status || 'pending';
+      const backend = this.backendStageByName()[secId];
+      if (backend) return backend.status || 'pending';
+      return 'pending';
     },
     checklistIcon(secId) {
       const s = this.checklistStatus(secId);
@@ -243,9 +279,99 @@ export default {
       const path = r?.output?.transcript_path;
       return typeof path === 'string' && path.length > 0;
     },
+    sectionAlgoChips(secId) {
+      // Surface identified encryption / signature algorithms as small
+      // chips below the section name. Only emit when the section's
+      // own output has positively identified the algorithm — never
+      // guess. Empty list → template renders nothing.
+      const r = this.phaseIiSections[secId];
+      const out = r?.output || {};
+      const chips = [];
+      const pushEnc = (value, tooltip) => {
+        if (!value) return;
+        chips.push({ kind: 'enc', label: 'Encryption', value: String(value), tooltip: tooltip || '' });
+      };
+      const pushSig = (value, tooltip) => {
+        if (!value) return;
+        chips.push({ kind: 'sig', label: 'Signature', value: String(value), tooltip: tooltip || '' });
+      };
+
+      if (secId === 'weak_key_enc') {
+        // enc_type names the wrapping cipher (X25519 / EC256 / AES-KW);
+        // header_encryption_flag is the MCUboot image-key flag (AES-128
+        // / AES-256). Both surface only after a successful probe.
+        if (out.enc_type) {
+          const flag = out.header_encryption_flag ? ` (${out.header_encryption_flag} image key)` : '';
+          pushEnc(out.enc_type, `Cipher path actually walked by the weak-key probe${flag}`);
+        } else if (out.header_encryption_flag) {
+          pushEnc(out.header_encryption_flag, 'Image-key flag from MCUboot header');
+        }
+      } else if (secId === 'weak_key_ota') {
+        pushSig(out.algorithm, 'Signature algorithm reported by the OTA authenticity probe');
+      } else if (secId === 'secure_boot') {
+        // Phase-I-covered: full secure-boot payload sits under `secure_boot`.
+        const sb = out.secure_boot || {};
+        pushSig(sb.algorithm, 'Signature algorithm identified in the OTA secure-boot TLV');
+        const det = sb.details || {};
+        if (det.image_encrypted === true || det.header_flag_encrypted === true) {
+          pushEnc('encrypted', 'Container flag says the firmware payload is encrypted');
+        }
+      } else if (secId === 'entropy') {
+        // Prefer the actual cipher identified by weak_key_enc (e.g.
+        // EC256 with AES-128 image key) over "high-entropy". Entropy
+        // is the *last-resort* basis — only show it when the section
+        // had nothing better to go on.
+        if (out.encrypted === true) {
+          const basis = out.encryption_decision_basis;
+          if (basis === 'cipher_decoded' && out.cipher) {
+            const envelope = out.key_envelope ? ` (${out.key_envelope} image key)` : '';
+            pushEnc(out.cipher, `Cipher decoded from the encryption TLV${envelope}`);
+          } else if (basis === 'container_flag_true') {
+            pushEnc('encrypted', 'Chipset container flag confirms the payload is encrypted');
+          } else {
+            pushEnc('high-entropy', `Global entropy ${out.entropy_global ?? '?'} ≥ threshold ${out.threshold ?? '?'} — no cipher identification available`);
+          }
+        }
+      }
+      return chips;
+    },
     checklistOutcome(sec) {
       const r = this.phaseIiSections[sec.id];
       if (!r) {
+        // Phase I shuttle fallback — no Phase II result, but if the
+        // section ID matches a backend stage we can still render a
+        // meaningful outcome from that stage's status + details.
+        const backend = this.backendStageByName()[sec.id];
+        if (backend) {
+          const sbStatus = String(backend.status || '').toLowerCase();
+          const det = backend.details || {};
+          if (sbStatus === 'skipped') {
+            // Surface the most informative bit from details when we can.
+            // capability_recovery: all counts == 0 → "no evidence found".
+            if (
+              det.endpoint_count === 0 &&
+              det.cluster_count === 0 &&
+              det.attribute_count === 0 &&
+              det.default_count === 0
+            ) {
+              return 'Skipped — no capability evidence to normalize';
+            }
+            if (det.skip_reason) return `Skipped — ${String(det.skip_reason)}`;
+            return 'Skipped';
+          }
+          if (sbStatus === 'failed') {
+            return det.error ? String(det.error).substring(0, 160) : 'Failed';
+          }
+          if (sbStatus === 'needs_review') {
+            if (det.unsupported_reason) return `Needs review — ${String(det.unsupported_reason)}`;
+            return 'Needs review';
+          }
+          if (sbStatus === 'success' || sbStatus === 'done') {
+            const keys = Object.keys(det).filter((k) => !k.startsWith('_')).slice(0, 3);
+            return keys.length ? `Verified: ${keys.join(', ')}` : 'Passed';
+          }
+          if (sbStatus === 'running') return 'In progress...';
+        }
         if (sec.runner === 'llm') return 'Not evaluated — LLM analysis not yet configured';
         if (sec.runner === 'hybrid') return 'Not evaluated — hybrid analysis pending';
         return 'Not evaluated — run analysis to check';
@@ -280,6 +406,31 @@ export default {
       }
       if (r.status === 'success' || r.status === 'done') {
         const output = r.output || {};
+        // Section-specific summaries — say what the card actually proved.
+        if (sec.id === 'entropy') {
+          if (output.encrypted === true) {
+            const basis = output.encryption_decision_basis;
+            if (basis === 'cipher_decoded' && output.cipher) {
+              const envelope = output.key_envelope ? ` with ${output.key_envelope} image key` : '';
+              return `Encrypted — ${output.cipher}${envelope}`;
+            }
+            if (basis === 'container_flag_true') {
+              return 'Encrypted — chipset container flag confirms (cipher not identified)';
+            }
+            const entropy = output.entropy_global != null ? ` (entropy ${output.entropy_global})` : '';
+            return `Likely encrypted by entropy heuristic only${entropy}`;
+          }
+          if (output.encrypted === false) {
+            return output.encryption_decision_basis === 'container_flag_false'
+              ? 'Not encrypted — chipset container flag confirms'
+              : 'Not encrypted';
+          }
+        }
+        if (sec.id === 'weak_key_enc') {
+          const cipher = output.enc_type || output.header_encryption_flag || 'cipher';
+          const tried = output.keys_tried != null ? ` (${output.keys_tried} keys tried)` : '';
+          return `No weak ${cipher} key matched${tried}`;
+        }
         const keys = Object.keys(output).filter((k) => !k.startsWith('_')).slice(0, 3);
         if (keys.length === 0) return 'Passed';
         return `Verified: ${keys.join(', ')}`;
@@ -355,6 +506,39 @@ export default {
 .cl-badge-info { background: #dbeafe; color: #1d4ed8; }
 .cl-badge-warning { background: #fef9c3; color: #a16207; }
 .cl-badge-secondary { background: #f3f4f6; color: #4b5563; }
+
+/* ---- Per-section algorithm chips (encryption / signature) ---- */
+.cl-algo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.2rem 0 0.35rem 0;
+}
+.cl-algo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.cl-algo-chip-label {
+  text-transform: uppercase;
+  font-size: 0.6rem;
+  opacity: 0.75;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.cl-algo-chip-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 700;
+}
+.cl-algo-chip-enc { background: #ede9fe; color: #5b21b6; border-color: #ddd6fe; }
+.cl-algo-chip-sig { background: #ecfeff; color: #0e7490; border-color: #cffafe; }
 .cl-legend {
   font-size: 0.85rem;
   display: inline-flex;

@@ -10,9 +10,10 @@
 // (FirmwareJobProgressModal.vue) import from here. Add a new stage / card
 // by editing DISPLAY_STAGES — every UI surface picks it up.
 //
-// provenance backend stage is "hidden" iff no DISPLAY_STAGES entry lists it in its
-// `backend` array. That's how IDA Headless / Sidekick / Capability Recovery
-// stay out of the timeline without an explicit denylist.
+// A backend stage is "hidden" from the timeline iff no DISPLAY_STAGES entry
+// lists it in its `backend` array. After build_databases got its own group,
+// the only Phase I stage that stays hidden is the `meta` intake stage (plus
+// the Phase II Sidekick helpers) — no explicit denylist needed.
 
 export const DISPLAY_STAGES = [
     {
@@ -47,6 +48,37 @@ export const DISPLAY_STAGES = [
         sections: [{ id: 'non_firmware', name: 'Non-firmware Payload / Contamination', desc: 'Detect non-firmware artifacts (config, certs, backups, debug)' }]
     },
     {
+        id: 'disassembly_db',
+        label: 'Disassembly Databases',
+        // Maps to the Phase I `build_databases` stage (formerly the hidden
+        // `ida_headless` stage). This is the long pole — IDA recovery + FLIRT
+        // and the Binary Ninja .bndb seed run here (~tens of seconds), so it
+        // needs its own timeline row instead of being attributed to an
+        // earlier group. Runs after Extract Executable because it consumes the
+        // extracted ELF, and skips automatically when the payload is encrypted
+        // or otherwise unsupported (executable_supported=false).
+        //
+        // `build_databases` provides the group's aggregate wall-clock; the two
+        // synthetic per-builder rows (ida_database / binja_database, derived by
+        // derive_database_cards) are listed too so aggregateDisplayStatus —
+        // which only resolves section cards against this group's own backend —
+        // can read each card's status, mirroring how the sdk_version group
+        // lists `capability_recovery`.
+        backend: ['build_databases', 'ida_database', 'binja_database'],
+        sections: [
+            // One card per builder. Their IDs match the synthetic stage rows
+            // the backend derives from the build_databases stage details
+            // (see derive_database_cards in stage_build_databases.py), so
+            // aggregateDisplayStatus / checklistOutcome resolve each card's
+            // status by name — the same Phase-I shuttle mechanism as the
+            // capability_recovery card. The group is just a container: add
+            // another { id, name, desc } here (and a tuple in
+            // DATABASE_CARD_META) to represent a further builder.
+            { id: 'ida_database', name: 'IDA Database', desc: 'Build the pristine IDA .i64 — cold recovery pass (endpoints, defaults, dynamic spec-version) plus FLIRT signature matching against the chipset family' },
+            { id: 'binja_database', name: 'Binary Ninja Database', desc: 'Build / seed the content-addressed Binary Ninja .bndb cache so downstream AI + Sidekick RE reuse it instead of re-analysing the ELF; needs only Binary Ninja (not the Sidekick plugin) — skipped when Binary Ninja is unavailable' }
+        ]
+    },
+    {
         id: 'ota_authenticity',
         label: 'OTA Authenticity',
         backend: ['secure_boot_authenticity'],
@@ -60,8 +92,24 @@ export const DISPLAY_STAGES = [
         label: 'SDK Version Recovery',
         backend: ['capability_recovery', 'sdk_version'],
         sections: [
-            { id: 'CAP_RECOVERY', name: 'Capability Recovery', desc: 'Recover and normalize capability evidence from firmware artifacts' },
+            // This card mirrors the Phase I `capability_recovery` stage,
+            // not a Phase II section — the ID must match the backend
+            // stage name so the lookups in PipelineStageTimeline.vue
+            // and `aggregateDisplayStatus` can find its status.
+            { id: 'capability_recovery', name: 'Capability Recovery', desc: 'Recover and normalize capability evidence from firmware artifacts' },
             { id: 'sdk_baseline', name: 'Matter SDK / Specification Baseline', desc: 'Recover SpecVer from Basic Information cluster, SDK branch estimate' }
+        ]
+    },
+    {
+        id: 'sidekick_re',
+        label: 'Sidekick Deep RE',
+        // Phase II section (no Phase I backend stage). Runs after the Binary
+        // Ninja database is built (depends on the .bndb), then BNQL queries +
+        // agent triage. The Modular Analysis AI cards wait for this when it
+        // runs, and proceed without it when it is skipped/disabled/unavailable.
+        backend: [],
+        sections: [
+            { id: 'sidekick_triage', name: 'Sidekick Triage', desc: 'BNQL semantic queries + Sidekick agent triage over the Binary Ninja .bndb — classifies candidate functions (auth-bypass, command/OTA handlers); reuses the .bndb from the Disassembly Databases step. Skipped when Sidekick is disabled or unavailable.' }
         ]
     },
     {
@@ -143,10 +191,23 @@ export function stageStatusFriendlyLabel(status) {
 // Aggregate a display stage's status from its section cards and linked backend
 // stages. Priority: danger > info > warning > success > secondary. If every
 // contributor is skipped, surface as skipped.
+//
+// Section cards may correspond to either a Phase II analysis section
+// (status comes from `sectionResults` keyed by section_id) or a Phase I
+// shuttle stage (status comes from the backend stage of the same name —
+// e.g. `capability_recovery`). We try Phase II first, then fall back to
+// the backend stage by name so Phase-I shuttles don't vote "pending"
+// just because they're not in the Phase II results dict.
 export function aggregateDisplayStatus(display, linkedBackendStages, sectionResults) {
+    const backendByName = new Map(
+        (linkedBackendStages || []).map((s) => [String(s?.name || ''), s])
+    );
     const sectionSeverities = (display.sections || []).map((def) => {
         const r = (sectionResults || {})[def.id];
-        return stageSeverity(r ? r.status : 'pending');
+        if (r) return stageSeverity(r.status);
+        const backend = backendByName.get(def.id);
+        if (backend) return stageSeverity(backend.status || '');
+        return stageSeverity('pending');
     });
     const backendSeverities = linkedBackendStages.map((s) => stageSeverity(s?.status || ''));
     const all = [...sectionSeverities, ...backendSeverities];

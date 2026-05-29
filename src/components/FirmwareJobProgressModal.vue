@@ -35,11 +35,11 @@
       <div v-else>
         <div class="surface-ground p-3 border-round mb-4">
           <div class="grid text-sm">
-            <div class="col-12 md:col-4 border-right-1 surface-border" v-if="!isConformanceJob && !isPollJob">
+            <div class="col-12 md:col-4 border-right-1 surface-border" v-if="!isSimpleJob">
               <div class="text-500 font-medium mb-1">FIRMWARE SHA-256</div>
               <code class="text-900">{{ shortSha(job.firmware_sha256) }}</code>
             </div>
-            <div class="col-12 md:col-4 border-right-1 surface-border pl-2 md:pl-4" v-else-if="isConformanceJob">
+            <div class="col-12 md:col-4 border-right-1 surface-border pl-2 md:pl-4" v-else-if="isConformanceJob || isPoolScanJob">
               <div class="text-500 font-medium mb-1">TARGET NETWORK</div>
               <div class="text-900 font-bold uppercase">{{ job.source_network || 'Default' }}</div>
             </div>
@@ -51,7 +51,7 @@
               <div class="text-500 font-medium mb-1">JOB TYPE</div>
               <div class="text-900 font-bold uppercase">{{ displayValue(job.job_type) }}</div>
             </div>
-            <div class="col-6 md:col-4 pl-2 md:pl-4" v-if="!isConformanceJob && !isPollJob">
+            <div class="col-6 md:col-4 pl-2 md:pl-4" v-if="!isSimpleJob">
               <div class="text-500 font-medium mb-1">PIPELINE RUN</div>
               <div class="text-900 font-bold">{{ pipeline.run_id || 'Generating...' }}</div>
             </div>
@@ -103,16 +103,50 @@
           </div>
         </div>
 
+        <div v-if="isPoolScanJob && pipeline.statistics">
+          <div class="text-700 font-bold mb-3 ml-1">Scan Statistics</div>
+          <div class="grid">
+            <div class="col-6 md:col-3">
+              <div class="card surface-card border-1 surface-border p-3 text-center">
+                <div class="text-500 font-medium mb-2">Total in Pool</div>
+                <div class="text-900 font-bold text-2xl">{{ pipeline.statistics.total }}</div>
+              </div>
+            </div>
+            <div class="col-6 md:col-3">
+              <div class="card surface-card border-1 surface-border p-3 text-center">
+                <div class="text-green-500 font-medium mb-2">Scanned</div>
+                <div class="text-900 font-bold text-2xl">{{ pipeline.statistics.scanned }}</div>
+              </div>
+            </div>
+            <div class="col-6 md:col-3">
+              <div class="card surface-card border-1 surface-border p-3 text-center">
+                <div class="text-500 font-medium mb-2">Skipped</div>
+                <div class="text-900 font-bold text-2xl">{{ pipeline.statistics.skipped }}</div>
+              </div>
+            </div>
+            <div class="col-6 md:col-3">
+              <div class="card surface-card border-1 surface-border p-3 text-center">
+                <div class="text-red-500 font-medium mb-2">Errors</div>
+                <div class="text-900 font-bold text-2xl">{{ pipeline.statistics.errors }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="text-500 text-sm mt-2 ml-1">
+            Skipped firmware is already in the inventory. Use "Scan Pool" with force to re-scan.
+          </div>
+        </div>
+
         <PipelineStageTimeline
-          v-if="!isConformanceJob && !isPollJob"
+          v-if="!isSimpleJob"
           :stage-rows="displayStageRows"
           :phase-ii-sections="phaseIiSections"
+          :backend-stages="pipeline?.stages || []"
           :dag="dagData"
           empty-message="Waiting for pipeline stages..."
         />
 
         <!-- Live AI Activity (collapsible) -->
-        <div v-if="!isConformanceJob && !isPollJob" class="mt-4">
+        <div v-if="!isSimpleJob" class="mt-4">
           <div class="flex align-items-center justify-content-between mb-2">
             <div class="flex align-items-center gap-2">
               <span class="text-700 font-bold">Live AI Activity</span>
@@ -278,9 +312,17 @@ export default {
     isPollJob() {
       return this.job.job_type === 'poll';
     },
+    isPoolScanJob() {
+      return this.job.job_type === 'pool_scan';
+    },
+    isSimpleJob() {
+      // Jobs with no per-firmware analysis pipeline or AI stream.
+      return this.isConformanceJob || this.isPollJob || this.isPoolScanJob;
+    },
     modalTitle() {
       if (this.isConformanceJob) return 'Conformance Validation';
       if (this.isPollJob) return 'Source Polling';
+      if (this.isPoolScanJob) return 'Pool Chipset Scan';
       return 'Analysis Progress';
     }
   },

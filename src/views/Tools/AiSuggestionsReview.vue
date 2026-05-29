@@ -22,7 +22,7 @@ export default {
             scope: 'latest',
             // Paging
             first: 0,
-            rows: 25,
+            rows: 50,
             // Reviewer identity (free text, persisted locally)
             reviewer: (typeof localStorage !== 'undefined' && localStorage.getItem(REVIEWER_KEY)) || '',
             // Suggestion detail dialog
@@ -329,26 +329,21 @@ export default {
 
 <template>
     <div class="ai-suggestions-review p-3">
-        <div class="flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
-            <div>
-                <h2 class="m-0 flex align-items-center gap-2">
-                    <i class="pi pi-comments text-blue-500"></i>
-                    AI Suggestions Review
-                </h2>
-                <div class="text-sm text-500 mt-1">
-                    Triage AI self-review issues &amp; knowledge-base suggestions across all scans.
-                </div>
+        <div class="flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+            <div class="flex align-items-center gap-2">
+                <i class="pi pi-comments text-blue-500 text-lg"></i>
+                <h2 class="m-0 text-lg">AI Suggestions Review</h2>
             </div>
-            <div class="flex gap-2 flex-wrap">
-                <Tag :value="`Pending ${counts.pending}`" severity="warning" />
-                <Tag :value="`Accepted ${counts.accepted}`" severity="success" />
-                <Tag :value="`Rejected ${counts.rejected}`" severity="danger" />
-                <Tag :value="`Total ${counts.total}`" severity="secondary" />
+            <div class="flex gap-1 flex-wrap">
+                <Tag :value="`${counts.pending}`" severity="warning" v-tooltip.top="'Pending'" />
+                <Tag :value="`${counts.accepted}`" severity="success" v-tooltip.top="'Accepted'" />
+                <Tag :value="`${counts.rejected}`" severity="danger" v-tooltip.top="'Rejected'" />
+                <Tag :value="`${counts.total}`" severity="secondary" v-tooltip.top="'Total'" />
             </div>
         </div>
 
         <!-- Filters -->
-        <div class="surface-card p-3 border-round mb-3 flex flex-wrap gap-3 align-items-end">
+        <div class="surface-card p-2 border-round mb-2 flex flex-wrap gap-2 align-items-end">
             <div class="flex flex-column gap-1">
                 <label class="text-xs font-bold text-500 uppercase">Status</label>
                 <Dropdown
@@ -357,7 +352,7 @@ export default {
                     option-label="label"
                     option-value="value"
                     @change="applyFilters"
-                    style="width: 11rem"
+                    style="width: 9rem"
                 />
             </div>
             <div class="flex flex-column gap-1">
@@ -368,7 +363,7 @@ export default {
                     option-label="label"
                     option-value="value"
                     @change="applyFilters"
-                    style="width: 12rem"
+                    style="width: 10rem"
                 />
             </div>
             <div class="flex flex-column gap-1">
@@ -379,10 +374,10 @@ export default {
                     option-label="label"
                     option-value="value"
                     @change="applyFilters"
-                    style="width: 13rem"
+                    style="width: 10rem"
                 />
             </div>
-            <div class="flex flex-column gap-1 flex-grow-1" style="min-width: 16rem">
+            <div class="flex flex-column gap-1 flex-grow-1" style="min-width: 12rem">
                 <label class="text-xs font-bold text-500 uppercase">Search</label>
                 <span class="p-input-icon-left">
                     <i class="pi pi-search" />
@@ -396,10 +391,10 @@ export default {
             </div>
             <div class="flex flex-column gap-1">
                 <label class="text-xs font-bold text-500 uppercase">Your name</label>
-                <InputText v-model="reviewer" placeholder="reviewer" style="width: 10rem" />
+                <InputText v-model="reviewer" placeholder="reviewer" style="width: 8rem" />
             </div>
             <div>
-                <Button label="Apply" icon="pi pi-filter" @click="applyFilters" :loading="loading" />
+                <Button icon="pi pi-filter" v-tooltip.top="'Apply filters'" @click="applyFilters" :loading="loading" />
             </div>
         </div>
 
@@ -410,10 +405,11 @@ export default {
             :loading="loading"
             lazy
             paginator
+            class="p-datatable-sm"
             :rows="rows"
             :first="first"
             :total-records="total"
-            :rows-per-page-options="[10, 25, 50, 100]"
+            :rows-per-page-options="[25, 50, 100, 200]"
             data-key="suggestion_id"
             responsive-layout="scroll"
             row-group-mode="subheader"
@@ -429,109 +425,110 @@ export default {
 
             <!-- Device group header: Vendor — Product (VID/PID), aggregated -->
             <template #groupheader="{ data }">
-                <div class="flex align-items-center gap-2 py-1">
-                    <i class="pi pi-box text-blue-500"></i>
-                    <span class="font-bold">{{ data.device_label || 'Unknown device' }}</span>
-                    <Tag v-if="data.chipset" :value="data.chipset" severity="secondary" v-tooltip.top="'Chipset'" />
+                <div class="flex align-items-center gap-1">
+                    <span class="font-bold text-sm">{{ data.device_label || 'Unknown device' }}</span>
+                    <Tag v-if="data.chipset" :value="data.chipset" severity="secondary" />
                 </div>
             </template>
 
-            <Column header="Scan / Job" style="min-width: 12rem">
+            <Column header="Scan / Job" style="min-width: 9rem">
                 <template #body="{ data }">
-                    <a
-                        class="scan-link text-sm font-medium text-primary cursor-pointer"
-                        :title="`Open scan detail (run ${data.run_id})`"
-                        @click="openScanDetail(data)"
-                    >
-                        <i class="pi pi-external-link text-xs mr-1"></i>{{ shortRunId(data.run_id) }}
-                    </a>
-                    <div class="text-xs text-500">{{ formatDate(data.analyzed_at) }}</div>
-                    <div class="text-xs text-400">
-                        <code :title="data.firmware_sha256">{{ shortSha(data.firmware_sha256) }}</code>
+                    <div class="scan-job-cell">
+                        <a
+                            class="scan-link text-sm font-medium text-primary"
+                            :title="`Run ${data.run_id} · SHA ${data.firmware_sha256 || ''}`"
+                            @click="openScanDetail(data)"
+                        >
+                            {{ shortRunId(data.run_id) }}
+                        </a>
+                        <span class="text-xs text-500 mx-1">·</span>
+                        <span class="text-xs text-500">{{ formatDate(data.analyzed_at) }}</span>
                     </div>
                 </template>
             </Column>
 
-            <Column header="Section" field="section_id" style="min-width: 9rem">
+            <Column header="Section" field="section_id" style="min-width: 6rem">
                 <template #body="{ data }">
                     <code class="text-xs">{{ data.section_id }}</code>
                 </template>
             </Column>
 
-            <Column header="Type" style="width: 8rem">
+            <Column header="Type" style="min-width: 6rem">
+                <template #body="{ data }">
+                    <div class="type-cell">
+                        <Tag
+                            :value="data.item_type === 'issue' ? 'Issue' : 'KB'"
+                            :severity="typeSeverity(data.item_type)"
+                        />
+                        <span v-if="data.payload" class="text-xs text-500 ml-1">
+                            {{ data.item_type === 'kb_suggestion' ? data.payload.kind : data.payload.category }}
+                        </span>
+                    </div>
+                </template>
+            </Column>
+
+            <Column header="Suggestion" style="min-width: 18rem">
+                <template #body="{ data }">
+                    <div class="suggestion-cell">
+                        <span
+                            class="suggestion-text"
+                            :title="changeText(data)"
+                        >{{ changeText(data) }}</span>
+                        <Button
+                            icon="pi pi-eye"
+                            class="p-button-text p-button-sm suggestion-detail-btn"
+                            v-tooltip.top="'View details'"
+                            @click="openDetail(data)"
+                        />
+                    </div>
+                </template>
+            </Column>
+
+            <Column header="Status" style="min-width: 6rem">
                 <template #body="{ data }">
                     <Tag
-                        :value="data.item_type === 'issue' ? 'Issue' : 'KB'"
-                        :severity="typeSeverity(data.item_type)"
-                    />
-                    <div v-if="data.item_type === 'kb_suggestion' && data.payload && data.payload.kind" class="mt-1">
-                        <Tag :value="data.payload.kind" :severity="suggestionKindSeverity(data.payload.kind)" />
-                    </div>
-                    <div v-else-if="data.item_type === 'issue' && data.payload && data.payload.category" class="mt-1">
-                        <Tag :value="data.payload.category" :severity="issueCategorySeverity(data.payload.category)" />
-                    </div>
-                </template>
-            </Column>
-
-            <Column header="Suggestion" style="min-width: 24rem">
-                <template #body="{ data }">
-                    <div
-                        v-if="data.item_type === 'kb_suggestion' && data.payload && data.payload.path"
-                        class="text-xs text-blue-600 mb-1"
-                    >
-                        <code>{{ data.payload.path }}</code>
-                    </div>
-                    <div class="text-sm change-text">{{ changeText(data) }}</div>
-                    <Button
-                        label="Details"
-                        icon="pi pi-eye"
-                        text
-                        size="small"
-                        class="mt-1 p-0"
-                        @click="openDetail(data)"
+                        :value="data.status"
+                        :severity="statusSeverity(data.status)"
+                        v-tooltip.top="data.decided_at
+                            ? `By ${data.reviewer || '—'} at ${formatTime(data.decided_at)}`
+                            : ''"
                     />
                 </template>
             </Column>
 
-            <Column header="Status" style="width: 10rem">
-                <template #body="{ data }">
-                    <Tag :value="data.status" :severity="statusSeverity(data.status)" />
-                    <div v-if="data.decided_at" class="text-xs text-500 mt-1">
-                        {{ data.reviewer || '—' }}<br />{{ formatTime(data.decided_at) }}
-                    </div>
-                </template>
-            </Column>
-
-            <Column header="Decision" style="width: 13rem">
+            <Column header="Decision" style="min-width: 4rem">
                 <template #body="{ data }">
                     <div class="flex gap-1">
                         <Button
                             icon="pi pi-check"
-                            label="Accept"
                             size="small"
+                            class="p-button-text"
                             severity="success"
                             :outlined="data.status !== 'accepted'"
                             :loading="!!deciding[data.suggestion_id]"
-                            @click="decide(data, 'accepted')"
+                            v-tooltip.top="'Accept'"
+                            @click.stop="decide(data, 'accepted')"
                         />
                         <Button
                             icon="pi pi-times"
-                            label="Reject"
                             size="small"
+                            class="p-button-text"
                             severity="danger"
                             :outlined="data.status !== 'rejected'"
                             :loading="!!deciding[data.suggestion_id]"
-                            @click="decide(data, 'rejected')"
+                            v-tooltip.top="'Reject'"
+                            @click.stop="decide(data, 'rejected')"
                         />
                         <Button
                             v-if="data.status !== 'pending'"
                             icon="pi pi-undo"
                             size="small"
+                            class="p-button-text"
                             severity="secondary"
                             text
                             v-tooltip.top="'Reset to pending'"
                             :loading="!!deciding[data.suggestion_id]"
-                            @click="decide(data, 'pending')"
+                            @click.stop="decide(data, 'pending')"
                         />
                     </div>
                 </template>
@@ -664,20 +661,69 @@ export default {
 </template>
 
 <style scoped>
-.change-text {
-    line-height: 1.4;
-    max-width: 40rem;
+/* --- Single-line cell layouts --- */
+.scan-job-cell {
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
 }
+
+.suggestion-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.suggestion-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.82rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.suggestion-detail-btn {
+    flex-shrink: 0;
+    width: 1.5rem;
+    height: 1.5rem;
+}
+
+.type-cell {
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    gap: 0.2rem;
+}
+
+/* --- Scan link --- */
 .scan-link {
     text-decoration: none;
+    cursor: pointer;
 }
 .scan-link:hover {
     text-decoration: underline;
 }
+
+/* --- Detail dialog content --- */
 .detail-cell {
     line-height: 1.4;
     max-width: 32rem;
     max-height: 6rem;
     overflow: auto;
+}
+
+/* --- Compact paginator and group headers --- */
+.ai-suggestions-review :deep(.p-paginator) {
+    padding: 0.25rem 0;
+}
+.ai-suggestions-review :deep(.p-paginator .p-paginator-page) {
+    min-width: 2rem;
+    height: 2rem;
+}
+.ai-suggestions-review :deep(.p-rowgroup-header td) {
+    padding: 0.25rem 0.5rem;
 }
 </style>

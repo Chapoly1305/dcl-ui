@@ -61,7 +61,7 @@ export default {
                     icon: 'pi pi-fw pi-shield',
                     items: [
                         { label: 'Available Firmware', icon: 'pi pi-fw pi-box', to: '/firmware-security/available-firmware' },
-                        { label: 'Batch Analysis', icon: 'pi pi-fw pi-play-circle', to: '/firmware-security/batch-analysis' },
+                        { label: 'Batch Analysis', icon: 'pi pi-fw pi-bolt', to: '/firmware-security/batch-analysis' },
                         { label: 'Scan Results', icon: 'pi pi-fw pi-chart-line', to: '/firmware-security/scan-results' },
                         { label: 'AI Suggestions Review', icon: 'pi pi-fw pi-comments', to: '/firmware-security/ai-suggestions' },
                         { label: 'Device Profiles', icon: 'pi pi-fw pi-cog', to: '/firmware-security/device-profiles' },
