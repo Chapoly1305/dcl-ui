@@ -2,6 +2,7 @@
 import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
 import AiTranscriptDialog from '@/components/AiTranscriptDialog.vue';
 import FirmwareJobProgressModal from '@/components/FirmwareJobProgressModal.vue';
+import BatchRunsTab from '@/components/BatchRunsTab.vue';
 
 // Display config lives in utils/pipelineDisplay.js (shared with the live
 // progress modal). Edit there to rename, add, or reorder stages — every UI
@@ -11,16 +12,17 @@ import PipelineStageTimeline from '@/components/PipelineStageTimeline.vue';
 
 export default {
     name: 'FirmwareScanResults',
-    components: { AiTranscriptDialog, FirmwareJobProgressModal, PipelineStageTimeline },
+    components: { AiTranscriptDialog, FirmwareJobProgressModal, PipelineStageTimeline, BatchRunsTab },
     data() {
         const { requestBase } = resolveMatteroverwatchApiBase();
         return {
             apiBase: requestBase,
+            topTabIndex: 0,
             loading: false,
             error: null,
             rows: [],
             totalCount: 0,
-            pageSize: 5,
+            pageSize: 20,
             pageFirst: 0,
 
             uiSortField: 'analyzed_at',
@@ -321,6 +323,15 @@ export default {
         openTranscriptDialog(secId) {
             this.transcriptSectionId = secId;
             this.transcriptDialogVisible = true;
+        },
+        onTopTabChange(event) {
+            const idx = Number(event?.index ?? 0);
+            this.topTabIndex = idx;
+            const tab = idx === 1 ? 'batch-runs' : 'all-scans';
+            // Keep the active tab in the URL so it survives refresh / is shareable.
+            if (String(this.$route?.query?.tab || '') !== tab) {
+                this.$router.replace({ query: { ...this.$route.query, tab } }).catch(() => {});
+            }
         },
         normalizeNetwork(value) {
             const key = String(value || '')
@@ -709,6 +720,9 @@ export default {
             this.filters.q = initialQuery;
             this.tableFiltersExpanded = true;
         }
+        if (String(this.$route?.query?.tab || '') === 'batch-runs') {
+            this.topTabIndex = 1;
+        }
         this.loadResults();
         this.loadJobs();
     }
@@ -718,6 +732,8 @@ export default {
 <template>
     <div class="p-2 scan-results-page">
         <ConfirmDialog />
+        <TabView v-model:activeIndex="topTabIndex" @tab-change="onTopTabChange" class="scan-results-tabs">
+        <TabPanel header="All Scans">
         <div class="grid">
             <!-- Analysis Pipeline Status -->
             <div class="col-12">
@@ -806,7 +822,7 @@ export default {
                             :loading="loading"
                             paginator
                             :rows="pageSize"
-                            :rowsPerPageOptions="[5, 10, 20, 50]"
+                            :rowsPerPageOptions="[20, 50, 100]"
                             :first="pageFirst"
                             :totalRecords="totalCount"
                             @page="onPage"
@@ -880,6 +896,11 @@ export default {
                 </Card>
             </div>
         </div>
+        </TabPanel>
+        <TabPanel header="Batch Runs">
+            <BatchRunsTab :api-base="apiBase" :network="selectedNetwork" @open-report="openReport" @open-progress="openJobProgress" />
+        </TabPanel>
+        </TabView>
 
         <!-- ===== Rendered Report Sidebar ===== -->
         <Sidebar v-model:visible="reportSidebarVisible" position="right" class="report-sidebar w-full md:w-32rem lg:w-45rem">
@@ -1173,6 +1194,7 @@ export default {
                             :key="selectedResultId"
                             :stage-rows="stageRows"
                             :phase-ii-sections="checklistResults"
+                            :backend-stages="sanitizedReport?.stages || []"
                             :dag="dagData"
                             :show-transcript-button="true"
                             @open-transcript="openTranscriptDialog"
