@@ -22,12 +22,28 @@ export default {
             pollTimer: null,
             deleteDialog: { visible: false, group: null, purgeResults: false },
             insights: { visible: false, group: null, loading: false, status: 'none', doc: null, error: null },
-            insightsPollTimer: null
+            insightsPollTimer: null,
+            insightsPollCount: 0,
+            showInfoIssues: false
         };
     },
     computed: {
         hasActive() {
             return this.groups.some((g) => g.status === 'running');
+        },
+        // v2 insights expose a canonical `issues` array; older docs fall back to
+        // the legacy per-perspective tabs.
+        useIssuesLayout() {
+            return Array.isArray(this.insights.doc?.issues);
+        },
+        insightIssues() {
+            return Array.isArray(this.insights.doc?.issues) ? this.insights.doc.issues : [];
+        },
+        reviewIssues() {
+            return this.insightIssues.filter((i) => i.recommend_review);
+        },
+        infoIssues() {
+            return this.insightIssues.filter((i) => !i.recommend_review);
         }
     },
     watch: {
@@ -179,6 +195,7 @@ export default {
         },
         async openInsights(group) {
             if (!group?.group_id) return;
+            this.showInfoIssues = false;
             this.insights = { visible: true, group, loading: true, status: 'none', doc: null, error: null };
             await this.loadInsights(group.group_id);
         },
@@ -203,9 +220,21 @@ export default {
         },
         scheduleInsightsPoll(groupId) {
             this.clearInsightsPoll();
+            this.insightsPollCount = 0;
+            const MAX_POLLS = 150; // 10 min at 4s intervals
             this.insightsPollTimer = setInterval(() => {
-                if (this.insights.visible) this.loadInsights(groupId);
-                else this.clearInsightsPoll();
+                if (!this.insights.visible) {
+                    this.clearInsightsPoll();
+                    return;
+                }
+                this.insightsPollCount += 1;
+                if (this.insightsPollCount > MAX_POLLS) {
+                    this.clearInsightsPoll();
+                    this.insights.loading = false;
+                    this.insights.error = 'Insights generation timed out. Check the server or try again.';
+                    return;
+                }
+                this.loadInsights(groupId);
             }, 4000);
         },
         clearInsightsPoll() {
@@ -213,6 +242,7 @@ export default {
                 clearInterval(this.insightsPollTimer);
                 this.insightsPollTimer = null;
             }
+            this.insightsPollCount = 0;
         },
         async generateInsights(group) {
             const g = group || this.insights.group;
@@ -245,6 +275,21 @@ export default {
             if (k === 'medium') return 'warning';
             if (k === 'low') return 'info';
             return 'secondary';
+        },
+        issueTitle(issue) {
+            return String(issue?.summary || issue?.verdict || issue?.section_id || 'finding');
+        },
+        shortRid(rid) {
+            const s = String(rid || '');
+            return s.length > 10 ? `${s.slice(0, 8)}…` : s;
+        },
+        // Click-through from an issue's affected list: hand the result_id to the
+        // parent's report sidebar and close the modal so the report is visible.
+        openResultFromInsights(resultId) {
+            const id = String(resultId || '').trim();
+            if (!id) return;
+            this.$emit('open-report', { result_id: id });
+            this.insights.visible = false;
         },
         groupStatusSeverity(status) {
             const key = String(status || '').toLowerCase();
@@ -502,14 +547,14 @@ export default {
 
             <div v-if="insights.loading || insights.status === 'running' || insights.status === 'pending'" class="flex flex-column align-items-center justify-content-center p-5 gap-3 text-500">
                 <ProgressSpinner style="width: 2.5rem; height: 2.5rem" strokeWidth="6" />
-                <span class="text-lg">Generating insights across multiple perspectives…</span>
-                <span class="text-sm">Security posture · Fleet clustering · Anomalies · Pipeline health</span>
+                <span class="text-lg">Generating insights…</span>
+                <span class="text-sm">Triaging findings · Fleet clustering · Pipeline health</span>
             </div>
 
             <div v-else-if="insights.status === 'none'" class="flex flex-column align-items-center justify-content-center p-5 gap-3 text-500">
                 <i class="pi pi-bolt text-4xl text-yellow-500"></i>
                 <span class="text-lg">No insights generated yet.</span>
-                <span class="text-sm text-center">Generate an AI review of this batch across four perspectives: security posture, fleet clustering, anomalies &amp; outliers, and pipeline health.</span>
+                <span class="text-sm text-center">Generate an AI review of this batch: a deduplicated, severity-ranked list of issues worth manual review, plus fleet clustering and pipeline / KB health.</span>
                 <Button label="Generate insights" icon="pi pi-bolt" @click="generateInsights(insights.group)" />
             </div>
 
@@ -534,8 +579,78 @@ export default {
                     </div>
                 </div>
 
-                <!-- Perspective tabs -->
+                <!-- Issues to review (v2 canonical list) + cohort perspective tabs -->
                 <TabView>
+                    <TabPanel v-if="useIssuesLayout" :header="reviewIssues.length ? `Issues to review (${reviewIssues.length})` : 'Issues to review'">
+                        <Message v-if="insights.doc.issues_status === 'failed'" severity="warn" :closable="false" class="mb-2">
+                            AI triage was unavailable — showing deterministic findings with mapped severity.
+                        </Message>
+                        <Message v-else-if="insights.doc.issues_status === 'partial'" severity="info" :closable="false" class="mb-2">
+                            AI triage partially completed — some findings show mapped severity only.
+                        </Message>
+
+                        <div v-if="insightIssues.length === 0" class="text-500 text-sm">No findings extracted from this batch.</div>
+
+                        <!-- review-worthy issues, highest severity / prevalence first -->
+                        <div v-for="(it, i) in reviewIssues" :key="`iss-${it.finding_id || i}`" class="finding-row">
+                            <div class="flex align-items-center gap-2 mb-1 flex-wrap">
+                                <Tag :value="(it.severity || 'info').toUpperCase()" :severity="findingSeverity(it.severity)" />
+                                <span class="font-semibold text-sm">{{ issueTitle(it) }}</span>
+                                <Tag v-if="it.affected_count > 1" :value="`${it.affected_count} firmwares`" severity="info" class="affected-count-tag" />
+                                <Tag v-if="it.section_id" :value="it.section_id" severity="secondary" class="section-tag" />
+                            </div>
+                            <div v-if="it.why" class="text-sm text-700">{{ it.why }}</div>
+                            <div v-else-if="it.detail" class="text-sm text-700 issue-detail">{{ it.detail }}</div>
+                            <div v-if="(it.affected_result_ids || []).length" class="flex flex-wrap gap-1 mt-1 align-items-center">
+                                <span class="text-xs text-500 mr-1">Affected:</span>
+                                <Chip
+                                    v-for="(rid, j) in it.affected_result_ids.slice(0, 12)"
+                                    :key="`ar-${it.finding_id}-${j}`"
+                                    :label="shortRid(rid)"
+                                    class="text-xs affected-chip"
+                                    @click="openResultFromInsights(rid)"
+                                />
+                                <span v-if="it.affected_result_ids.length > 12" class="text-xs text-500">+{{ it.affected_result_ids.length - 12 }} more</span>
+                            </div>
+                            <div v-if="(it.correlates_with || []).length" class="text-xs text-500 mt-1">
+                                Correlates with: {{ it.correlates_with.join(', ') }}
+                            </div>
+                        </div>
+                        <div v-if="reviewIssues.length === 0 && insightIssues.length" class="text-500 text-sm">Nothing flagged for manual review.</div>
+
+                        <!-- informational / benign findings, collapsed by default -->
+                        <div v-if="infoIssues.length" class="mt-3">
+                            <Button
+                                :label="`${showInfoIssues ? 'Hide' : 'Show'} ${infoIssues.length} informational finding${infoIssues.length === 1 ? '' : 's'}`"
+                                :icon="showInfoIssues ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+                                class="p-button-text p-button-sm"
+                                @click="showInfoIssues = !showInfoIssues"
+                            />
+                            <template v-if="showInfoIssues">
+                                <div v-for="(it, i) in infoIssues" :key="`info-${it.finding_id || i}`" class="finding-row finding-row--muted">
+                                    <div class="flex align-items-center gap-2 mb-1 flex-wrap">
+                                        <Tag :value="(it.severity || 'info').toUpperCase()" :severity="findingSeverity(it.severity)" />
+                                        <span class="font-semibold text-sm">{{ issueTitle(it) }}</span>
+                                        <Tag v-if="it.affected_count > 1" :value="`${it.affected_count} firmwares`" severity="info" class="affected-count-tag" />
+                                        <Tag v-if="it.section_id" :value="it.section_id" severity="secondary" class="section-tag" />
+                                    </div>
+                                    <div v-if="it.detail" class="text-sm text-700 issue-detail">{{ it.detail }}</div>
+                                    <div v-if="(it.affected_result_ids || []).length" class="flex flex-wrap gap-1 mt-1 align-items-center">
+                                        <span class="text-xs text-500 mr-1">Affected:</span>
+                                        <Chip
+                                            v-for="(rid, j) in it.affected_result_ids.slice(0, 12)"
+                                            :key="`info-ar-${it.finding_id}-${j}`"
+                                            :label="shortRid(rid)"
+                                            class="text-xs affected-chip"
+                                            @click="openResultFromInsights(rid)"
+                                        />
+                                        <span v-if="it.affected_result_ids.length > 12" class="text-xs text-500">+{{ it.affected_result_ids.length - 12 }} more</span>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </TabPanel>
+
                     <TabPanel v-for="(persp, key) in insights.doc.perspectives" :key="key" :header="persp.label || key">
                         <Message v-if="persp.status === 'failed'" severity="error" :closable="false">
                             This perspective failed to generate: {{ persp.error }}
@@ -547,6 +662,7 @@ export default {
                                 <div class="flex align-items-center gap-2 mb-1">
                                     <Tag :value="(f.severity || 'info').toUpperCase()" :severity="findingSeverity(f.severity)" />
                                     <span class="font-semibold text-sm">{{ f.title }}</span>
+                                    <Tag v-if="f.affected_count && f.affected_count > 1" :value="`${f.affected_count} firmwares`" severity="info" class="affected-count-tag" />
                                 </div>
                                 <div class="text-sm text-700">{{ f.detail }}</div>
                                 <div v-if="(f.affected || []).length" class="flex flex-wrap gap-1 mt-1">
@@ -621,5 +737,21 @@ export default {
 }
 .finding-row:last-child {
     border-bottom: none;
+}
+.finding-row--muted {
+    opacity: 0.78;
+}
+.issue-detail {
+    white-space: pre-line;
+}
+.section-tag {
+    font-size: 0.7rem;
+}
+.affected-chip {
+    cursor: pointer;
+}
+.affected-chip:hover {
+    filter: brightness(0.95);
+    text-decoration: underline;
 }
 </style>
