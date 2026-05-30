@@ -136,7 +136,7 @@ export default {
 
             const src = r?.source_rel_path;
             if (src) {
-                const match = String(src).match(/ota[a-z]?_(\d+)_(\d+)_(\d+)_([0-9a-fA-ota_format]{8})/);
+                const match = String(src).match(/ota[a-z]?_(\d+)_(\d+)_(\d+)_([0-9a-fA-F]{8})/);
                 if (match) {
                     vid = parseInt(match[1]);
                     pid = parseInt(match[2]);

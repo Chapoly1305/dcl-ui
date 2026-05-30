@@ -23,17 +23,6 @@ import { shallowRef } from 'vue';
 
 export const DISPLAY_STAGES = [
     {
-        id: 'intake',
-        label: 'OTA / Payload Intake',
-        backend: ['meta', 'matter_ota'],
-        sections: [
-            { id: 'manifest_integrity', name: 'Manifest-layer Integrity', desc: 'Base64 decode OtaChecksum, recompute whole-file hash, compare with DCL declaration' },
-            { id: 'ota_format', name: 'Matter OTA Image Format', desc: 'Magic number check, TLV parse, header field validation, cross-reference with DCL fields' },
-            { id: 'payload_extraction', name: 'Image-layer Digest / Payload Extraction', desc: 'Extract payload from Matter wrapper, verify ImageDigest, compute payload SHA-256' },
-            { id: 'matter_ota', name: 'Matter OTA Detection', desc: 'Detect + peel the Matter OTA wrapper; emit the inner payload.' },
-        ]
-    },
-    {
         id: 'classify',
         label: 'Payload Classification',
         backend: ['chipset_identify', 'secure_boot_authenticity'],
@@ -70,7 +59,7 @@ export const DISPLAY_STAGES = [
     },
     {
         id: 'analysis',
-        label: 'Modular Analysis',
+        label: 'AI-Enriched Analysis',
         backend: [],
         sections: [
             { id: 'secrets', name: 'Secrets / Sensitive Material Scan', desc: 'AI-enriched byte-scan for embedded secrets; disambiguates real keys from library refs, hex tables, and benign certs' },
@@ -78,7 +67,6 @@ export const DISPLAY_STAGES = [
             { id: 'custom_auth', name: 'Custom Authenticity Validation', desc: 'AI-driven vendor-rolled signature verification; decompiles OTA apply spine, traces crypto gating, produces transcript' },
             { id: 'backdoor', name: 'Vendor Implementation / Sink-driven RE', desc: 'AI-driven backdoor detection; decompiles candidate sinks, traces data flow, assesses exploitability, discovers missed patterns' },
             { id: 'connectivity', name: 'Vendor-cloud Telemetry / Privacy', desc: 'AI-enriched endpoint audit; researches unclassified endpoints, assesses privacy risk, flags C2 indicators' },
-            { id: 'lineage', name: 'Version Lineage / Cross-network / Regression', desc: 'Version chain analysis, testnet/mainnet cross-reference, binary/strings diff, regression detection' },
             { id: 'supply_chain', name: 'Supply-chain / Integration Failure', desc: 'AI-enriched aggregation of secure_boot/rng_init/secrets/sdk_baseline signals; identifies SDK-reuse patterns, assesses key-reuse potential, recommends remediation' },
         ]
     },
@@ -167,9 +155,20 @@ export function aggregateDisplayStatus(display, linkedBackendStages, sectionResu
         if (r) return stageSeverity(r.status);
         const backend = backendByName.get(def.id);
         if (backend) return stageSeverity(backend.status || '');
-        return stageSeverity('pending');
+        // Card has no data source at all — treat as not applicable
+        // (skipped) rather than pending, so Phase-I-only cards don't
+        // block their group from resolving to skipped when all Phase II
+        // content was filtered out or not in scope.
+        return stageSeverity('skipped');
     });
-    const backendSeverities = linkedBackendStages.map((s) => stageSeverity(s?.status || ''));
+    // Only include backend stages that don't have a corresponding section card,
+    // so section cards are the authoritative source of group status. Without
+    // this, a successful Phase-I backend stage (e.g. build_databases) can make
+    // an entire group show "Passed" even when every section card is "Skipped".
+    const sectionCardIds = new Set((display.sections || []).map((s) => s.id));
+    const backendSeverities = linkedBackendStages
+        .filter((s) => !sectionCardIds.has(String(s?.name || '')))
+        .map((s) => stageSeverity(s?.status || ''));
     const all = [...sectionSeverities, ...backendSeverities];
     if (!all.length) return 'pending';
     if (all.includes('danger')) return 'issue';
@@ -196,7 +195,7 @@ export function aggregateDisplayStatus(display, linkedBackendStages, sectionResu
 // firmware-analysis timeline + DAG, matching the curated design.
 export function buildDisplayStages(summary) {
     const groups = (summary && summary.groups ? summary.groups : []).filter((g) => g.id !== 'conformance');
-    const comps = (summary && summary.components) ? summary.components : [];
+    const comps = (summary && summary.components ? summary.components : []).filter(c => c.phase !== 1);
     const byGroup = {};
     for (const c of comps) {
         if (!byGroup[c.group]) byGroup[c.group] = [];
@@ -210,8 +209,12 @@ export function buildDisplayStages(summary) {
             // ctx_stage components carry the Phase-I-style status/timing the
             // timeline reads from `backend-stages`.
             backend: members.filter((c) => c.kind === 'ctx_stage').map((c) => c.id),
+            // Only file_section and synthetic_db components become selectable
+            // section cards.  ctx_stage (prep) components are backend-only —
+            // they run in Phase I and should never appear as user-selectable
+            // Phase II items.
             sections: members
-                .filter((c) => c.visible !== false)
+                .filter((c) => c.visible !== false && c.kind !== 'ctx_stage')
                 .map((c) => ({ id: c.id, name: c.label, desc: c.description })),
         };
     });

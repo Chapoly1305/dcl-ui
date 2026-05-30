@@ -207,6 +207,10 @@
                 <Checkbox v-model="run.force" :binary="true" inputId="builder-force" />
                 <label for="builder-force" class="text-sm font-bold text-yellow-800 cursor-pointer">Force Re-run (Overwrites existing results)</label>
               </div>
+              <div class="flex align-items-center gap-2 mt-2">
+                <label for="builder-parallel" class="text-sm font-bold text-700">Parallel Jobs</label>
+                <InputNumber v-model="run.parallel" inputId="builder-parallel" :min="1" :max="64" class="w-5rem" />
+              </div>
             </div>
 
             <!-- Estimate / Status -->
@@ -295,11 +299,12 @@ export default {
       profiles: [],
       sectionOptions: [],
       selectedRows: [],
-      run: { 
-        analysis: 'default', 
-        sections: [], 
-        target: 'selected', 
+      run: {
+        analysis: 'default',
+        sections: [],
+        target: 'selected',
         force: false,
+        parallel: 4,
         activeStages: displayStagesRef.value.filter(s => s.id !== 'analysis').map(s => s.id)
       },
       confirmVisible: false,
@@ -460,8 +465,8 @@ export default {
         this.run.sections = [];
         this.run.analysis = 'default';
       } else if (name === 'chipset') {
-        this.run.activeStages = ['intake', 'classify'];
-        this.run.sections = ['chipset_identify', 'manifest_integrity', 'ota_format', 'payload_extraction'];
+        this.run.activeStages = ['classify'];
+        this.run.sections = ['chipset_identify', 'chipset_inference', 'manifest_integrity'];
         this.run.analysis = 'chipset_scan';
       } else if (name === 'standard') {
         this.run.activeStages = this.pipelineStages.filter(s => s.id !== 'analysis').map(s => s.id);
@@ -608,7 +613,7 @@ export default {
           this.actionNote = 'Chipset scan queued.';
         } else {
           const profile = mode === 'custom' ? 'default' : mode;
-          const payload = { network: this.selectedNetwork, analysis_profile: profile, ...target };
+          const payload = { network: this.selectedNetwork, analysis_profile: profile, worker_parallel: this.run.parallel, ...target };
           if (this.run.sections && this.run.sections.length) payload.phase_ii_section_filter = this.run.sections;
           const res = await fetch(`${this.metadataApiBase}/api/v1/firmware/pool/analyze`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
