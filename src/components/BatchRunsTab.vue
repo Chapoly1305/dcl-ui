@@ -21,10 +21,11 @@ export default {
             memberState: {}, // group_id -> { loading, error, members }
             pollTimer: null,
             deleteDialog: { visible: false, group: null, purgeResults: false },
-            insights: { visible: false, group: null, loading: false, status: 'none', doc: null, error: null },
+            insights: { visible: false, group: null, loading: false, status: 'none', doc: null, error: null, progress: null, startedAt: null },
             insightsPollTimer: null,
             insightsPollCount: 0,
-            showInfoIssues: false
+            showInfoIssues: false,
+            nowMs: Date.now()
         };
     },
     computed: {
@@ -44,6 +45,35 @@ export default {
         },
         infoIssues() {
             return this.insightIssues.filter((i) => !i.recommend_review);
+        },
+        insightsElapsedLabel() {
+            const started = this.insights.startedAt;
+            if (!started) return '';
+            const t0 = Date.parse(started);
+            if (Number.isNaN(t0)) return '';
+            const secs = Math.max(0, Math.round((this.nowMs - t0) / 1000));
+            const m = Math.floor(secs / 60);
+            const s = secs % 60;
+            return m > 0 ? `${m}m ${s}s` : `${s}s`;
+        },
+        insightsStageLabel() {
+            const stage = String(this.insights.progress?.stage || '');
+            if (stage === 'perspective:fleet') return 'Clustering the fleet…';
+            if (stage === 'perspective:pipeline') return 'Reviewing pipeline & KB health…';
+            if (stage === 'enrichment') return 'Triaging findings…';
+            if (stage === 'synthesis') return 'Synthesising the executive view…';
+            if (this.insights.status === 'pending') return 'Queued — waiting for a worker…';
+            return 'Generating insights…';
+        },
+        insightsProgressDetail() {
+            const parts = [];
+            const p = this.insights.progress;
+            if (p && Number.isFinite(p.total) && p.total > 0) {
+                const step = Math.min((Number(p.completed) || 0) + 1, p.total);
+                parts.push(`Step ${step} of ${p.total}`);
+            }
+            if (this.insightsElapsedLabel) parts.push(`${this.insightsElapsedLabel} elapsed`);
+            return parts.join(' · ');
         }
     },
     watch: {
@@ -196,8 +226,12 @@ export default {
         async openInsights(group) {
             if (!group?.group_id) return;
             this.showInfoIssues = false;
-            this.insights = { visible: true, group, loading: true, status: 'none', doc: null, error: null };
+            this.nowMs = Date.now();
+            this.insights = { visible: true, group, loading: true, status: 'none', doc: null, error: null, progress: null, startedAt: null };
             await this.loadInsights(group.group_id);
+            if (this.insights.status === 'running' || this.insights.status === 'pending') {
+                this.scheduleInsightsPoll(group.group_id);
+            }
         },
         async loadInsights(groupId) {
             if (!this.apiBase || !groupId) return;
@@ -207,12 +241,9 @@ export default {
                 const data = await response.json();
                 this.insights.status = data.status;
                 this.insights.doc = data.insights;
+                this.insights.progress = data.progress || null;
+                this.insights.startedAt = data.started_at || null;
                 this.insights.loading = false;
-                if (data.status === 'running' || data.status === 'pending') {
-                    this.scheduleInsightsPoll(groupId);
-                } else {
-                    this.clearInsightsPoll();
-                }
             } catch (err) {
                 this.insights.loading = false;
                 this.insights.error = err instanceof Error ? err.message : 'Failed to load insights';
@@ -221,21 +252,30 @@ export default {
         scheduleInsightsPoll(groupId) {
             this.clearInsightsPoll();
             this.insightsPollCount = 0;
-            const MAX_POLLS = 150; // 10 min at 4s intervals
-            this.insightsPollTimer = setInterval(() => {
+            // 1s ticker: refresh the elapsed clock every second, hit the server
+            // every 4s, and keep polling for as long as the job stays running —
+            // generation runs server-side with no time limit, so there is no
+            // premature client timeout. A generous safety stop only guards against
+            // a zombie timer if the backend dies without ever updating status.
+            const SAFETY_TICKS = 10800; // ~3h at 1s
+            this.insightsPollTimer = setInterval(async () => {
                 if (!this.insights.visible) {
                     this.clearInsightsPoll();
                     return;
                 }
+                this.nowMs = Date.now();
                 this.insightsPollCount += 1;
-                if (this.insightsPollCount > MAX_POLLS) {
+                if (this.insightsPollCount > SAFETY_TICKS) {
                     this.clearInsightsPoll();
-                    this.insights.loading = false;
-                    this.insights.error = 'Insights generation timed out. Check the server or try again.';
+                    this.insights.error = 'Still running after a long time — check the worker process or the job transcripts.';
                     return;
                 }
-                this.loadInsights(groupId);
-            }, 4000);
+                if (this.insightsPollCount % 4 !== 0) return; // server poll every 4s
+                await this.loadInsights(groupId);
+                if (this.insights.status !== 'running' && this.insights.status !== 'pending') {
+                    this.clearInsightsPoll();
+                }
+            }, 1000);
         },
         clearInsightsPoll() {
             if (this.insightsPollTimer) {
@@ -545,10 +585,11 @@ export default {
 
             <Message v-if="insights.error" severity="warn" :closable="false" class="mb-2">{{ insights.error }}</Message>
 
-            <div v-if="insights.loading || insights.status === 'running' || insights.status === 'pending'" class="flex flex-column align-items-center justify-content-center p-5 gap-3 text-500">
+            <div v-if="insights.loading || insights.status === 'running' || insights.status === 'pending'" class="flex flex-column align-items-center justify-content-center p-5 gap-2 text-500">
                 <ProgressSpinner style="width: 2.5rem; height: 2.5rem" strokeWidth="6" />
-                <span class="text-lg">Generating insights…</span>
-                <span class="text-sm">Triaging findings · Fleet clustering · Pipeline health</span>
+                <span class="text-lg">{{ insightsStageLabel }}</span>
+                <span v-if="insightsProgressDetail" class="text-sm">{{ insightsProgressDetail }}</span>
+                <span class="text-xs text-400 mt-2 text-center">Runs in the background — you can close this dialog; progress is kept and resumes when you reopen it.</span>
             </div>
 
             <div v-else-if="insights.status === 'none'" class="flex flex-column align-items-center justify-content-center p-5 gap-3 text-500">
