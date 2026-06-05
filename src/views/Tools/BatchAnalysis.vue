@@ -55,7 +55,7 @@
                   <Dropdown v-model="filters.status" class="w-full p-inputtext-sm" :options="statusOptions"
                     optionLabel="label" optionValue="value" @change="applyFilters" />
                 </div>
-                <div class="col-12 md:col-6 py-1">
+                <div class="col-12 md:col-4 py-1">
                   <label class="filter-label">Vendor Name</label>
                   <InputText v-model="filters.vendor" class="w-full p-inputtext-sm" placeholder="Search vendor..." @keyup.enter="applyFilters" />
                 </div>
@@ -67,7 +67,13 @@
                   <label class="filter-label">PID</label>
                   <InputText v-model="filters.pid" class="w-full p-inputtext-sm" placeholder="0x..." @keyup.enter="applyFilters" />
                 </div>
-                <div class="col-12 md:col-2 py-1 flex align-items-end justify-content-end gap-2">
+                <div class="col-6 md:col-2 py-1">
+                  <label class="filter-label">Block Height</label>
+                  <InputText v-model="filters.blockHeight" class="w-full p-inputtext-sm" placeholder="Exact..." @keyup.enter="applyFilters" />
+                </div>
+                <div class="col-6 md:col-2 py-1">
+                  <label class="filter-label">TX Hash (first 8)</label>
+                  <InputText v-model="filters.txHashFirst8" class="w-full p-inputtext-sm" placeholder="e.g. A1B2C3D4" @keyup.enter="applyFilters" />
                 </div>
               </div>
               <div class="flex align-items-center justify-content-end gap-3 mt-3 pt-3 border-top-1 surface-border">
@@ -356,7 +362,7 @@ export default {
   },
   methods: {
     defaultFilters() {
-      return { chipset: null, status: 'any', vendor: '', vid: '', pid: '', q: '' };
+      return { chipset: null, status: 'any', vendor: '', vid: '', pid: '', blockHeight: '', txHashFirst8: '', q: '' };
     },
     clearFilters() { this.filters = this.defaultFilters(); this.pageFirst = 0; this.loadInventory(); },
     applyFilters() { this.pageFirst = 0; this.loadInventory(); },
@@ -467,7 +473,7 @@ export default {
       } else if (name === 'chipset') {
         this.run.activeStages = ['classify'];
         this.run.sections = ['chipset_identify', 'chipset_inference', 'manifest_integrity'];
-        this.run.analysis = 'chipset_scan';
+        this.run.analysis = 'custom';
       } else if (name === 'standard') {
         this.run.activeStages = this.pipelineStages.filter(s => s.id !== 'analysis').map(s => s.id);
         this.run.sections = [];
@@ -512,6 +518,8 @@ export default {
       if (this.filters.vendor) f.vendor = this.filters.vendor;
       if (this.filters.vid) f.vid = Number(this.filters.vid);
       if (this.filters.pid) f.pid = Number(this.filters.pid);
+      if (this.filters.blockHeight) f.block_height = Number(this.filters.blockHeight);
+      if (this.filters.txHashFirst8) f.tx_hash_first8 = this.filters.txHashFirst8.trim().toUpperCase();
       if (this.filters.q) f.q = this.filters.q;
       return f;
     },
@@ -525,7 +533,9 @@ export default {
         sort_dir: this.sortOrder === 1 ? 'asc' : 'desc'
       });
       const map = [['chipset', this.filters.chipset], ['vendor', this.filters.vendor],
-        ['vid', this.filters.vid], ['pid', this.filters.pid], ['q', this.filters.q]];
+        ['vid', this.filters.vid], ['pid', this.filters.pid],
+        ['block_height', this.filters.blockHeight], ['tx_hash_first8', this.filters.txHashFirst8],
+        ['q', this.filters.q]];
       for (const [k, v] of map) {
         if (v !== null && v !== undefined && String(v).trim() !== '') params.set(k, String(v).trim());
       }
