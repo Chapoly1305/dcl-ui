@@ -64,6 +64,7 @@ export default {
                         { label: 'Batch Analysis', icon: 'pi pi-fw pi-bolt', to: '/firmware-security/batch-analysis' },
                         { label: 'Scan Results', icon: 'pi pi-fw pi-chart-line', to: '/firmware-security/scan-results' },
                         { label: 'AI Suggestions Review', icon: 'pi pi-fw pi-comments', to: '/firmware-security/ai-suggestions' },
+                        { label: 'Findings Clustering', icon: 'pi pi-fw pi-th-large', to: '/firmware-security/findings-clustering' },
                         { label: 'Device Profiles', icon: 'pi pi-fw pi-cog', to: '/firmware-security/device-profiles' },
                         { label: 'Vendor Profiles', icon: 'pi pi-fw pi-briefcase', to: '/firmware-security/vendor-profiles' },
                         { label: 'Webhook Settings', icon: 'pi pi-fw pi-bell', to: '/firmware-security/webhook-settings' }
