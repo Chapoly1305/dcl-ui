@@ -247,17 +247,28 @@
       :api-base="metadataApiBase"
       @update:visible="progressDialogVisible = $event"
     />
+
+    <PipelineBuilderDialog
+      v-model:visible="builderVisible"
+      mode="single"
+      :api-base="metadataApiBase"
+      :selected-network="selectedNetwork"
+      @execute="onBuilderExecute"
+      @cancel="builderVisible = false"
+    />
   </div>
 </template>
 
 <script>
 import FirmwareJobProgressModal from '@/components/FirmwareJobProgressModal.vue';
+import PipelineBuilderDialog from '@/components/PipelineBuilderDialog.vue';
 import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
 
 export default {
   name: 'FirmwareAvailable',
   components: {
-    FirmwareJobProgressModal
+    FirmwareJobProgressModal,
+    PipelineBuilderDialog
   },
   data() {
     const { requestBase } = resolveMatteroverwatchApiBase();
@@ -300,7 +311,9 @@ export default {
         { label: 'None', value: 'none' }
       ],
       progressDialogVisible: false,
-      progressJobId: ''
+      progressJobId: '',
+      builderVisible: false,
+      builderRow: null
     };
   },
   computed: {
@@ -511,14 +524,21 @@ export default {
       if (key === 'done' || key === 'failed' || key === 'running' || key === 'pending') return key;
       return 'none';
     },
-    async enqueueAnalyze(row) {
+    enqueueAnalyze(row) {
       if (!this.metadataApiBase) {
         this.error = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
         return;
       }
+      this.builderRow = row;
+      this.builderVisible = true;
+    },
+    async onBuilderExecute(payload) {
+      const row = this.builderRow;
+      if (!row || !this.metadataApiBase) return;
+      this.error = null;
       try {
         const sha = String(row?.firmwareSha256 || '').trim();
-        const payload = {
+        const body = {
           firmware_sha256: sha || null,
           requested_from: 'available_firmware',
           network: this.selectedNetwork,
@@ -526,17 +546,24 @@ export default {
           pid: row?.pid ?? null,
           software_version: row?.softwareVersion ?? null,
           block_height: row?.blockHeight ?? null,
-          tx_hash_first8: this.txHashFirst8(row?.txHash)
+          tx_hash_first8: this.txHashFirst8(row?.txHash),
+          analysis_profile: payload.analysis_profile,
+          force: payload.force,
         };
+        if (payload.phase_ii_section_filter && payload.phase_ii_section_filter.length) {
+          body.phase_ii_section_filter = payload.phase_ii_section_filter;
+        }
         const response = await fetch(`${this.metadataApiBase}/api/v1/jobs/analyze-firmware`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(body)
         });
         if (!response.ok) {
           throw new Error(`Analyze enqueue failed (${response.status})`);
         }
         const result = await response.json();
+        this.builderVisible = false;
+        this.builderRow = null;
         await this.loadAvailableFirmware();
         const queuedJobId = String(result?.job?.job_id || '').trim();
         if (queuedJobId) {

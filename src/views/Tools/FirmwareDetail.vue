@@ -252,11 +252,21 @@
       </div>
     </div>
   </div>
+
+  <PipelineBuilderDialog
+    v-model:visible="builderVisible"
+    mode="single"
+    :api-base="apiBase"
+    :selected-network="selectedNetwork"
+    @execute="onBuilderExecute"
+    @cancel="builderVisible = false"
+  />
 </template>
 
 <script>
 import VueJsonPretty from 'vue-json-pretty';
 import 'vue-json-pretty/lib/styles.css';
+import PipelineBuilderDialog from '@/components/PipelineBuilderDialog.vue';
 import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
 
 const ZCL_TYPE_NAME = {
@@ -305,7 +315,8 @@ const GLOBAL_ATTRIBUTE_IDS = new Set(['0xFFF8', '0xFFF9', '0xFFFA', '0xFFFB', '0
 export default {
   name: 'FirmwareDetail',
   components: {
-    VueJsonPretty
+    VueJsonPretty,
+    PipelineBuilderDialog
   },
   data() {
     const { requestBase } = resolveMatteroverwatchApiBase();
@@ -313,6 +324,7 @@ export default {
       apiBase: requestBase,
       loading: false,
       enqueueLoading: false,
+      builderVisible: false,
       error: null,
       statusNote: null,
       detail: {
@@ -546,7 +558,10 @@ export default {
       if (this.activeTabIndex === 2 && !this.jobsLoaded) await this.refreshJobs();
       if (this.activeTabIndex === 3 && !this.modulesLoaded) await this.refreshModules();
     },
-    async enqueueAnalyze() {
+    enqueueAnalyze() {
+      this.builderVisible = true;
+    },
+    async onBuilderExecute(payload) {
       this.enqueueLoading = true;
       this.error = null;
       this.statusNote = null;
@@ -556,18 +571,25 @@ export default {
         return;
       }
       try {
+        const body = {
+          firmware_sha256: this.firmwareSha256,
+          requested_from: 'firmware_detail',
+          network: this.selectedNetwork,
+          analysis_profile: payload.analysis_profile,
+          force: payload.force,
+        };
+        if (payload.phase_ii_section_filter && payload.phase_ii_section_filter.length) {
+          body.phase_ii_section_filter = payload.phase_ii_section_filter;
+        }
         const response = await fetch(`${this.apiBase}/api/v1/jobs/analyze-firmware`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            firmware_sha256: this.firmwareSha256,
-            requested_from: 'firmware_detail',
-            network: this.selectedNetwork
-          })
+          body: JSON.stringify(body)
         });
         if (!response.ok) {
           throw new Error(`Analyze enqueue failed (${response.status})`);
         }
+        this.builderVisible = false;
         await this.refreshAll();
         this.statusNote = `Analysis job queued for ${this.shortSha(this.firmwareSha256)}.`;
       } catch (err) {
