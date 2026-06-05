@@ -436,7 +436,7 @@ export default {
                     if (first?.result_id) {
                         this.selectedResultId = first.result_id;
                         this.detailTabIndex = 0;
-                        await this.loadResultDetail(first.result_id);
+                        this.loadResultDetail(first.result_id);
                     } else {
                         this.selectedResultId = '';
                         this.detailPayload = { result: null, attempts: [] };
