@@ -85,6 +85,7 @@
               responsiveLayout="scroll"
               @page="onPage"
               @sort="onSort"
+              @row-click="onRowClick"
               paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
               :rowsPerPageOptions="[25, 50, 100]"
               currentPageReportTemplate=""
@@ -169,6 +170,247 @@
         <Button label="Save Override" icon="pi pi-check" :loading="overrideSaving" @click="submitOverride" />
       </template>
     </Dialog>
+
+    <!-- ===== Device Detail Sidebar ===== -->
+    <Sidebar
+      v-model:visible="detailSidebarVisible"
+      position="right"
+      class="device-sidebar w-full md:w-32rem lg:w-45rem"
+    >
+      <template #header>
+        <div class="flex align-items-center gap-2 w-full">
+          <i class="pi pi-microchip text-xl text-blue-500"></i>
+          <span class="text-xl font-bold">Device Detail</span>
+          <Tag
+            v-if="selectedDevice"
+            :value="`VID:${selectedDevice.vid} PID:${selectedDevice.pid}`"
+            severity="info"
+            class="ml-1"
+          />
+        </div>
+      </template>
+
+      <!-- Error state -->
+      <Message v-if="detailError" severity="error" :closable="false" class="mb-2">{{ detailError }}</Message>
+
+      <!-- Empty state (no device selected) -->
+      <div
+        v-if="!selectedDevice && !detailLoading"
+        class="flex flex-column align-items-center justify-content-center p-6 text-400"
+      >
+        <i class="pi pi-microchip text-5xl mb-3"></i>
+        <span class="text-lg">Select a device row to view details.</span>
+      </div>
+
+      <!-- Loading state -->
+      <div
+        v-else-if="detailLoading"
+        class="flex align-items-center justify-content-center p-6 text-500 gap-3"
+      >
+        <ProgressSpinner style="width: 2rem; height: 2rem" strokeWidth="6" />
+        <span class="text-lg">Loading device detail…</span>
+      </div>
+
+      <!-- Content loaded -->
+      <div v-else-if="selectedDevice" class="device-detail-content">
+        <!-- Device identity banner -->
+        <div class="detail-banner mb-3">
+          <div class="flex align-items-center gap-3 flex-wrap">
+            <i class="pi pi-microchip text-blue-500" style="font-size: 1.3rem"></i>
+            <div>
+              <div class="font-bold text-lg">
+                {{ deviceDetail?.vendor_name || selectedDevice.vendor_name || 'Unknown Vendor' }}
+                —
+                {{ deviceDetail?.product_name || selectedDevice.product_name || 'Unknown Product' }}
+              </div>
+              <div class="text-sm text-600 mt-1">
+                VID <code>{{ selectedDevice.vid }}</code>
+                <span class="ml-2">PID <code>{{ selectedDevice.pid }}</code></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <TabView v-model:activeIndex="detailTabIndex">
+          <!-- ===== Tab 1: Device Info ===== -->
+          <TabPanel header="Device Info">
+            <Card class="detail-card mb-2">
+              <template #title><i class="pi pi-info-circle mr-2 text-blue-500"></i>Device Metadata</template>
+              <template #content>
+                <div class="info-grid">
+                  <div class="info-row">
+                    <span class="info-label">VID</span>
+                    <code class="info-value">{{ selectedDevice.vid }}</code>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-label">PID</span>
+                    <code class="info-value">{{ selectedDevice.pid }}</code>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-label">Vendor</span>
+                    <span class="info-value">{{ deviceDetail?.vendor_name || selectedDevice.vendor_name || '-' }}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-label">Product</span>
+                    <span class="info-value">{{ deviceDetail?.product_name || selectedDevice.product_name || '-' }}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-label">Chipset</span>
+                    <span class="info-value">
+                      <Tag
+                        :value="deviceDetail?.chipset || selectedDevice.chipset || 'unknown'"
+                        :severity="chipsetSeverity(deviceDetail?.chipset || selectedDevice.chipset)"
+                      />
+                      <Tag
+                        v-if="(deviceDetail?.chipset_source || selectedDevice.chipset_source) === 'manual'"
+                        value="manual"
+                        severity="success"
+                        class="ml-1"
+                        v-tooltip.top="deviceDetail?.override_reason || selectedDevice.override_reason || 'Manual override'"
+                      />
+                    </span>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-label">Confidence</span>
+                    <span class="info-value">
+                      <span class="confidence-value">{{ formatPercent(deviceDetail?.chipset_confidence ?? selectedDevice.chipset_confidence) }}</span>
+                    </span>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-label">Last Activity</span>
+                    <span class="info-value">{{ formatDate(deviceDetail?.last_seen_at || selectedDevice.last_seen_at) }}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-label">Firmware Versions</span>
+                    <span class="info-value">{{ deviceDetail?.firmware_count ?? selectedDevice.firmware_count ?? firmwareVersions.length }}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-label">Analyzed</span>
+                    <span class="info-value">{{ deviceDetail?.analyzed_count ?? selectedDevice.analyzed_count ?? analysisResults.length }}</span>
+                  </div>
+                </div>
+              </template>
+            </Card>
+
+            <!-- Chipset Override section -->
+            <Card class="detail-card mb-0">
+              <template #title><i class="pi pi-pencil mr-2 text-orange-500"></i>Chipset Override</template>
+              <template #content>
+                <div class="mb-2 text-sm text-600">
+                  Current: <Tag :value="deviceDetail?.chipset || selectedDevice.chipset || 'unknown'" :severity="chipsetSeverity(deviceDetail?.chipset || selectedDevice.chipset)" />
+                  <span v-if="(deviceDetail?.chipset_source || selectedDevice.chipset_source) === 'manual'" class="ml-1 text-xs">(manual override)</span>
+                </div>
+                <Button
+                  label="Override Chipset"
+                  icon="pi pi-pencil"
+                  class="p-button-sm p-button-outlined"
+                  @click="openOverride(deviceDetail || selectedDevice)"
+                />
+              </template>
+            </Card>
+          </TabPanel>
+
+          <!-- ===== Tab 2: Firmware Versions ===== -->
+          <TabPanel header="Firmware Versions">
+            <div
+              v-if="firmwareVersions.length === 0 && !detailLoading"
+              class="flex flex-column align-items-center justify-content-center p-4 text-500"
+            >
+              <i class="pi pi-database text-3xl mb-2"></i>
+              <span>No firmware versions recorded for this device.</span>
+            </div>
+
+            <DataTable
+              v-else
+              :value="firmwareVersions"
+              :loading="detailLoading"
+              responsiveLayout="scroll"
+              class="p-datatable-sm"
+            >
+              <Column field="software_version" header="SW Version" style="min-width:100px">
+                <template #body="slotProps">
+                  <code>{{ slotProps.data.software_version }}</code>
+                </template>
+              </Column>
+              <Column field="release_time" header="Release Time" style="min-width:140px">
+                <template #body="slotProps">{{ formatDate(slotProps.data.release_time) }}</template>
+              </Column>
+              <Column field="block_height" header="Block" style="min-width:80px" />
+              <Column field="tx_hash_first8" header="Tx Hash" style="min-width:90px">
+                <template #body="slotProps">
+                  <code class="text-xs">{{ slotProps.data.tx_hash_first8 || '-' }}</code>
+                </template>
+              </Column>
+              <Column field="formality_conformance" header="Conformance" style="min-width:110px">
+                <template #body="slotProps">
+                  <Tag
+                    v-if="slotProps.data.formality_conformance"
+                    :value="slotProps.data.formality_conformance"
+                    :severity="slotProps.data.formality_conformance === 'pass' ? 'success' : 'danger'"
+                  />
+                  <span v-else>-</span>
+                </template>
+              </Column>
+            </DataTable>
+          </TabPanel>
+
+          <!-- ===== Tab 3: Scan History ===== -->
+          <TabPanel header="Scan History">
+            <div
+              v-if="analysisResults.length === 0 && !detailLoading"
+              class="flex flex-column align-items-center justify-content-center p-4 text-500"
+            >
+              <i class="pi pi-search text-3xl mb-2"></i>
+              <span>No scan history for this device.</span>
+            </div>
+
+            <DataTable
+              v-else
+              :value="analysisResults"
+              :loading="detailLoading"
+              responsiveLayout="scroll"
+              class="p-datatable-sm clickable-rows"
+              @row-click="navigateToScan($event.data)"
+            >
+              <Column field="result_id" header="Result ID" style="min-width:100px">
+                <template #body="slotProps">
+                  <code class="text-xs">{{ slotProps.data.result_id ? slotProps.data.result_id.slice(0, 8) : '-' }}</code>
+                </template>
+              </Column>
+              <Column field="chipset" header="Chipset" style="min-width:90px">
+                <template #body="slotProps">
+                  <Tag :value="slotProps.data.chipset || '-'" :severity="chipsetSeverity(slotProps.data.chipset)" />
+                </template>
+              </Column>
+              <Column field="sdk_best_guess_base" header="SDK" style="min-width:70px">
+                <template #body="slotProps">
+                  <span class="text-sm">{{ slotProps.data.sdk_best_guess_base || '-' }}</span>
+                </template>
+              </Column>
+              <Column field="verdict_authenticity" header="Authenticity" style="min-width:100px">
+                <template #body="slotProps">
+                  <Tag
+                    :value="slotProps.data.verdict_authenticity || 'pending'"
+                    :severity="slotProps.data.verdict_authenticity === 'pass' ? 'success' : slotProps.data.verdict_authenticity === 'fail' ? 'danger' : 'warning'"
+                  />
+                </template>
+              </Column>
+              <Column field="verdict_integrity" header="Integrity" style="min-width:80px">
+                <template #body="slotProps">
+                  <Tag
+                    :value="slotProps.data.verdict_integrity || 'pending'"
+                    :severity="slotProps.data.verdict_integrity === 'pass' ? 'success' : 'danger'"
+                  />
+                </template>
+              </Column>
+              <Column field="analyzed_at" header="Analyzed At" style="min-width:140px">
+                <template #body="slotProps">{{ formatDate(slotProps.data.analyzed_at) }}</template>
+              </Column>
+            </DataTable>
+          </TabPanel>
+        </TabView>
+      </div>
+    </Sidebar>
   </div>
 </template>
 
@@ -201,6 +443,15 @@ export default {
       overrideReason: '',
       overrideError: null,
       overrideSaving: false,
+      // Device detail sidebar
+      detailSidebarVisible: false,
+      selectedDevice: null,
+      detailLoading: false,
+      detailError: null,
+      detailTabIndex: 0,
+      deviceDetail: null,
+      firmwareVersions: [],
+      analysisResults: [],
     };
   },
   computed: {
@@ -300,7 +551,9 @@ export default {
     formatDate(value) {
       if (!value) return '';
       try {
-        return new Date(value).toLocaleDateString();
+        const dt = new Date(value);
+        if (Number.isNaN(dt.getTime())) return String(value);
+        return dt.toLocaleString();
       } catch {
         return value;
       }
@@ -338,6 +591,46 @@ export default {
         this.overrideSaving = false;
       }
     },
+    // ---- Device detail sidebar ----
+    onRowClick(event) {
+      this.openDeviceDetail(event?.data);
+    },
+    openDeviceDetail(row) {
+      if (!row || row.vid === undefined || row.pid === undefined) return;
+      this.selectedDevice = row;
+      this.detailTabIndex = 0;
+      this.detailSidebarVisible = true;
+      this.fetchDeviceDetail(row.vid, row.pid);
+    },
+    async fetchDeviceDetail(vid, pid) {
+      this.detailLoading = true;
+      this.detailError = null;
+      this.deviceDetail = null;
+      this.firmwareVersions = [];
+      this.analysisResults = [];
+      try {
+        const url = `${this.apiBase}/api/v1/profiling/devices/${vid}/${pid}?network=${this.selectedNetwork}`;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`Device detail request failed (${resp.status})`);
+        const payload = await resp.json();
+        this.deviceDetail = payload.device || null;
+        this.firmwareVersions = Array.isArray(payload.firmware_versions) ? payload.firmware_versions : [];
+        this.analysisResults = Array.isArray(payload.analysis_results) ? payload.analysis_results : [];
+      } catch (err) {
+        this.detailError = err instanceof Error ? err.message : 'Failed to load device detail';
+      } finally {
+        this.detailLoading = false;
+      }
+    },
+    navigateToScan(result) {
+      const sha = String(result?.firmware_sha256 || '').trim();
+      if (sha) {
+        this.$router.push(`/firmware-security/firmware/${sha}`);
+        return;
+      }
+      this.$router.push(`/firmware-security/scan-results?q=${encodeURIComponent(result.result_id || '')}`);
+    },
+
     async refreshProfiling() {
       this.pageFirst = 0;
       try {
@@ -384,5 +677,78 @@ export default {
   text-transform: uppercase;
   color: var(--text-color-secondary);
   letter-spacing: 0.04em;
+}
+
+/* ---- Device Detail Sidebar ---- */
+:deep(.device-sidebar.p-sidebar) {
+  background: #f8fafc;
+}
+:deep(.device-sidebar .p-sidebar-header) {
+  padding: 1rem 1.2rem 0.5rem;
+}
+:deep(.device-sidebar .p-sidebar-content) {
+  padding: 0.5rem 1.2rem 1.2rem;
+}
+
+.device-detail-content {
+  font-size: 0.88rem;
+}
+
+.detail-banner {
+  padding: 1rem 1.2rem;
+  background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%);
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+}
+
+/* Info Grid */
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  row-gap: 0.55rem;
+}
+
+.info-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px dashed #e5e7eb;
+  padding-bottom: 0.3rem;
+}
+
+.info-label {
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding-right: 0.75rem;
+  white-space: nowrap;
+}
+
+.info-value {
+  color: #111827;
+  font-size: 0.9rem;
+  text-align: right;
+  word-break: break-word;
+}
+
+.detail-card :deep(.p-card-body) {
+  padding: 0.8rem;
+}
+.detail-card :deep(.p-card-title) {
+  margin-bottom: 0.35rem;
+}
+.detail-card :deep(.p-card-content) {
+  padding-top: 0.35rem;
+}
+
+.confidence-value {
+  font-weight: 600;
+}
+
+.clickable-rows :deep(.p-datatable-tbody > tr) {
+  cursor: pointer;
+}
+.clickable-rows :deep(.p-datatable-tbody > tr:hover) {
+  background: #f1f5f9;
 }
 </style>

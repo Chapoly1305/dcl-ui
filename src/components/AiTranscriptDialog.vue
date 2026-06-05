@@ -527,6 +527,17 @@ export default {
     visible(now) {
       if (now && !this.data && !this.loading) this.fetchTranscript();
     },
+    // Refetch when the user switches to a different section while the dialog
+    // stays open — otherwise stale transcript data from the previous section
+    // is shown (e.g. switching from rng_init → custom_auth would keep showing
+    // rng_init's 0/0 token summary).
+    sectionId(_newId, _oldId) {
+      if (this.visible && _newId !== _oldId) {
+        this.data = null;
+        this.error = '';
+        this.fetchTranscript();
+      }
+    },
   },
   methods: {
     onVisibleChange(v) {

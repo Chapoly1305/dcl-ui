@@ -10,7 +10,7 @@ export default {
         apiBase: { type: String, default: '' },
         network: { type: String, default: 'testnet' }
     },
-    emits: ['open-report', 'open-progress'],
+    emits: ['open-report', 'open-progress', 'rerun-done'],
     data() {
         return {
             loading: false,
@@ -177,6 +177,30 @@ export default {
         },
         emitOpenProgress(jobId) {
             if (jobId) this.$emit('open-progress', jobId);
+        },
+        async rerunJob(groupId, member) {
+            const jobId = String(member?.job_id || '').trim();
+            if (!this.apiBase || !groupId || !jobId) return;
+            try {
+                const response = await fetch(
+                    `${this.apiBase}/api/v1/job-groups/${encodeURIComponent(groupId)}/jobs/${encodeURIComponent(jobId)}/rerun`,
+                    { method: 'POST' }
+                );
+                if (!response.ok) {
+                    let detail = `Re-run failed (${response.status})`;
+                    try {
+                        const body = await response.json();
+                        if (body.detail) detail = body.detail;
+                    } catch (_) { /* ignore */ }
+                    throw new Error(detail);
+                }
+                this.$toast?.add({ severity: 'success', summary: 'Re-run queued', detail: 'The job has been re-queued within this group.', life: 3000 });
+                this.$emit('rerun-done');
+                await this.loadGroupDetail(groupId);
+                await this.loadGroups();
+            } catch (err) {
+                this.$toast?.add({ severity: 'error', summary: 'Re-run failed', detail: err instanceof Error ? err.message : 'Unknown error', life: 5000 });
+            }
         },
         confirmStop(group) {
             if (!group?.group_id) return;
@@ -380,6 +404,25 @@ export default {
             if (!text) return '-';
             const parts = text.split(/[\\/]/).filter(Boolean);
             return parts.length ? parts[parts.length - 1] : '-';
+        },
+        findingBadgeClass(counts) {
+            if (!counts) return '';
+            if (counts.critical || counts.high) return 'finding-badge--danger';
+            if (counts.medium) return 'finding-badge--warning';
+            return 'finding-badge--info';
+        },
+        findingTooltip(counts) {
+            if (!counts) return '';
+            const parts = [];
+            if (counts.total) parts.push(`${counts.total} finding${counts.total === 1 ? '' : 's'}`);
+            const sev = [];
+            if (counts.critical) sev.push(`${counts.critical} critical`);
+            if (counts.high) sev.push(`${counts.high} high`);
+            if (counts.medium) sev.push(`${counts.medium} medium`);
+            if (counts.low) sev.push(`${counts.low} low`);
+            if (counts.info) sev.push(`${counts.info} info`);
+            if (sev.length) parts.push(`(${sev.join(', ')})`);
+            return parts.join(' ');
         }
     }
 };
@@ -415,6 +458,7 @@ export default {
                 <template #body="{ data }">
                     <div class="flex flex-column">
                         <span class="font-medium">{{ data.title }}</span>
+                        <span class="text-xs text-500 font-mono select-all">{{ data.group_id }}</span>
                         <span class="text-xs text-500">
                             {{ formatTimestamp(data.created_at || data.first_requested_at) }}
                             <span v-if="data.is_synthetic" class="ml-1" v-tooltip.top="'Grouped automatically from legacy jobs'">· auto</span>
@@ -498,7 +542,11 @@ export default {
                         </Column>
                         <Column header="Firmware">
                             <template #body="{ data: m }">
-                                <code class="text-xs">{{ shortSha(m.firmware_sha256) }}</code>
+                                <div class="flex align-items-center gap-1 flex-wrap">
+                                    <code class="text-xs">{{ shortSha(m.firmware_sha256) }}</code>
+                                    <Tag v-if="m.replaced_by_job_id" value="superseded" severity="warning" class="version-tag" v-tooltip.top="`Replaced by ${shortId(m.replaced_by_job_id)}`" />
+                                    <Tag v-else-if="m.replaces_job_id" value="re-run" severity="info" class="version-tag" v-tooltip.top="`Re-run of ${shortId(m.replaces_job_id)}`" />
+                                </div>
                                 <span v-if="m.source_rel_path" class="text-xs text-500 ml-2">{{ pathTail(m.source_rel_path) }}</span>
                             </template>
                         </Column>
@@ -508,7 +556,7 @@ export default {
                         <Column header="Updated" headerStyle="min-width:10rem">
                             <template #body="{ data: m }">{{ formatTimestamp(m.finished_at || m.started_at || m.requested_at) }}</template>
                         </Column>
-                        <Column header="Actions" headerStyle="width:7rem">
+                        <Column header="Actions" headerStyle="width:11rem">
                             <template #body="{ data: m }">
                                 <div class="flex align-items-center gap-1">
                                     <Button
@@ -518,14 +566,31 @@ export default {
                                         v-tooltip.top="'View progress'"
                                         @click="emitOpenProgress(m.job_id)"
                                     />
-                                    <Button
-                                        v-else
-                                        icon="pi pi-file"
-                                        class="p-button-sm p-button-text"
-                                        :disabled="!m.output_result_id"
-                                        v-tooltip.top="m.output_result_id ? 'View report' : 'No report (job did not finish)'"
-                                        @click="emitOpenReport(m)"
-                                    />
+                                    <template v-else>
+                                        <!-- Finding count badge -->
+                                        <span
+                                            v-if="m.finding_counts && m.finding_counts.total > 0"
+                                            class="finding-badge"
+                                            :class="findingBadgeClass(m.finding_counts)"
+                                            v-tooltip.top="findingTooltip(m.finding_counts)"
+                                        >
+                                            <i class="pi pi-exclamation-triangle" />
+                                            <span>{{ m.finding_counts.total }}</span>
+                                        </span>
+                                        <Button
+                                            icon="pi pi-file"
+                                            class="p-button-sm p-button-text"
+                                            :disabled="!m.output_result_id"
+                                            v-tooltip.top="m.output_result_id ? 'View report' : 'No report (job did not finish)'"
+                                            @click="emitOpenReport(m)"
+                                        />
+                                        <Button
+                                            icon="pi pi-refresh"
+                                            class="p-button-sm p-button-text p-button-info"
+                                            v-tooltip.top="'Re-run this job within the group'"
+                                            @click="rerunJob(data.group_id, m)"
+                                        />
+                                    </template>
                                 </div>
                             </template>
                         </Column>
@@ -794,5 +859,31 @@ export default {
 .affected-chip:hover {
     filter: brightness(0.95);
     text-decoration: underline;
+}
+.finding-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: default;
+    white-space: nowrap;
+}
+.finding-badge--danger {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+}
+.finding-badge--warning {
+    background: #fffbeb;
+    color: #d97706;
+    border: 1px solid #fde68a;
+}
+.finding-badge--info {
+    background: #f0f9ff;
+    color: #0284c7;
+    border: 1px solid #bae6fd;
 }
 </style>
