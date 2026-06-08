@@ -139,27 +139,31 @@ export default {
             const groupId = event?.data?.group_id;
             if (groupId) await this.loadGroupDetail(groupId);
         },
-        async loadGroupDetail(groupId, { silent = false } = {}) {
+        async loadGroupDetail(groupId, { silent = false, first, rows } = {}) {
             if (!this.apiBase || !groupId) return;
             const prev = this.memberState[groupId];
+            // Explicit page change: use the passed values. Silent poll / fresh
+            // expand: fall back to stored page (if any) or page 1 at 20 rows.
+            const pageFirst = (typeof first === 'number' ? first : (prev?.pageFirst || 0));
+            const pageRows = (typeof rows === 'number' ? rows : (prev?.pageRows || 20));
             if (!silent) {
-                this.memberState = { ...this.memberState, [groupId]: { loading: true, error: null, members: prev?.members || [] } };
+                this.memberState = { ...this.memberState, [groupId]: { loading: true, error: null, members: prev?.members || [], totalCount: prev?.totalCount || 0, pageFirst, pageRows } };
             }
             try {
-                const query = new URLSearchParams({ limit: '500' });
-                const response = await fetch(`${this.apiBase}/api/v1/job-groups/${encodeURIComponent(groupId)}?${query.toString()}`);
+                const params = new URLSearchParams({ limit: String(pageRows), offset: String(pageFirst) });
+                const response = await fetch(`${this.apiBase}/api/v1/job-groups/${encodeURIComponent(groupId)}?${params.toString()}`);
                 if (!response.ok) throw new Error(`Group detail request failed (${response.status})`);
                 const payload = await response.json();
                 this.memberState = {
                     ...this.memberState,
-                    [groupId]: { loading: false, error: null, members: Array.isArray(payload.members) ? payload.members : [] }
+                    [groupId]: { loading: false, error: null, members: Array.isArray(payload.members) ? payload.members : [], totalCount: payload.total_count || 0, pageFirst, pageRows }
                 };
             } catch (err) {
                 // Silent poll failure: keep the members already shown.
                 if (!silent) {
                     this.memberState = {
                         ...this.memberState,
-                        [groupId]: { loading: false, error: err instanceof Error ? err.message : 'Failed', members: prev?.members || [] }
+                        [groupId]: { loading: false, error: err instanceof Error ? err.message : 'Failed', members: prev?.members || [], totalCount: prev?.totalCount || 0, pageFirst, pageRows }
                     };
                 }
             }
@@ -169,6 +173,19 @@ export default {
         },
         isMembersLoading(groupId) {
             return !!this.memberState[groupId]?.loading;
+        },
+        memberTotal(groupId) {
+            return this.memberState[groupId]?.totalCount || 0;
+        },
+        memberRows(groupId) {
+            return this.memberState[groupId]?.pageRows || 20;
+        },
+        memberFirst(groupId) {
+            return this.memberState[groupId]?.pageFirst || 0;
+        },
+        onMemberPage(groupId, event) {
+            if (!groupId) return;
+            this.loadGroupDetail(groupId, { first: event.first, rows: event.rows });
         },
         emitOpenReport(member) {
             const resultId = String(member?.output_result_id || '').trim();
@@ -529,11 +546,16 @@ export default {
                     <DataTable
                         v-else
                         :value="membersFor(data.group_id)"
+                        :lazy="true"
+                        :loading="isMembersLoading(data.group_id)"
+                        :totalRecords="memberTotal(data.group_id)"
+                        :rows="memberRows(data.group_id)"
+                        :first="memberFirst(data.group_id)"
                         responsiveLayout="scroll"
                         class="p-datatable-sm member-table"
-                        :rows="20"
-                        paginator
                         :rowsPerPageOptions="[20, 50, 100]"
+                        paginator
+                        @page="onMemberPage(data.group_id, $event)"
                     >
                         <Column header="Status" headerStyle="width:7rem">
                             <template #body="{ data: m }">
