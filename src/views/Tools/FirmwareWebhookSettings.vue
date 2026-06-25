@@ -29,6 +29,7 @@
                 <i class="pi pi-info-circle text-blue-500 mt-1" style="font-size: 1.2rem"></i>
                 <div class="text-sm line-height-3 text-700">
                   Configure where MatterOverwatch sends notifications for new firmware discoveries and analysis updates.
+                  Settings are stored separately for each network, so Testnet and Mainnet can post to different Discord channels.
                   Changes are applied immediately to the background worker.
                 </div>
               </div>
@@ -101,9 +102,36 @@
               </div>
             </div>
 
-            <div class="flex align-items-center justify-content-end gap-2 mt-4">
-              <Button label="Reset to Current" icon="pi pi-undo" class="p-button-text p-button-sm" :disabled="saving" @click="loadSettings" />
-              <Button label="Save Changes" icon="pi pi-save" class="p-button-sm px-4" :loading="saving" @click="saveSettings" />
+            <div class="flex align-items-center justify-content-between gap-2 mt-4 flex-wrap">
+              <Button
+                label="Send Test Events"
+                icon="pi pi-send"
+                class="p-button-outlined p-button-sm"
+                :loading="testing"
+                v-tooltip.top="'Post a sample event to each configured webhook URL'"
+                @click="sendTestEvents"
+              />
+              <div class="flex align-items-center gap-2">
+                <Button label="Reset to Current" icon="pi pi-undo" class="p-button-text p-button-sm" :disabled="saving" @click="loadSettings" />
+                <Button label="Save Changes" icon="pi pi-save" class="p-button-sm px-4" :loading="saving" @click="saveSettings" />
+              </div>
+            </div>
+
+            <div v-if="testResults" class="mt-4">
+              <Divider />
+              <div class="section-title mb-2">Test Event Results</div>
+              <div class="text-xs text-500 mb-3">
+                Results reflect the <b>currently saved</b> settings. Save changes first if you edited URLs above.
+              </div>
+              <div class="grid">
+                <div v-for="row in testResultRows" :key="row.key" class="col-12 md:col-6 mb-2">
+                  <div class="flex align-items-center gap-2 p-2 border-1 surface-border border-round">
+                    <Tag :value="row.label" :severity="row.severity" />
+                    <span class="text-sm text-700">{{ row.title }}</span>
+                    <span v-if="row.detail" class="text-xs text-500 ml-auto">{{ row.detail }}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </template>
         </Card>
@@ -124,8 +152,10 @@ export default {
       apiDisplayBase: displayBase,
       loading: false,
       saving: false,
+      testing: false,
       error: null,
       statusNote: null,
+      testResults: null,
       activeNetwork: '',
       scopeNetwork: '',
       form: {
@@ -145,6 +175,7 @@ export default {
       return key === 'mainnet' || key === 'testnet' ? key : '';
     },
     resolveScopeNetwork() {
+      // Scope follows the global network selector (top-right MAINNET/TESTNET).
       const selected = this.normalizeNetwork(this.selectedNetwork);
       if (selected) {
         return selected;
@@ -246,6 +277,39 @@ export default {
       } finally {
         this.saving = false;
       }
+    },
+    async sendTestEvents() {
+      this.testing = true;
+      this.error = null;
+      this.statusNote = null;
+      this.testResults = null;
+      if (!this.apiBase) {
+        this.error = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
+        this.testing = false;
+        return;
+      }
+      try {
+        const network = this.resolveScopeNetwork();
+        const query = new URLSearchParams({ network });
+        const response = await fetch(`${this.apiBase}/api/v1/settings/webhook/test?${query.toString()}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ use_default_fallback: true })
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to send test events (HTTP ${response.status})`);
+        }
+        const payload = await response.json();
+        this.testResults = payload.results || {};
+        const count = Number(payload.messages_sent || 0);
+        this.statusNote = payload.any_sent
+          ? `Sent ${count} test message${count === 1 ? '' : 's'} for ${this.networkLabel(network)} (one per unique destination). Check your Discord channel.`
+          : `No webhook URLs are configured for ${this.networkLabel(network)}.`;
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to send test events';
+      } finally {
+        this.testing = false;
+      }
     }
   },
   computed: {
@@ -254,6 +318,39 @@ export default {
     },
     scopeNetworkLabel() {
       return this.networkLabel(this.scopeNetwork);
+    },
+    testResultRows() {
+      if (!this.testResults) {
+        return [];
+      }
+      const labels = {
+        new_firmware_released: 'General Firmware Release',
+        new_network_firmware_released: 'Network Firmware Release',
+        new_device_firmware_released: 'New Device Discovery',
+        new_network_device_firmware_released: 'Network New Device Discovery'
+      };
+      const order = [
+        'new_firmware_released',
+        'new_network_firmware_released',
+        'new_device_firmware_released',
+        'new_network_device_firmware_released'
+      ];
+      return order
+        .filter((key) => this.testResults[key])
+        .map((key) => {
+          const r = this.testResults[key] || {};
+          const result = String(r.result || 'skipped');
+          const severity = result === 'ok' ? 'success' : (result === 'failed' ? 'danger' : 'warning');
+          let detail = '';
+          if (result === 'ok' && r.status != null) {
+            detail = `HTTP ${r.status}`;
+          } else if (result === 'failed') {
+            detail = r.error || (r.status != null ? `HTTP ${r.status}` : 'failed');
+          } else if (result === 'skipped') {
+            detail = 'no URL configured';
+          }
+          return { key, title: labels[key] || key, label: result.toUpperCase(), severity, detail };
+        });
     }
   },
   watch: {
@@ -263,7 +360,9 @@ export default {
       if (!a || a === b) {
         return;
       }
+      // Follow the global network selector (top-right MAINNET/TESTNET).
       this.scopeNetwork = a;
+      this.testResults = null;
       this.loadSettings();
     }
   },
