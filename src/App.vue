@@ -61,6 +61,7 @@ export default {
                     icon: 'pi pi-fw pi-shield',
                     items: [
                         { label: 'Available Firmware', icon: 'pi pi-fw pi-box', to: '/firmware-security/available-firmware' },
+                        { label: 'Upload Firmware', icon: 'pi pi-fw pi-upload', to: '/firmware-security/upload' },
                         { label: 'Batch Analysis', icon: 'pi pi-fw pi-bolt', to: '/firmware-security/batch-analysis' },
                         { label: 'Scan Results', icon: 'pi pi-fw pi-chart-line', to: '/firmware-security/scan-results' },
                         { label: 'AI Suggestions Review', icon: 'pi pi-fw pi-comments', to: '/firmware-security/ai-suggestions' },

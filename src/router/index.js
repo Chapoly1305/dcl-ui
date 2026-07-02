@@ -12,6 +12,7 @@ import KeplrConnectionDocs from '@/views/Docs/KeplrConnectionDocs.vue'
 import Transactions from '@/views/Tools/Transactions.vue'
 import FirmwareAvailable from '@/views/Tools/FirmwareAvailable.vue'
 import BatchAnalysis from '@/views/Tools/BatchAnalysis.vue'
+import UploadFirmware from '@/views/Tools/UploadFirmware.vue'
 import FirmwareDetail from '@/views/Tools/FirmwareDetail.vue'
 import FirmwareScanResults from '@/views/Tools/FirmwareScanResults.vue'
 import FirmwareWebhookSettings from '@/views/Tools/FirmwareWebhookSettings.vue'
@@ -37,6 +38,7 @@ const routes = [
     { path: '/transactions/blocks/:height?', component: Transactions },
     { path: '/firmware-security', redirect: '/firmware-security/available-firmware' },
     { path: '/firmware-security/available-firmware', component: FirmwareAvailable },
+    { path: '/firmware-security/upload', component: UploadFirmware },
     { path: '/firmware-security/batch-analysis', component: BatchAnalysis },
     { path: '/firmware-security/firmware/:sha256', component: FirmwareDetail },
     { path: '/firmware-security/scan-results', component: FirmwareScanResults },
