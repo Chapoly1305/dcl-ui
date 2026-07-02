@@ -32,14 +32,9 @@ export default {
                 verdict: null,
                 status: null,
                 chipset: '',
-                origin: null,
                 fromTime: null,
                 toTime: null
             },
-            originOptions: [
-                { label: 'DCL firmware', value: 'dcl' },
-                { label: 'Uploaded', value: 'upload' }
-            ],
             verdictOptions: [
                 { label: 'Pass', value: 'pass' },
                 { label: 'Fail', value: 'fail' },
@@ -365,6 +360,9 @@ export default {
             const params = new URLSearchParams({
                 network: this.selectedNetwork,
                 scope: 'all',
+                // DCL firmware pool only — user-uploaded firmware lives on the
+                // dedicated Upload Firmware page, not mixed in here.
+                origin: 'dcl',
                 limit: String(this.pageSize),
                 offset: String(this.pageFirst),
                 sort_by: this.sortFieldApi(this.uiSortField),
@@ -374,8 +372,7 @@ export default {
                 ['q', this.filters.q],
                 ['verdict', this.filters.verdict],
                 ['status', this.filters.status],
-                ['chipset', this.filters.chipset],
-                ['origin', this.filters.origin]
+                ['chipset', this.filters.chipset]
             ];
             for (const [k, v] of map) {
                 if (v !== null && v !== undefined && String(v).trim() !== '') {
@@ -462,7 +459,6 @@ export default {
                 verdict: null,
                 status: null,
                 chipset: '',
-                origin: null,
                 fromTime: null,
                 toTime: null
             };
@@ -809,10 +805,6 @@ export default {
                                 <label class="filter-label">Chipset</label>
                                 <InputText v-model="filters.chipset" class="w-full p-inputtext-sm" placeholder="e.g. siliconlabs" @keyup.enter="applyFilters" />
                             </div>
-                            <div class="col-6 md:col-2 pt-0">
-                                <label class="filter-label">Source</label>
-                                <Dropdown v-model="filters.origin" class="w-full p-inputtext-sm" :options="originOptions" optionLabel="label" optionValue="value" placeholder="Any" showClear @change="applyFilters" />
-                            </div>
                             <div class="col-6 md:col-3 pt-0">
                                 <label class="filter-label">Date Range</label>
                                 <div class="flex gap-2">
@@ -858,16 +850,10 @@ export default {
                                 >
                             </Column>
                             <Column field="vendor_name" header="Vendor Name" headerClass="scan-col-name" bodyClass="scan-col-name">
-                                <template #body="slotProps">
-                                    <Tag v-if="slotProps.data.origin === 'upload'" value="Uploaded" icon="pi pi-upload" severity="success" />
-                                    <template v-else>{{ displayValue(slotProps.data.vendor_name) }}</template>
-                                </template>
+                                <template #body="slotProps">{{ displayValue(slotProps.data.vendor_name) }}</template>
                             </Column>
                             <Column field="product_name" header="Product Name" headerClass="scan-col-name" bodyClass="scan-col-name">
-                                <template #body="slotProps">
-                                    <span v-if="slotProps.data.origin === 'upload'" v-tooltip.top="'Uploaded file'">{{ displayValue(slotProps.data.input_firmware_name) }}</span>
-                                    <template v-else>{{ displayValue(slotProps.data.product_name) }}</template>
-                                </template>
+                                <template #body="slotProps">{{ displayValue(slotProps.data.product_name) }}</template>
                             </Column>
                             <Column field="block_height" header="Block Height" headerClass="scan-col-height" bodyClass="scan-col-height">
                                 <template #body="slotProps">{{ displayValue(slotProps.data.block_height) }}</template>

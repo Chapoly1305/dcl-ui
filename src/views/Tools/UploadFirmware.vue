@@ -1,24 +1,24 @@
 <template>
   <div class="p-3 upload-firmware-page">
-    <div class="grid">
-      <div class="col-12 lg:col-8 lg:col-offset-2">
-        <Card class="upload-card">
-          <template #title>
-            <div class="flex align-items-center gap-2 flex-wrap">
-              <i class="pi pi-upload text-primary"></i>
-              <span>Custom Firmware Upload</span>
-            </div>
-          </template>
-          <template #content>
+    <Card>
+      <template #title>
+        <div class="flex align-items-center gap-2 flex-wrap">
+          <i class="pi pi-upload text-primary"></i>
+          <span>Custom Firmware</span>
+        </div>
+      </template>
+      <template #content>
+        <TabView v-model:activeIndex="activeTab">
+          <!-- ── Upload tab ─────────────────────────────────────────── -->
+          <TabPanel header="Upload">
             <Message severity="info" :closable="false" class="mb-4">
               Upload an arbitrary firmware image to run through the full analysis pipeline.
-              No VID/PID/version or DCL record is required — this path is for firmware that is
+              No VID/PID/version or DCL record is required — this is for firmware that is
               <b>not on the DCL</b>, including vendor pre-release builds, retail dumps, and
-              non-Matter images such as <b>Zigbee</b> GBL. Conformance checks that need declared
-              DCL metadata are automatically skipped.
+              non-Matter images such as <b>Zigbee</b> GBL/ELF. Uploaded firmware stays here on
+              this page and is <b>not</b> mixed into the DCL firmware pool.
             </Message>
 
-            <!-- Drop zone -->
             <div
               class="dropzone border-round-xl mb-4"
               :class="{ 'dropzone-active': dragging, 'dropzone-filled': !!selectedFile }"
@@ -31,7 +31,7 @@
               <div v-if="!selectedFile" class="flex flex-column align-items-center justify-content-center gap-2 py-5 text-500">
                 <i class="pi pi-cloud-upload text-4xl"></i>
                 <span class="text-lg font-medium">Drop a firmware file here, or click to browse</span>
-                <span class="text-sm">Any format — .ota, .gbl, .bin, .img, … (max {{ maxSizeLabel }})</span>
+                <span class="text-sm">Any format — .ota, .gbl, .bin, .elf, .img, … (max {{ maxSizeLabel }})</span>
               </div>
               <div v-else class="flex align-items-center justify-content-between gap-3 py-4 px-2">
                 <div class="flex align-items-center gap-3 min-w-0">
@@ -46,7 +46,6 @@
               </div>
             </div>
 
-            <!-- Options -->
             <div class="grid mb-2">
               <div class="col-12 md:col-8">
                 <label class="opt-label">Analysis Profile</label>
@@ -70,44 +69,70 @@
               <Button label="Upload & Analyze" icon="pi pi-play" class="px-4 shadow-2"
                 :loading="uploading" :disabled="!selectedFile || uploading" @click="submit" />
             </div>
-          </template>
-        </Card>
+          </TabPanel>
 
-        <!-- Recent uploads (persisted in this browser) -->
-        <Card v-if="recent.length" class="mt-3">
-          <template #title>
-            <div class="flex align-items-center justify-content-between gap-2">
-              <span class="text-lg">Your Uploads</span>
-              <Button label="Clear list" icon="pi pi-trash" class="p-button-text p-button-sm p-button-secondary"
-                @click="clearRecent" />
+          <!-- ── Results tab ────────────────────────────────────────── -->
+          <TabPanel header="Results">
+            <div class="flex align-items-center justify-content-between gap-2 flex-wrap mb-3">
+              <span class="text-600 text-sm">
+                {{ results.length }} uploaded firmware {{ results.length === 1 ? 'result' : 'results' }}
+              </span>
+              <Button icon="pi pi-refresh" label="Refresh" class="p-button-text p-button-sm"
+                :loading="resultsLoading" @click="loadResults" />
             </div>
-          </template>
-          <template #content>
-            <DataTable :value="recent" class="p-datatable-sm" responsiveLayout="scroll">
-              <Column field="name" header="File">
+
+            <Message v-if="resultsError" severity="error" :closable="true" @close="resultsError = null" class="mb-3">{{ resultsError }}</Message>
+
+            <DataTable :value="results" :loading="resultsLoading" class="p-datatable-sm" responsiveLayout="scroll" dataKey="row_key">
+              <Column field="input_firmware_name" header="File">
                 <template #body="s">
-                  <span class="font-medium">{{ s.data.name }}</span>
+                  <span class="font-medium">{{ displayName(s.data) }}</span>
                 </template>
               </Column>
-              <Column field="sha" header="SHA-256">
-                <template #body="s"><code class="text-sm">{{ shortSha(s.data.sha) }}</code></template>
+              <Column field="firmware_sha256" header="SHA-256">
+                <template #body="s"><code class="text-sm">{{ shortSha(s.data.firmware_sha256) }}</code></template>
+              </Column>
+              <Column field="chipset" header="Chipset">
+                <template #body="s">
+                  <Tag v-if="s.data.chipset && s.data.chipset !== 'unknown'" :value="s.data.chipset" severity="info" />
+                  <span v-else class="text-500">—</span>
+                </template>
+              </Column>
+              <Column field="sdk_primary_version" header="SDK Version">
+                <template #body="s">
+                  <span v-if="s.data.sdk_primary_version === 'undetermined'" class="text-500" v-tooltip.top="'No Matter data model detected'">not Matter</span>
+                  <span v-else>{{ displayValue(s.data.sdk_primary_version) }}</span>
+                </template>
+              </Column>
+              <Column field="status" header="Status" bodyClass="text-center" headerClass="text-center">
+                <template #body="s">
+                  <Tag :value="s.data.status || '—'" :severity="statusSeverity(s.data.status)" />
+                </template>
+              </Column>
+              <Column field="analyzed_at" header="Analyzed At">
+                <template #body="s">{{ formatTimestamp(s.data.analyzed_at) }}</template>
               </Column>
               <Column header="Actions" headerClass="text-right" bodyClass="text-right">
                 <template #body="s">
-                  <Button label="Progress" icon="pi pi-chart-line" class="p-button-text p-button-sm"
-                    @click="openJobProgress(s.data.jobId)" />
-                  <Button label="Results" icon="pi pi-search" class="p-button-text p-button-sm"
-                    @click="viewResults(s.data.sha)" />
+                  <Button v-if="s.data.job_id" label="Progress" icon="pi pi-chart-line" class="p-button-text p-button-sm"
+                    @click="openJobProgress(s.data.job_id)" />
+                  <Button v-if="s.data.result_id" label="Details" icon="pi pi-search" class="p-button-text p-button-sm"
+                    @click="viewResults(s.data.firmware_sha256)" />
                 </template>
               </Column>
             </DataTable>
-          </template>
-        </Card>
-      </div>
-    </div>
+            <div v-if="!resultsLoading && !resultsError && results.length === 0"
+              class="flex flex-column align-items-center justify-content-center p-5 text-500">
+              <i class="pi pi-inbox text-4xl mb-3"></i>
+              <span class="text-lg">No uploaded firmware yet. Use the Upload tab to add one.</span>
+            </div>
+          </TabPanel>
+        </TabView>
+      </template>
+    </Card>
 
     <FirmwareJobProgressModal :visible="progressDialogVisible" :job-id="progressJobId" :api-base="metadataApiBase"
-      @update:visible="progressDialogVisible = $event" />
+      @update:visible="onProgressVisibleChange" />
   </div>
 </template>
 
@@ -116,8 +141,6 @@ import FirmwareJobProgressModal from '@/components/FirmwareJobProgressModal.vue'
 import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
 
 const MAX_BYTES = 256 * 1024 * 1024;
-const RECENT_KEY = 'mo.uploadFirmware.recent';
-const RECENT_MAX = 50;
 
 export default {
   name: 'UploadFirmware',
@@ -126,6 +149,8 @@ export default {
     const { requestBase } = resolveMatteroverwatchApiBase();
     return {
       metadataApiBase: requestBase,
+      activeTab: 0,
+      // Upload tab
       dragging: false,
       selectedFile: null,
       analysisProfile: 'full',
@@ -133,12 +158,23 @@ export default {
       profiles: [],
       uploading: false,
       error: null,
-      recent: [],
+      // Results tab
+      results: [],
+      resultsLoading: false,
+      resultsError: null,
+      pollHandle: null,
+      // Progress modal
       progressDialogVisible: false,
       progressJobId: ''
     };
   },
   computed: {
+    selectedNetwork() {
+      const key = String(
+        this.$store?.state?.network?.selectedNetwork || this.$store?.state?.network?.defaultNetwork || 'testnet'
+      ).trim().toLowerCase();
+      return key === 'mainnet' ? 'mainnet' : 'testnet';
+    },
     maxSizeLabel() {
       return this.formatSize(MAX_BYTES);
     },
@@ -146,6 +182,9 @@ export default {
       const opts = this.profiles.map((p) => ({ label: p.label, value: p.id }));
       if (!opts.find((o) => o.value === 'full')) opts.unshift({ label: 'Full Analysis', value: 'full' });
       return opts;
+    },
+    hasInProgress() {
+      return this.results.some((r) => ['pending', 'running'].includes(String(r.status || '').toLowerCase()));
     }
   },
   methods: {
@@ -194,10 +233,10 @@ export default {
         }
         const d = await res.json();
         const jobId = String(d?.job?.job_id || '');
-        const sha = String(d?.firmware_sha256 || '');
-        this.recent.unshift({ name: this.selectedFile.name, sha, jobId });
-        this.persistRecent();
         this.selectedFile = null;
+        // Jump to the Results tab and surface progress for the new job.
+        this.activeTab = 1;
+        await this.loadResults();
         if (jobId) this.openJobProgress(jobId);
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Upload failed';
@@ -215,20 +254,87 @@ export default {
         }
       } catch (_e) { /* non-fatal — 'full' default remains available */ }
     },
+    async loadResults() {
+      if (!this.metadataApiBase) {
+        this.resultsError = 'Missing MatterOverwatch API base.';
+        return;
+      }
+      this.resultsLoading = true;
+      this.resultsError = null;
+      try {
+        const params = new URLSearchParams({
+          network: this.selectedNetwork,
+          origin: 'upload',
+          scope: 'latest',
+          limit: '200',
+          offset: '0',
+          sort_by: 'analyzed_at',
+          sort_dir: 'desc'
+        });
+        const res = await fetch(`${this.metadataApiBase}/api/v1/results?${params.toString()}`);
+        if (!res.ok) throw new Error(`Results request failed (${res.status})`);
+        const d = await res.json();
+        this.results = (d.items || []).map((it, i) => ({
+          ...it,
+          row_key: `${it.result_id || it.job_id || 'r'}-${it.firmware_sha256 || i}`
+        }));
+      } catch (err) {
+        this.resultsError = err instanceof Error ? err.message : 'Failed to load results';
+      } finally {
+        this.resultsLoading = false;
+      }
+    },
+    startPolling() {
+      this.stopPolling();
+      // Light auto-refresh while uploads are still being analyzed.
+      this.pollHandle = setInterval(() => {
+        if (this.activeTab === 1 && this.hasInProgress && !this.resultsLoading) {
+          this.loadResults();
+        }
+      }, 4000);
+    },
+    stopPolling() {
+      if (this.pollHandle) {
+        clearInterval(this.pollHandle);
+        this.pollHandle = null;
+      }
+    },
     openJobProgress(jobId) {
       const id = String(jobId || '').trim();
       if (!id) return;
       this.progressJobId = id;
       this.progressDialogVisible = true;
     },
+    onProgressVisibleChange(visible) {
+      this.progressDialogVisible = visible;
+      // Refresh results when the progress modal closes (job likely advanced).
+      if (!visible) this.loadResults();
+    },
     viewResults(sha) {
       const id = String(sha || '').trim();
       if (id) this.$router.push(`/firmware-security/firmware/${id}`);
     },
+    displayName(row) {
+      return row.input_firmware_name || row.source_rel_path || this.shortSha(row.firmware_sha256);
+    },
+    statusSeverity(status) {
+      const k = String(status || '').toLowerCase();
+      if (k === 'success' || k === 'done') return 'success';
+      if (k === 'failed') return 'danger';
+      if (k === 'running') return 'info';
+      if (k === 'pending') return 'warning';
+      if (k === 'partial') return 'warning';
+      return 'secondary';
+    },
     shortSha(value) {
       const text = String(value || '').trim();
-      if (text.length <= 16) return text || '-';
+      if (!text) return '—';
+      if (text.length <= 16) return text;
       return `${text.slice(0, 8)}...${text.slice(-8)}`;
+    },
+    displayValue(value) {
+      if (value === null || value === undefined || value === '') return '—';
+      return value;
     },
     formatSize(bytes) {
       const n = Number(bytes || 0);
@@ -236,31 +342,28 @@ export default {
       if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
       return `${(n / (1024 * 1024)).toFixed(1)} MB`;
     },
-    // Uploaded firmware persists in the catalog, but the corpus-oriented Scan
-    // Results view mixes it among thousands of DCL entries. Keep a local list
-    // of this browser's uploads so they survive a page refresh and give a
-    // direct link back to each result.
-    loadRecent() {
-      try {
-        const raw = window.localStorage.getItem(RECENT_KEY);
-        const arr = raw ? JSON.parse(raw) : [];
-        this.recent = Array.isArray(arr) ? arr.slice(0, RECENT_MAX) : [];
-      } catch (_e) { this.recent = []; }
+    formatTimestamp(value) {
+      if (!value) return '—';
+      const dt = new Date(value);
+      if (Number.isNaN(dt.getTime())) return String(value);
+      return dt.toLocaleString();
+    }
+  },
+  watch: {
+    activeTab(next) {
+      if (next === 1) this.loadResults();
     },
-    persistRecent() {
-      try {
-        this.recent = this.recent.slice(0, RECENT_MAX);
-        window.localStorage.setItem(RECENT_KEY, JSON.stringify(this.recent));
-      } catch (_e) { /* storage unavailable/full — list stays in-memory only */ }
-    },
-    clearRecent() {
-      this.recent = [];
-      try { window.localStorage.removeItem(RECENT_KEY); } catch (_e) { /* ignore */ }
+    selectedNetwork() {
+      this.loadResults();
     }
   },
   mounted() {
-    this.loadRecent();
     this.loadProfiles();
+    this.loadResults();
+    this.startPolling();
+  },
+  beforeUnmount() {
+    this.stopPolling();
   }
 };
 </script>
