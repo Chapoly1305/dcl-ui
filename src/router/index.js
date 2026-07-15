@@ -16,6 +16,7 @@ import UploadFirmware from '@/views/Tools/UploadFirmware.vue'
 import FirmwareDetail from '@/views/Tools/FirmwareDetail.vue'
 import FirmwareScanResults from '@/views/Tools/FirmwareScanResults.vue'
 import FirmwareWebhookSettings from '@/views/Tools/FirmwareWebhookSettings.vue'
+import ScannerSettings from '@/views/Tools/ScannerSettings.vue'
 import DeviceProfiles from '@/views/Tools/DeviceProfiles.vue'
 import VendorProfiles from '@/views/Tools/VendorProfiles.vue'
 import FindingsClustering from '@/views/Tools/FindingsClustering.vue'
@@ -44,6 +45,7 @@ const routes = [
     { path: '/firmware-security/scan-results', component: FirmwareScanResults },
     { path: '/firmware-security/ai-suggestions', component: AiSuggestionsReview },
     { path: '/firmware-security/webhook-settings', component: FirmwareWebhookSettings },
+    { path: '/firmware-security/scanner-settings', component: ScannerSettings },
     { path: '/firmware-security/device-profiles', component: DeviceProfiles },
     { path: '/firmware-security/vendor-profiles', component: VendorProfiles },
     { path: '/firmware-security/findings-clustering', component: FindingsClustering },

@@ -68,7 +68,8 @@ export default {
                         { label: 'Findings Clustering', icon: 'pi pi-fw pi-th-large', to: '/firmware-security/findings-clustering' },
                         { label: 'Device Profiles', icon: 'pi pi-fw pi-cog', to: '/firmware-security/device-profiles' },
                         { label: 'Vendor Profiles', icon: 'pi pi-fw pi-briefcase', to: '/firmware-security/vendor-profiles' },
-                        { label: 'Webhook Settings', icon: 'pi pi-fw pi-bell', to: '/firmware-security/webhook-settings' }
+                        { label: 'Webhook Settings', icon: 'pi pi-fw pi-bell', to: '/firmware-security/webhook-settings' },
+                        { label: 'Scanner Settings', icon: 'pi pi-fw pi-sliders-h', to: '/firmware-security/scanner-settings' }
                     ]
                 },
                 {
