@@ -198,6 +198,10 @@ export default {
 			const restEndpoint = context.getters.dclRestEndpoint;
 			const rpcEndpoint = context.getters.dclRpcEndpoint;
 			const websocketEndpoint = context.getters.dclWebsocketEndpoint;
+			const configuredRefresh = Number(import.meta.env.VITE_APP_DCL_REFRESH);
+			const refreshInterval = Number.isFinite(configuredRefresh) && configuredRefresh >= 1000
+				? configuredRefresh
+				: 5000;
 			await context.dispatch(
 				'common/env/init',
 				{
@@ -208,7 +212,7 @@ export default {
 					addrPrefix: import.meta.env.VITE_APP_DCL_ADDR_PREFIX,
 					sdkVersion: import.meta.env.VITE_APP_DCL_SDK_VERSION,
 					getTXApi: `${rpcEndpoint}/tx?hash=0x`,
-					refresh: import.meta.env.VITE_APP_DCL_REFRESH,
+					refresh: refreshInterval,
 				},
 				{ root: true }
 			);
