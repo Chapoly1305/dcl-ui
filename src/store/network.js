@@ -98,7 +98,9 @@ export default {
 			return trimTrailingSlash(import.meta.env.VITE_APP_DCL_RPC_NODE || 'http://localhost:8080/rpc');
 		},
 		dclWebsocketEndpoint() {
-			return String(import.meta.env.VITE_APP_DCL_WEBSOCKET_NODE || 'ws://localhost:8080/websocket').replace(/\/$/, '');
+			const raw = import.meta.env.VITE_APP_DCL_WEBSOCKET_NODE;
+			if (raw === '' || raw === 'disabled') return null;
+			return String(raw || 'ws://localhost:8080/websocket').replace(/\/$/, '');
 		},
 		isReady(state) {
 			return state.initialized && Boolean(state.defaultNetwork);
