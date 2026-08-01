@@ -9,22 +9,6 @@ function currentOrigin() {
   return trimTrailingSlash(window.location.origin || "");
 }
 
-function deriveApiBase(origin) {
-  // When accessed via port-forward (localhost), derive API port from UI port + offset.
-  // UI is on 8082, API is on 8080 on the same host.
-  try {
-    const url = new URL(origin);
-    if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
-      if (url.port === "8082") {
-        return `${url.protocol}//${url.hostname}:8080`;
-      }
-    }
-    return origin;
-  } catch {
-    return origin;
-  }
-}
-
 export function resolveMatteroverwatchApiBase() {
   const configured = trimTrailingSlash(import.meta.env.VITE_APP_MATTEROVERWATCH_API_BASE || "");
   const origin = currentOrigin();
@@ -38,13 +22,13 @@ export function resolveMatteroverwatchApiBase() {
     };
   }
 
-  // When on localhost (port-forwarded access), derive API URL from current origin
-  // so API calls go through the tunnel instead of trying to reach the hardcoded IP.
+  // When on localhost (port-forwarded access), use relative paths so API calls
+  // go through the same origin (nginx proxies /api/* to central:8080). Deriving
+  // localhost:8080 from :8082 breaks single-port forwarding setups.
   if (origin && (origin.includes("localhost") || origin.includes("127.0.0.1"))) {
-    const apiBase = deriveApiBase(origin);
     return {
-      requestBase: apiBase,
-      displayBase: apiBase,
+      requestBase: "",
+      displayBase: origin,
       configuredBase: configured
     };
   }
