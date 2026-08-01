@@ -213,17 +213,17 @@ export default {
         console.log('RPC Node:', this.$store.getters['network/dclRpcEndpoint']);
         console.log('WebSocket Node:', this.$store.getters['network/dclWebsocketEndpoint']);
 
+        // Show UI immediately -- DCL store bootstrap runs in background
+        this.initialized = true;
+
         const bootstrapEnabled = String(import.meta.env.VITE_APP_DCL_BOOTSTRAP ?? 'true').toLowerCase() !== 'false';
         if (bootstrapEnabled) {
-            try {
-                await storeInitializer.initializeAllStores(this.$store);
-            } catch (error) {
+            storeInitializer.initializeAllStores(this.$store).catch((error) => {
                 console.error('Failed to bootstrap legacy DCL stores:', error);
-            }
+            });
         } else {
             console.log('Skipping legacy store bootstrap (VITE_APP_DCL_BOOTSTRAP=false)');
         }
-        this.initialized = true;
     }
 };
 </script>
