@@ -257,6 +257,29 @@ export default {
         capabilityMatrix() {
             return this.reportOutputs?.capability_recovery || {};
         },
+        capabilityClusters() {
+            return Array.isArray(this.capabilityMatrix?.clusters) ? this.capabilityMatrix.clusters : [];
+        },
+        capabilityEndpoints() {
+            return Array.isArray(this.capabilityMatrix?.endpoints) ? this.capabilityMatrix.endpoints : [];
+        },
+        capabilityClusterRows() {
+            const fmap = this.capabilityMatrix?.feature_map_values || {};
+            const crev = this.capabilityMatrix?.cluster_revision_values || {};
+            return this.capabilityClusters.map(c => ({
+                cluster: c,
+                feature_map: fmap[parseInt(c)]?.[0],
+                revision: crev[parseInt(c)]?.[0]
+            }));
+        },
+        capabilityAttributeRows() {
+            const attrs = Array.isArray(this.capabilityMatrix?.attributes) ? this.capabilityMatrix.attributes : [];
+            return attrs.map(entry => {
+                const text = String(entry || '');
+                const [cluster = '', attribute = ''] = text.split('/');
+                return { cluster, attribute };
+            });
+        },
         sdkInferredVersion() {
             return this.sdkResult?.inferred_best_guess_base || this.selectedResult?.sdk_inferred_version || null;
         },
@@ -1161,70 +1184,38 @@ export default {
                     </TabPanel>
 
                     <!-- ===== Tab 4: Capability Matrix ===== -->
-                    <TabPanel header="Capability Matrix">
-                        <div v-if="capabilityMatrix.clusters && capabilityMatrix.clusters.length > 0" class="capability-matrix">
-                            <!-- Summary -->
-                            <div class="flex flex-wrap gap-3 mb-3">
-                                <div class="stat-chip" v-if="capabilityMatrix.endpoints && capabilityMatrix.endpoints.length">
-                                    <span class="stat-label">Endpoints</span>
-                                    <span class="stat-value">{{ capabilityMatrix.endpoints.length }}</span>
+                    <TabPanel header="Capabilities">
+                        <Card class="report-card">
+                            <template #title>Endpoints / Clusters / Attributes</template>
+                            <template #content>
+                                <div class="grid mb-2">
+                                    <div class="col-6 md:col-3"><strong>Endpoints:</strong> {{ capabilityEndpoints.length }}</div>
+                                    <div class="col-6 md:col-3"><strong>Clusters:</strong> {{ capabilityClusters.length }}</div>
+                                    <div class="col-6 md:col-3"><strong>Attributes:</strong> {{ capabilityMatrix.attributes?.length || 0 }}</div>
+                                    <div class="col-6 md:col-3"><strong>Defaults:</strong> {{ capabilityMatrix.defaults_count || 0 }}</div>
                                 </div>
-                                <div class="stat-chip">
-                                    <span class="stat-label">Clusters</span>
-                                    <span class="stat-value">{{ capabilityMatrix.clusters?.length || 0 }}</span>
+                                <div v-if="capabilityClusters.length === 0" class="text-600">
+                                    No capability data recovered for this firmware. The ELF may be encrypted, stripped, or not a Matter application.
                                 </div>
-                                <div class="stat-chip">
-                                    <span class="stat-label">Attributes</span>
-                                    <span class="stat-value">{{ capabilityMatrix.attributes?.length || 0 }}</span>
-                                </div>
-                                <div class="stat-chip">
-                                    <span class="stat-label">Default Values</span>
-                                    <span class="stat-value">{{ capabilityMatrix.defaults_count || 0 }}</span>
-                                </div>
-                            </div>
-
-                            <!-- Cluster table -->
-                            <Card class="report-card mb-2">
-                                <template #title>Clusters ({{ capabilityMatrix.clusters?.length || 0 }})</template>
-                                <template #content>
-                                    <DataTable :value="capabilityMatrix.clusters.map(c => ({ id: c, feature_map: capabilityMatrix.feature_map_values?.[parseInt(c)]?.[0], revision: capabilityMatrix.cluster_revision_values?.[parseInt(c)]?.[0] }))" class="p-datatable-sm" responsiveLayout="scroll" v-if="capabilityMatrix.clusters?.length">
-                                        <Column field="id" header="Cluster ID" style="min-width:100px">
-                                            <template #body="slotProps">
-                                                <code>{{ slotProps.data.id }}</code>
-                                            </template>
-                                        </Column>
-                                        <Column field="feature_map" header="Feature Map" style="min-width:100px">
-                                            <template #body="slotProps">
-                                                <span v-if="slotProps.data.feature_map !== undefined">{{ slotProps.data.feature_map }}</span>
-                                                <span v-else class="text-500">-</span>
-                                            </template>
-                                        </Column>
-                                        <Column field="revision" header="Revision" style="min-width:80px">
-                                            <template #body="slotProps">
-                                                <span v-if="slotProps.data.revision !== undefined">{{ slotProps.data.revision }}</span>
-                                                <span v-else class="text-500">-</span>
-                                            </template>
-                                        </Column>
-                                    </DataTable>
-                                    <div v-else class="text-500">No clusters recovered.</div>
-                                </template>
-                            </Card>
-
-                            <!-- Attributes -->
-                            <Card class="report-card">
-                                <template #title>Attributes ({{ capabilityMatrix.attributes?.length || 0 }})</template>
-                                <template #content>
-                                    <div v-if="capabilityMatrix.attributes?.length" class="attr-list">
-                                        <code v-for="a in capabilityMatrix.attributes" :key="a" class="attr-chip">{{ a }}</code>
+                                <div v-else class="grid">
+                                    <div class="col-12">
+                                        <div class="text-700 font-medium mb-2">Clusters</div>
+                                        <DataTable :value="capabilityClusterRows" responsiveLayout="scroll" class="p-datatable-sm" :rows="12" :paginator="capabilityClusterRows.length > 12">
+                                            <Column field="cluster" header="Cluster" />
+                                            <Column field="feature_map" header="Feature Map" />
+                                            <Column field="revision" header="Revision" />
+                                        </DataTable>
                                     </div>
-                                    <div v-else class="text-500">No attributes recovered.</div>
-                                </template>
-                            </Card>
-                        </div>
-                        <div v-else class="text-500 text-center py-4">
-                            <i class="pi pi-info-circle mr-2"></i>
-                            No capability matrix recovered for this firmware. The ELF may be encrypted, stripped, or not a Matter application.
-                        </div>
+                                    <div class="col-12">
+                                        <div class="text-700 font-medium mb-2">Attributes</div>
+                                        <DataTable :value="capabilityAttributeRows" responsiveLayout="scroll" class="p-datatable-sm" :rows="12" :paginator="capabilityAttributeRows.length > 12">
+                                            <Column field="cluster" header="Cluster" />
+                                            <Column field="attribute" header="Attribute" />
+                                        </DataTable>
+                                    </div>
+                                </div>
+                            </template>
+                        </Card>
                     </TabPanel>
 
                     <!-- ===== Tab 5: Stages ===== -->
@@ -1411,37 +1402,38 @@ button[data-pd-tooltip] {
 
 /* ---- Outcome Grid ---- */
 .outcome-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    column-gap: 1.2rem;
-    row-gap: 0.55rem;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  column-gap: 1.5rem;
+  row-gap: 0.65rem;
 }
-
+@media (max-width: 768px) {
+  .outcome-grid {
+    grid-template-columns: 1fr;
+  }
+}
 .outcome-row {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    border-bottom: 1px dashed #e5e7eb;
-    padding-bottom: 0.3rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px dashed #e5e7eb;
+  padding-bottom: 0.35rem;
 }
-
 .outcome-label {
-    color: #6b7280;
-    font-weight: 600;
-    font-size: 0.85rem;
-    padding-right: 0.75rem;
-    white-space: nowrap;
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding-right: 1rem;
+  white-space: nowrap;
 }
-
 .outcome-value {
-    color: #111827;
-    font-size: 0.9rem;
-    text-align: right;
-    word-break: break-word;
+  color: #111827;
+  font-size: 0.9rem;
+  text-align: right;
+  word-break: break-word;
 }
-
 .col-span-2 {
-    grid-column: span 2;
+  grid-column: span 2;
 }
 
 /* ---- OTA Banner ---- */
@@ -1504,19 +1496,6 @@ button[data-pd-tooltip] {
 .sdk-flow-arrow {
     flex-shrink: 0;
     padding: 0 0.15rem;
-}
-
-.stat-chip {
-    display: inline-flex; flex-direction: column; align-items: center;
-    background: var(--surface-100); border-radius: 8px; padding: 0.5rem 1rem; min-width: 80px;
-}
-.stat-label { font-size: 0.7rem; text-transform: uppercase; color: var(--text-color-secondary); }
-.stat-value { font-size: 1.2rem; font-weight: 700; }
-
-.attr-list { display: flex; flex-wrap: wrap; gap: 4px; }
-.attr-chip {
-    background: var(--surface-100); border-radius: 4px; padding: 2px 6px;
-    font-size: 0.75rem; font-family: monospace;
 }
 
 </style>
