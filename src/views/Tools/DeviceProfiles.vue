@@ -382,9 +382,9 @@
                   <Tag :value="slotProps.data.chipset || '-'" :severity="chipsetSeverity(slotProps.data.chipset)" />
                 </template>
               </Column>
-              <Column field="sdk_best_guess_base" header="SDK" style="min-width:70px">
+              <Column field="sdk_decoded_version" header="SDK" style="min-width:70px">
                 <template #body="slotProps">
-                  <span class="text-sm">{{ slotProps.data.sdk_best_guess_base || '-' }}</span>
+                  <span class="text-sm">{{ slotProps.data.sdk_decoded_version || slotProps.data.sdk_primary_version || '-' }}</span>
                 </template>
               </Column>
               <Column field="verdict_authenticity" header="Authenticity" style="min-width:100px">

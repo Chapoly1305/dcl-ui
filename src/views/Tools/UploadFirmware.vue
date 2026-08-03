@@ -98,10 +98,10 @@
                   <span v-else class="text-500">—</span>
                 </template>
               </Column>
-              <Column field="sdk_primary_version" header="SDK Version">
+              <Column field="sdk_decoded_version" header="SDK Version">
                 <template #body="s">
-                  <span v-if="s.data.sdk_primary_version === 'undetermined'" class="text-500" v-tooltip.top="'No Matter data model detected'">not Matter</span>
-                  <span v-else>{{ displayValue(s.data.sdk_primary_version) }}</span>
+                  <span v-if="(s.data.sdk_decoded_version || s.data.sdk_primary_version) === 'undetermined'" class="text-500" v-tooltip.top="'No Matter data model detected'">not Matter</span>
+                  <span v-else>{{ displayValue(s.data.sdk_decoded_version || s.data.sdk_primary_version) }}</span>
                 </template>
               </Column>
               <Column field="status" header="Status" bodyClass="text-center" headerClass="text-center">

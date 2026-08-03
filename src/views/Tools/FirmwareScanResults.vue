@@ -254,6 +254,9 @@ export default {
             const decoded = this.sdkResult?.decoded_specification_version?.decoded || null;
             return decoded?.version_4tuple || this.selectedResult?.sdk_decoded_version || null;
         },
+        capabilityMatrix() {
+            return this.reportOutputs?.capability_recovery || {};
+        },
         sdkInferredVersion() {
             return this.sdkResult?.inferred_best_guess_base || this.selectedResult?.sdk_inferred_version || null;
         },
@@ -1011,17 +1014,7 @@ export default {
                             <template #content>
                                 <div class="outcome-grid">
                                     <div class="outcome-row">
-                                        <span class="outcome-label">Decoded</span><span class="outcome-value">{{ sdkDisplayValue(selectedResult.sdk_decoded_version) }}</span>
-                                    </div>
-                                    <div class="outcome-row">
-                                        <span class="outcome-label">Inferred</span><span class="outcome-value">{{ sdkDisplayValue(selectedResult.sdk_inferred_version) }}</span>
-                                    </div>
-                                    <div class="outcome-row">
-                                        <span class="outcome-label">Primary</span><span class="outcome-value">{{ sdkDisplayValue(selectedResult.sdk_primary_version || selectedResult.sdk_best_guess_base) }}</span>
-                                    </div>
-                                    <div class="outcome-row">
-                                        <span class="outcome-label">Consistency</span
-                                        ><span class="outcome-value"><Tag :value="sdkDisplayValue(selectedResult.sdk_version_consistency)" :severity="sdkConsistencySeverity(selectedResult.sdk_version_consistency)" /></span>
+                                        <span class="outcome-label">SDK Version</span><span class="outcome-value">{{ sdkDisplayValue(selectedResult.sdk_decoded_version) }}</span>
                                     </div>
                                 </div>
                             </template>
@@ -1128,38 +1121,13 @@ export default {
 
                     <!-- ===== Tab 3: SDK Evidence ===== -->
                     <TabPanel header="SDK Evidence">
-                        <!-- Version flow -->
+                        <!-- Version (decode-only) -->
                         <div class="sdk-flow mb-3">
                             <div class="sdk-flow-node">
                                 <div class="text-xs text-500 uppercase mb-1">Decoded</div>
                                 <div class="font-semibold">{{ sdkDisplayValue(sdkDecodedVersion) }}</div>
                             </div>
-                            <div class="sdk-flow-arrow"><i class="pi pi-arrow-right text-400"></i></div>
-                            <div class="sdk-flow-node">
-                                <div class="text-xs text-500 uppercase mb-1">Inferred</div>
-                                <div class="font-semibold">{{ sdkDisplayValue(sdkInferredVersion) }}</div>
-                            </div>
-                            <div class="sdk-flow-arrow"><i class="pi pi-arrow-right text-400"></i></div>
-                            <div class="sdk-flow-node sdk-flow-best">
-                                <div class="text-xs text-500 uppercase mb-1">Best Guess</div>
-                                <div class="font-semibold text-blue-600">{{ sdkDisplayValue(sdkBestGuess) }}</div>
-                            </div>
                         </div>
-
-                        <!-- Consistency + Source -->
-                        <Card class="report-card mb-2">
-                            <template #title><i class="pi pi-balance mr-2 text-blue-500"></i>Consistency</template>
-                            <template #content>
-                                <div class="outcome-row mb-2">
-                                    <span class="outcome-label">Verdict</span>
-                                    <span class="outcome-value"><Tag :value="sdkDisplayValue(sdkConsistency)" :severity="sdkConsistencySeverity(sdkConsistency)" /></span>
-                                </div>
-                                <div class="outcome-row">
-                                    <span class="outcome-label">Inferred Source</span>
-                                    <span class="outcome-value">{{ sdkDisplayValue(sdkInferredSource) }}</span>
-                                </div>
-                            </template>
-                        </Card>
 
                         <!-- Version Classification -->
                         <Card class="report-card mb-2">
@@ -1192,7 +1160,74 @@ export default {
                         </Message>
                     </TabPanel>
 
-                    <!-- ===== Tab 4: Stages ===== -->
+                    <!-- ===== Tab 4: Capability Matrix ===== -->
+                    <TabPanel header="Capability Matrix">
+                        <div v-if="capabilityMatrix.clusters && capabilityMatrix.clusters.length > 0" class="capability-matrix">
+                            <!-- Summary -->
+                            <div class="flex flex-wrap gap-3 mb-3">
+                                <div class="stat-chip" v-if="capabilityMatrix.endpoints && capabilityMatrix.endpoints.length">
+                                    <span class="stat-label">Endpoints</span>
+                                    <span class="stat-value">{{ capabilityMatrix.endpoints.length }}</span>
+                                </div>
+                                <div class="stat-chip">
+                                    <span class="stat-label">Clusters</span>
+                                    <span class="stat-value">{{ capabilityMatrix.clusters?.length || 0 }}</span>
+                                </div>
+                                <div class="stat-chip">
+                                    <span class="stat-label">Attributes</span>
+                                    <span class="stat-value">{{ capabilityMatrix.attributes?.length || 0 }}</span>
+                                </div>
+                                <div class="stat-chip">
+                                    <span class="stat-label">Default Values</span>
+                                    <span class="stat-value">{{ capabilityMatrix.defaults_count || 0 }}</span>
+                                </div>
+                            </div>
+
+                            <!-- Cluster table -->
+                            <Card class="report-card mb-2">
+                                <template #title>Clusters ({{ capabilityMatrix.clusters?.length || 0 }})</template>
+                                <template #content>
+                                    <DataTable :value="capabilityMatrix.clusters.map(c => ({ id: c, feature_map: capabilityMatrix.feature_map_values?.[parseInt(c)]?.[0], revision: capabilityMatrix.cluster_revision_values?.[parseInt(c)]?.[0] }))" class="p-datatable-sm" responsiveLayout="scroll" v-if="capabilityMatrix.clusters?.length">
+                                        <Column field="id" header="Cluster ID" style="min-width:100px">
+                                            <template #body="slotProps">
+                                                <code>{{ slotProps.data.id }}</code>
+                                            </template>
+                                        </Column>
+                                        <Column field="feature_map" header="Feature Map" style="min-width:100px">
+                                            <template #body="slotProps">
+                                                <span v-if="slotProps.data.feature_map !== undefined">{{ slotProps.data.feature_map }}</span>
+                                                <span v-else class="text-500">-</span>
+                                            </template>
+                                        </Column>
+                                        <Column field="revision" header="Revision" style="min-width:80px">
+                                            <template #body="slotProps">
+                                                <span v-if="slotProps.data.revision !== undefined">{{ slotProps.data.revision }}</span>
+                                                <span v-else class="text-500">-</span>
+                                            </template>
+                                        </Column>
+                                    </DataTable>
+                                    <div v-else class="text-500">No clusters recovered.</div>
+                                </template>
+                            </Card>
+
+                            <!-- Attributes -->
+                            <Card class="report-card">
+                                <template #title>Attributes ({{ capabilityMatrix.attributes?.length || 0 }})</template>
+                                <template #content>
+                                    <div v-if="capabilityMatrix.attributes?.length" class="attr-list">
+                                        <code v-for="a in capabilityMatrix.attributes" :key="a" class="attr-chip">{{ a }}</code>
+                                    </div>
+                                    <div v-else class="text-500">No attributes recovered.</div>
+                                </template>
+                            </Card>
+                        </div>
+                        <div v-else class="text-500 text-center py-4">
+                            <i class="pi pi-info-circle mr-2"></i>
+                            No capability matrix recovered for this firmware. The ELF may be encrypted, stripped, or not a Matter application.
+                        </div>
+                    </TabPanel>
+
+                    <!-- ===== Tab 5: Stages ===== -->
                     <TabPanel header="Stages">
                         <PipelineStageTimeline
                             :key="selectedResultId"
@@ -1469,6 +1504,19 @@ button[data-pd-tooltip] {
 .sdk-flow-arrow {
     flex-shrink: 0;
     padding: 0 0.15rem;
+}
+
+.stat-chip {
+    display: inline-flex; flex-direction: column; align-items: center;
+    background: var(--surface-100); border-radius: 8px; padding: 0.5rem 1rem; min-width: 80px;
+}
+.stat-label { font-size: 0.7rem; text-transform: uppercase; color: var(--text-color-secondary); }
+.stat-value { font-size: 1.2rem; font-weight: 700; }
+
+.attr-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.attr-chip {
+    background: var(--surface-100); border-radius: 4px; padding: 2px 6px;
+    font-size: 0.75rem; font-family: monospace;
 }
 
 </style>

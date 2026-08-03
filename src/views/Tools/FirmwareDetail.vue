@@ -98,10 +98,7 @@
                       <div class="outcome-row"><span class="outcome-label">Integrity</span><span class="outcome-value">{{ detail.latest_result.verdict_integrity }}</span></div>
                       <div class="outcome-row"><span class="outcome-label">Authenticity</span><span class="outcome-value">{{ detail.latest_result.verdict_authenticity }}</span></div>
                       <div class="outcome-row"><span class="outcome-label">Chipset</span><span class="outcome-value">{{ detail.latest_result.chipset }}</span></div>
-                      <div class="outcome-row"><span class="outcome-label">SDK Decoded</span><span class="outcome-value">{{ sdkDisplayValue(detail.latest_result.sdk_decoded_version) }}</span></div>
-                      <div class="outcome-row"><span class="outcome-label">SDK Inferred</span><span class="outcome-value">{{ sdkDisplayValue(detail.latest_result.sdk_inferred_version) }}</span></div>
-                      <div class="outcome-row"><span class="outcome-label">SDK Primary</span><span class="outcome-value">{{ sdkDisplayValue(detail.latest_result.sdk_primary_version || detail.latest_result.sdk_best_guess_base) }}</span></div>
-                      <div class="outcome-row"><span class="outcome-label">SDK Consistency</span><span class="outcome-value">{{ sdkDisplayValue(detail.latest_result.sdk_version_consistency) }}</span></div>
+                      <div class="outcome-row"><span class="outcome-label">SDK Version</span><span class="outcome-value">{{ sdkDisplayValue(detail.latest_result.sdk_decoded_version) }}</span></div>
                       <div class="outcome-row"><span class="outcome-label">Container Entropy</span><span class="outcome-value">{{ entropyDisplay(latestMatterHeader.container_entropy_bits_per_byte) }}</span></div>
                       <div class="outcome-row"><span class="outcome-label">Payload Entropy</span><span class="outcome-value">{{ entropyDisplay(latestMatterHeader.payload_entropy_bits_per_byte) }}</span></div>
                     </div>
