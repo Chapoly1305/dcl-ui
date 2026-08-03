@@ -10,6 +10,21 @@ import BatchRunsTab from '@/components/BatchRunsTab.vue';
 import { displayStagesRef, loadPipeline, aggregateDisplayStatus } from '@/utils/pipelineDisplay';
 import PipelineStageTimeline from '@/components/PipelineStageTimeline.vue';
 
+const ZCL_TYPE_NAME = {
+    0x08: 'data8', 0x09: 'data16', 0x0A: 'data24', 0x0B: 'data32',
+    0x10: 'bool', 0x18: 'bitmap8', 0x19: 'bitmap16', 0x1A: 'bitmap24', 0x1B: 'bitmap32', 0x1F: 'bitmap64',
+    0x20: 'uint8', 0x21: 'uint16', 0x22: 'uint24', 0x23: 'uint32', 0x27: 'uint64',
+    0x28: 'int8', 0x29: 'int16', 0x2A: 'int24', 0x2B: 'int32', 0x2F: 'int64',
+    0x30: 'enum8', 0x31: 'enum16',
+    0x38: 'float-semi', 0x39: 'float-single', 0x3A: 'float-double',
+    0x41: 'octstr', 0x42: 'string', 0x43: 'long-octstr', 0x44: 'long-string',
+    0x48: 'array', 0x4C: 'struct',
+    0xE0: 'time-of-day', 0xE1: 'date', 0xE2: 'utc',
+    0xE8: 'cluster-id', 0xE9: 'attribute-id', 0xEA: 'bacnet-oid',
+    0xF0: 'ieee-address', 0xF1: 'security-key'
+};
+const GLOBAL_ATTRIBUTE_IDS = new Set(['0xFFF8', '0xFFF9', '0xFFFA', '0xFFFB', '0xFFFC', '0xFFFD', '0xFFFE', '0xFFFF']);
+
 export default {
     name: 'FirmwareScanResults',
     components: { AiTranscriptDialog, FirmwareJobProgressModal, PipelineStageTimeline, BatchRunsTab },
@@ -274,11 +289,35 @@ export default {
         },
         capabilityAttributeRows() {
             const attrs = Array.isArray(this.capabilityMatrix?.attributes) ? this.capabilityMatrix.attributes : [];
+            const defaults = this.capabilityMatrix?.attribute_defaults;
+            const defaultsMap = defaults && typeof defaults === 'object' ? defaults : {};
             return attrs.map(entry => {
                 const text = String(entry || '');
                 const [cluster = '', attribute = ''] = text.split('/');
-                return { cluster, attribute };
+                const meta = defaultsMap[text] && typeof defaultsMap[text] === 'object' ? defaultsMap[text] : {};
+                const hasDefault = Object.prototype.hasOwnProperty.call(meta, 'default_raw_u32');
+                return { cluster, attribute, default_raw_u32: meta.default_raw_u32, has_default: hasDefault, length: meta.length, type_u8: meta.type_u8 };
             });
+        },
+        capabilityGlobalAttributeRows() {
+            const defaults = this.capabilityMatrix?.attribute_defaults;
+            const defaultsMap = defaults && typeof defaults === 'object' ? defaults : {};
+            const rows = [];
+            for (const key of Object.keys(defaultsMap)) {
+                const [cluster = '', attribute = ''] = String(key).split('/');
+                const canonical = this.canonicalAttributeId(attribute);
+                if (!GLOBAL_ATTRIBUTE_IDS.has(canonical)) continue;
+                const meta = defaultsMap[key] && typeof defaultsMap[key] === 'object' ? defaultsMap[key] : {};
+                rows.push({ cluster, attribute, default_raw_u32: meta.default_raw_u32, has_default: Object.prototype.hasOwnProperty.call(meta, 'default_raw_u32'), length: meta.length, type_u8: meta.type_u8 });
+            }
+            rows.sort((a, b) => {
+                const ca = this.parseHexOrDec(a.cluster), cb = this.parseHexOrDec(b.cluster);
+                if (ca !== null && cb !== null && ca !== cb) return ca - cb;
+                const aa = this.parseHexOrDec(a.attribute), ab = this.parseHexOrDec(b.attribute);
+                if (aa !== null && ab !== null && aa !== ab) return aa - ab;
+                return String(a.cluster || '').localeCompare(String(b.cluster || '')) || String(a.attribute || '').localeCompare(String(b.attribute || ''));
+            });
+            return rows;
         },
         sdkInferredVersion() {
             return this.sdkResult?.inferred_best_guess_base || this.selectedResult?.sdk_inferred_version || null;
@@ -509,6 +548,17 @@ export default {
                 this.detailPayload = { result: { ...row }, attempts: [] };
             }
             await this.loadResultDetail(resultId);
+            // Sync URL for deep linking + back-button support
+            if (String(this.$route.query.result_id || '') !== resultId) {
+                this.$router.push({ query: { ...this.$route.query, result_id: resultId } });
+            }
+        },
+        onReportSidebarHide() {
+            // User closed the sidebar (X button or backdrop click) —
+            // navigate back to pop the history entry pushed by openReport().
+            if (this.$route.query.result_id) {
+                this.$router.back();
+            }
         },
         async reloadSelectedDetail() {
             if (!this.selectedResultId) return;
@@ -578,6 +628,13 @@ export default {
                 const query = new URLSearchParams({ network: this.selectedNetwork });
                 const response = await fetch(`${this.apiBase}/api/v1/results/${encodeURIComponent(resultId)}?${query.toString()}`, { method: 'DELETE' });
                 if (!response.ok) throw new Error(`Delete failed (${response.status})`);
+                // Clean up URL before closing sidebar so the @hide handler
+                // sees no result_id and skips $router.back() — avoids double-nav.
+                if (this.$route.query.result_id) {
+                    const q = { ...this.$route.query };
+                    delete q.result_id;
+                    this.$router.replace({ query: q });
+                }
                 this.reportSidebarVisible = false;
                 this.selectedResultId = '';
                 this.detailPayload = { result: null, attempts: [] };
@@ -727,6 +784,29 @@ export default {
             if (value === null || value === undefined || String(value).trim() === '') return 'rng_init/provenance';
             return String(value);
         },
+        parseHexOrDec(raw) {
+            const text = String(raw ?? '').trim();
+            if (!text) return null;
+            if (text.toLowerCase().startsWith('0x')) return parseInt(text, 16);
+            const n = Number(text);
+            return Number.isFinite(n) ? n : null;
+        },
+        canonicalAttributeId(raw) {
+            const text = String(raw ?? '').trim().toUpperCase();
+            if (text.startsWith('0X')) return text.replace('0X', '0x');
+            return text;
+        },
+        capabilityDefaultRaw(row) {
+            if (!row || row.has_default !== true) return 'N/A';
+            const tc = Number(row.type_u8);
+            if ([0x41, 0x42, 0x43, 0x44, 0x48, 0x4c].includes(tc)) return 'N/A (non-scalar)';
+            return String(row.default_raw_u32);
+        },
+        capabilityTypeName(row) {
+            const tc = Number(row?.type_u8);
+            if (!Number.isFinite(tc)) return 'N/A';
+            return ZCL_TYPE_NAME[tc] || `unknown(0x${tc.toString(16).toUpperCase().padStart(2, '0')})`;
+        },
         displayPathTail(value) {
             const text = String(value || '').trim();
             if (!text) return '-';
@@ -741,6 +821,19 @@ export default {
             this.pageFirst = 0;
             this.loadResults();
             this.loadJobs();
+        },
+        '$route.query.result_id'(newVal) {
+            const id = String(newVal || '').trim();
+            if (id && id !== this.selectedResultId) {
+                // URL gained a result_id — open its report
+                this.selectedResultId = id;
+                this.detailTabIndex = 0;
+                this.reportSidebarVisible = true;
+                this.loadResultDetail(id);
+            } else if (!id && this.reportSidebarVisible) {
+                // URL lost result_id (browser back) — close sidebar
+                this.reportSidebarVisible = false;
+            }
         }
     },
     mounted() {
@@ -755,6 +848,14 @@ export default {
         }
         this.loadResults();
         this.loadJobs();
+        // Handle deep-link: if URL already has a result_id, open that report
+        const initialResultId = String(this.$route.query.result_id || '').trim();
+        if (initialResultId) {
+            this.selectedResultId = initialResultId;
+            this.detailTabIndex = 0;
+            this.reportSidebarVisible = true;
+            this.loadResultDetail(initialResultId);
+        }
     }
 };
 </script>
@@ -933,7 +1034,7 @@ export default {
         </TabView>
 
         <!-- ===== Rendered Report Sidebar ===== -->
-        <Sidebar v-model:visible="reportSidebarVisible" position="right" class="report-sidebar w-full md:w-32rem lg:w-45rem">
+        <Sidebar v-model:visible="reportSidebarVisible" @hide="onReportSidebarHide" position="right" class="report-sidebar w-full md:w-32rem lg:w-45rem">
             <template #header>
                 <div class="flex align-items-center gap-2 w-full">
                     <i class="pi pi-file-check text-xl text-blue-500"></i>
@@ -1211,6 +1312,31 @@ export default {
                                         <DataTable :value="capabilityAttributeRows" responsiveLayout="scroll" class="p-datatable-sm" :rows="12" :paginator="capabilityAttributeRows.length > 12">
                                             <Column field="cluster" header="Cluster" />
                                             <Column field="attribute" header="Attribute" />
+                                            <Column field="default_raw_u32" header="Default">
+                                                <template #body="slotProps">{{ capabilityDefaultRaw(slotProps.data) }}</template>
+                                            </Column>
+                                            <Column field="length" header="Len">
+                                                <template #body="slotProps">{{ displayValue(slotProps.data.length) }}</template>
+                                            </Column>
+                                            <Column field="type_u8" header="Type">
+                                                <template #body="slotProps">{{ capabilityTypeName(slotProps.data) }}</template>
+                                            </Column>
+                                        </DataTable>
+                                    </div>
+                                    <div class="col-12" v-if="capabilityGlobalAttributeRows.length > 0">
+                                        <div class="text-700 font-medium mb-2">Global Attributes</div>
+                                        <DataTable :value="capabilityGlobalAttributeRows" responsiveLayout="scroll" class="p-datatable-sm" :rows="12" :paginator="capabilityGlobalAttributeRows.length > 12">
+                                            <Column field="cluster" header="Cluster" />
+                                            <Column field="attribute" header="Attribute" />
+                                            <Column field="default_raw_u32" header="Default">
+                                                <template #body="slotProps">{{ capabilityDefaultRaw(slotProps.data) }}</template>
+                                            </Column>
+                                            <Column field="length" header="Len">
+                                                <template #body="slotProps">{{ displayValue(slotProps.data.length) }}</template>
+                                            </Column>
+                                            <Column field="type_u8" header="Type">
+                                                <template #body="slotProps">{{ capabilityTypeName(slotProps.data) }}</template>
+                                            </Column>
                                         </DataTable>
                                     </div>
                                 </div>

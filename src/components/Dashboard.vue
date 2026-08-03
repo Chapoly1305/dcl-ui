@@ -274,6 +274,7 @@ import Vue3autocounter from 'vue3-autocounter';
 import { decodePubkey } from '@cosmjs/proto-signing';
 import { DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
 import QuickActions from './QuickActions.vue';
+import storeInitializer from '@/store/initializer';
 
 export default {
     name: 'Dashboard',
@@ -328,13 +329,12 @@ export default {
         selectedNetwork(next, prev) {
             if (next === prev) return;
             this.loadNetworkData();
-            this.dispatchDashboardQueries();
         }
     },
 
     created() {
         this.loadNetworkData();
-        this.dispatchDashboardQueries();
+        this.ensureDashboardData();
     },
     computed: {
         selectedNetwork() {
@@ -542,6 +542,14 @@ export default {
         }
     },
     methods: {
+        ensureDashboardData() {
+            const bootstrapEnabled = String(import.meta.env.VITE_APP_DCL_BOOTSTRAP ?? 'false').toLowerCase() === 'true';
+            if (bootstrapEnabled) {
+                storeInitializer.initializeAllStores(this.$store).catch((error) => {
+                    console.error('Failed to bootstrap dashboard DCL stores:', error);
+                });
+            }
+        },
         loadNetworkData() {
             this.loadValues = {};
             this.nodeInfo = {};
@@ -566,7 +574,7 @@ export default {
             this.queries.forEach((query) => {
                 this.$store.dispatch(`${query.namespace}/${query.method}`, {
                     options: {
-                        subscribe: true,
+                        subscribe: false,
                         all: true
                     }
                 });

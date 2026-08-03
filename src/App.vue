@@ -155,6 +155,14 @@ export default {
         },
         async onNetworkChange(network) {
             await this.$store.dispatch('network/setSelectedNetwork', network);
+            const legacyDclEnabled = String(import.meta.env.VITE_APP_DCL_BOOTSTRAP ?? 'false').toLowerCase() === 'true';
+            if (!legacyDclEnabled) {
+                // MatterOverwatch pages use the network-aware HTTP API directly.
+                // Do not create Starport's legacy polling client merely because the
+                // network selector changed.
+                this.$router.replace({ query: this.$route.query }).catch(() => undefined);
+                return;
+            }
             try {
                 await this.$store.dispatch('network/configureDclEnvironment');
                 await storeInitializer.initializeAllStores(this.$store);
@@ -205,20 +213,20 @@ export default {
         console.log('TX API:', import.meta.env.VITE_APP_DCL_TX_API);
         console.log('Refresh:', import.meta.env.VITE_APP_DCL_REFRESH);
         await this.$store.dispatch('network/initialize');
-        try {
-            await this.$store.dispatch('network/configureDclEnvironment');
-        } catch (error) {
-            console.error('Failed to configure selected DCL environment:', error);
-        }
-        console.log('API Node:', this.$store.getters['network/dclRestEndpoint']);
-        console.log('RPC Node:', this.$store.getters['network/dclRpcEndpoint']);
-        console.log('WebSocket Node:', this.$store.getters['network/dclWebsocketEndpoint']);
 
         // Show UI immediately -- DCL store bootstrap runs in background
         this.initialized = true;
 
-        const bootstrapEnabled = String(import.meta.env.VITE_APP_DCL_BOOTSTRAP ?? 'true').toLowerCase() !== 'false';
+        const bootstrapEnabled = String(import.meta.env.VITE_APP_DCL_BOOTSTRAP ?? 'false').toLowerCase() === 'true';
         if (bootstrapEnabled) {
+            try {
+                await this.$store.dispatch('network/configureDclEnvironment');
+            } catch (error) {
+                console.error('Failed to configure selected DCL environment:', error);
+            }
+            console.log('API Node:', this.$store.getters['network/dclRestEndpoint']);
+            console.log('RPC Node:', this.$store.getters['network/dclRpcEndpoint']);
+            console.log('WebSocket Node:', this.$store.getters['network/dclWebsocketEndpoint']);
             storeInitializer.initializeAllStores(this.$store).catch((error) => {
                 console.error('Failed to bootstrap legacy DCL stores:', error);
             });

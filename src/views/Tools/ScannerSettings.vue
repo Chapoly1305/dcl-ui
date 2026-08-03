@@ -27,9 +27,8 @@
               <div class="flex align-items-start gap-3">
                 <i class="pi pi-info-circle text-blue-500 mt-1" style="font-size: 1.2rem"></i>
                 <div class="text-sm line-height-3 text-700">
-                  Configure the OpenAI-compatible LLM endpoint used by the authenticity analysis
-                  section. The API key is never stored — it is read from the environment variable
-                  named below at runtime.
+                  Configure the Claude Agent SDK connection used by the authenticity analysis
+                  section. MatterOverwatch handles the SDK environment internally.
                 </div>
               </div>
             </div>
@@ -37,21 +36,10 @@
             <!-- LLM Provider -->
             <div class="section-title mb-3">LLM Provider</div>
             <div class="formgrid grid mb-3">
-              <div class="field col-12 md:col-6">
-                <label class="form-label" for="llm-harness">Harness</label>
-                <Dropdown
-                  id="llm-harness"
-                  v-model="form.llm_harness"
-                  :options="harnessOptions"
-                  optionLabel="label"
-                  optionValue="value"
-                  class="w-full"
-                />
-              </div>
-              <div class="field col-12 md:col-6">
+              <div class="field col-12">
                 <label class="form-label" for="llm-model">Model</label>
-                <InputText id="llm-model" v-model="form.llm_model" class="w-full" placeholder="openai/gpt-4.1-mini" />
-                <small class="text-500">e.g. deepseek-v4-flash, openai/gpt-4.1-mini, anthropic/claude-sonnet-4-20250514</small>
+                <InputText id="llm-model" v-model="form.llm_model" class="w-full" placeholder="claude-sonnet-4-20250514" />
+                <small class="text-500">The model identifier accepted by your Claude-compatible endpoint.</small>
               </div>
             </div>
 
@@ -62,63 +50,33 @@
                   <span class="p-inputgroup-addon"><i class="pi pi-link"></i></span>
                   <InputText id="llm-api-base" v-model="form.llm_api_base" class="w-full" placeholder="https://api.deepseek.com" />
                 </div>
-                <small class="text-500">OpenAI-compatible Chat Completions endpoint. OpenRouter: https://openrouter.ai/api/v1</small>
+                <small class="text-500">Anthropic or Claude-compatible API base URL.</small>
               </div>
             </div>
 
             <div class="formgrid grid mb-3">
-              <div class="field col-12 md:col-6">
-                <label class="form-label" for="llm-api-key">LLM API Key</label>
+              <div class="field col-12">
+                <label class="form-label" for="llm-api-key">Access Token</label>
                 <div class="p-inputgroup">
                   <span class="p-inputgroup-addon"><i class="pi pi-key"></i></span>
                   <Password
                     id="llm-api-key"
                     v-model="sessionToken"
                     class="w-full"
-                    placeholder="sk-... — write-only, never shown again"
+                    :placeholder="accessTokenConfigured ? 'Saved — enter a new token to replace it' : 'Enter access token'"
                     :feedback="false"
                     toggleMask
                   />
                 </div>
-                <small class="text-500">Used for test-llm. Never persisted and never returned by the API.</small>
-              </div>
-              <div class="field col-12 md:col-6">
-                <label class="form-label" for="env-var">Environment Variable</label>
-                <InputText id="env-var" v-model="form.llm_secret_env_var" class="w-full" placeholder="MO_AGENT_LLM_API_KEY" />
-                <small class="text-500">The worker reads the API key from this env var at runtime.</small>
-              </div>
-            </div>
-
-            <div class="formgrid grid mb-3">
-              <div class="field col-12 md:col-6">
-                <label class="form-label" for="default-backend">Default Backend</label>
-                <Dropdown
-                  id="default-backend"
-                  v-model="form.default_backend"
-                  :options="backendOptions"
-                  optionLabel="label"
-                  optionValue="value"
-                  class="w-full"
-                />
+                <small class="text-500">Write-only. Used by connection tests and analysis workers, and never returned by the API.</small>
               </div>
             </div>
 
             <div class="formgrid grid mb-2">
-              <div class="field col-6 md:col-3">
-                <label class="form-label" for="llm-timeout">LLM Timeout (sec)</label>
+              <div class="field col-12 md:col-4">
+                <label class="form-label" for="llm-timeout">Claude Run Timeout (sec)</label>
                 <InputNumber id="llm-timeout" v-model="form.llm_timeout_sec" :min="5" :max="3600" :useGrouping="false" class="w-full" />
-              </div>
-              <div class="field col-6 md:col-3">
-                <label class="form-label" for="audit-timeout">Audit Timeout (sec)</label>
-                <InputNumber id="audit-timeout" v-model="form.audit_timeout_sec" :min="60" :max="7200" :useGrouping="false" class="w-full" />
-              </div>
-              <div class="field col-6 md:col-3">
-                <label class="form-label" for="max-llm-calls">Max LLM Calls</label>
-                <InputNumber id="max-llm-calls" v-model="form.max_llm_calls" :min="1" :max="500" :useGrouping="false" class="w-full" />
-              </div>
-              <div class="field col-6 md:col-3">
-                <label class="form-label" for="max-decompile">Max Decompile</label>
-                <InputNumber id="max-decompile" v-model="form.max_decompile" :min="1" :max="2000" :useGrouping="false" class="w-full" />
+                <small class="text-500">Maximum wall-clock time for one Claude agent run.</small>
               </div>
             </div>
 
@@ -171,16 +129,12 @@ export default {
       activeNetwork: '',
       scopeNetwork: '',
       sessionToken: '',
+      accessTokenConfigured: false,
       form: {
-        llm_harness: 'pydantic_ai',
+        llm_harness: 'claude_agent',
         llm_api_base: '',
         llm_model: '',
-        llm_secret_env_var: 'MO_AGENT_LLM_API_KEY',
-        default_backend: 'bn',
         llm_timeout_sec: 600,
-        audit_timeout_sec: 1800,
-        max_llm_calls: 32,
-        max_decompile: 64,
         // Static fields required by PUT model but not displayed:
         analysis_profile: 'authenticity',
         phase_ii_section_filter: null,
@@ -190,7 +144,6 @@ export default {
         chipset_override_mode: 'auto',
         chipset_override_value: null,
       },
-      envPreview: '',
     };
   },
   methods: {
@@ -216,30 +169,13 @@ export default {
     },
     applyPayload(payload) {
       const s = payload.settings || payload;
-      this.form.llm_harness = s.llm_harness || 'pydantic_ai';
+      this.form.llm_harness = 'claude_agent';
       this.form.llm_api_base = s.llm_api_base || '';
       this.form.llm_model = s.llm_model || '';
-      this.form.llm_secret_env_var = s.llm_secret_env_var || 'MO_AGENT_LLM_API_KEY';
-      this.form.default_backend = s.default_backend || 'bn';
       this.form.llm_timeout_sec = s.llm_timeout_sec != null ? Number(s.llm_timeout_sec) : 600;
-      this.form.audit_timeout_sec = s.audit_timeout_sec != null ? Number(s.audit_timeout_sec) : 1800;
-      this.form.max_llm_calls = s.max_llm_calls != null ? Number(s.max_llm_calls) : 32;
-      this.form.max_decompile = s.max_decompile != null ? Number(s.max_decompile) : 64;
       this.activeNetwork = String(payload.active_network || '');
       this.scopeNetwork = this.normalizeNetwork(payload.network) || this.resolveScopeNetwork();
-      this.envPreview = payload.env_preview || this.buildEnvPreview();
-    },
-    buildEnvPreview() {
-      const lines = [`MO_AGENT_LLM_HARNESS=${this.form.llm_harness}`];
-      if (this.form.llm_api_base) lines.push(`MO_AGENT_LLM_API_BASE=${this.form.llm_api_base}`);
-      if (this.form.llm_model) lines.push(`MO_AGENT_LLM_MODEL=${this.form.llm_model}`);
-      lines.push(`MO_AGENT_LLM_API_KEY=$${this.form.llm_secret_env_var}`);
-      if (this.form.default_backend) lines.push(`MO_AGENT_DEFAULT_BACKEND=${this.form.default_backend}`);
-      if (this.form.llm_timeout_sec) lines.push(`MO_AGENT_LLM_TIMEOUT_SEC=${this.form.llm_timeout_sec}`);
-      if (this.form.audit_timeout_sec) lines.push(`MO_AGENT_AUDIT_TIMEOUT_SEC=${this.form.audit_timeout_sec}`);
-      if (this.form.max_llm_calls) lines.push(`MO_AGENT_MAX_LLM_CALLS=${this.form.max_llm_calls}`);
-      if (this.form.max_decompile) lines.push(`MO_AGENT_MAX_DECOMPILE=${this.form.max_decompile}`);
-      return lines.join('\n') + '\n';
+      this.accessTokenConfigured = Boolean(payload.access_token_configured);
     },
     async loadSettings() {
       this.loading = true;
@@ -288,13 +224,8 @@ export default {
           llm_harness: this.form.llm_harness,
           llm_api_base: this.form.llm_api_base || null,
           llm_model: this.form.llm_model || null,
-          llm_secret_mode: 'env',
-          llm_secret_env_var: this.form.llm_secret_env_var,
-          default_backend: this.form.default_backend,
+          llm_api_key: this.sessionToken || null,
           llm_timeout_sec: this.form.llm_timeout_sec,
-          audit_timeout_sec: this.form.audit_timeout_sec,
-          max_llm_calls: this.form.max_llm_calls,
-          max_decompile: this.form.max_decompile,
         };
         const response = await fetch(this.settingsEndpoint(), {
           method: 'PUT',
@@ -310,8 +241,9 @@ export default {
           ...(payload.settings || {}),
           network: payload.network,
           active_network: payload.active_network,
-          env_preview: payload.env_preview
+          access_token_configured: payload.access_token_configured
         });
+        this.sessionToken = '';
         this.statusNote = `Saved for ${this.networkLabel(this.scopeNetwork)}.`;
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Failed to save';
@@ -363,18 +295,6 @@ export default {
     scopeNetworkLabel() {
       return this.networkLabel(this.scopeNetwork);
     },
-    harnessOptions() {
-      return [
-        { label: 'Pydantic AI (OpenAI-compatible)', value: 'pydantic_ai' },
-        { label: 'Claude Agent SDK', value: 'claude_agent' },
-      ];
-    },
-    backendOptions() {
-      return [
-        { label: 'Binary Ninja (bn)', value: 'bn' },
-        { label: 'IDA Pro (ida)', value: 'ida' },
-      ];
-    },
   },
   watch: {
     selectedNetwork(next, prev) {
@@ -384,15 +304,6 @@ export default {
       this.scopeNetwork = a;
       this.loadSettings();
     },
-    'form.llm_harness': function () { this.envPreview = this.buildEnvPreview(); },
-    'form.llm_api_base': function () { this.envPreview = this.buildEnvPreview(); },
-    'form.llm_model': function () { this.envPreview = this.buildEnvPreview(); },
-    'form.llm_secret_env_var': function () { this.envPreview = this.buildEnvPreview(); },
-    'form.default_backend': function () { this.envPreview = this.buildEnvPreview(); },
-    'form.llm_timeout_sec': function () { this.envPreview = this.buildEnvPreview(); },
-    'form.audit_timeout_sec': function () { this.envPreview = this.buildEnvPreview(); },
-    'form.max_llm_calls': function () { this.envPreview = this.buildEnvPreview(); },
-    'form.max_decompile': function () { this.envPreview = this.buildEnvPreview(); },
   },
   mounted() {
     this.loadSettings();

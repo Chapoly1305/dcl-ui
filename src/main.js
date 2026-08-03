@@ -2,7 +2,6 @@ import 'regenerator-runtime/runtime';
 import { createApp } from 'vue';
 import App from './App.vue';
 import store from './store';
-import vueLib from '@starport/vue'
 
 import router from './router';
 
@@ -122,7 +121,6 @@ const app = createApp(App);
 
 app.use(router);
 app.use(store);
-app.use(vueLib);
 app.use(VueLoading);
 app.use(PrimeVue, { ripple: true });
 app.use(ToastService);

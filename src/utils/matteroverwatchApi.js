@@ -22,12 +22,15 @@ export function resolveMatteroverwatchApiBase() {
     };
   }
 
-  // When on localhost (port-forwarded access), use relative paths so API calls
-  // go through the same origin (nginx proxies /api/* to central:8080). Deriving
-  // localhost:8080 from :8082 breaks single-port forwarding setups.
-  if (origin && (origin.includes("localhost") || origin.includes("127.0.0.1"))) {
+  // Use the UI origin when it is served behind the nginx /api/* proxy. An
+  // explicit origin (instead of an empty relative base) also lets callers
+  // distinguish this valid same-origin mode from a genuinely missing base.
+  // Localhost always prefers the proxy because deriving :8080 from :8082
+  // breaks single-port forwarding setups.
+  const isLocalOrigin = origin.includes("localhost") || origin.includes("127.0.0.1");
+  if (origin && (isLocalOrigin || !configured)) {
     return {
-      requestBase: "",
+      requestBase: origin,
       displayBase: origin,
       configuredBase: configured
     };
