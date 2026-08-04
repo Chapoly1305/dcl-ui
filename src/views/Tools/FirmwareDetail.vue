@@ -245,6 +245,192 @@
               <div v-if="modules.length === 0" class="col-12 text-600">No module output available yet.</div>
             </div>
           </TabPanel>
+
+          <TabPanel header="Layout">
+            <div v-if="layoutError" class="col-12">
+              <Message severity="error" :closable="false">{{ layoutError }}</Message>
+            </div>
+            <div v-else-if="!layoutLoaded" class="col-12 text-600 p-3">
+              <i class="pi pi-spin pi-spinner mr-2"></i>Loading firmware layout...
+            </div>
+            <div v-else-if="!layoutPayload.layout_available" class="col-12">
+              <Message severity="info" :closable="false">
+                Firmware layout not available.
+                <span v-if="layoutPayload.reason">Reason: {{ layoutPayload.reason }}</span>
+              </Message>
+            </div>
+            <div v-else class="grid">
+              <!-- Summary KPIs -->
+              <div class="col-12">
+                <div class="grid">
+                  <div class="col-6 md:col-3" v-for="k in layoutKpis" :key="k.label">
+                    <div class="card mb-0 stat-card">
+                      <div class="flex justify-content-between mb-2">
+                        <div>
+                          <span class="block text-500 font-medium mb-1 stat-label-text">{{ k.label }}</span>
+                          <div class="text-900 font-bold text-xl">{{ k.value }}</div>
+                        </div>
+                        <div class="flex align-items-center justify-content-center border-round" :class="k.iconBg" style="width:2.5rem;height:2.5rem">
+                          <i class="pi text-xl" :class="[k.icon, k.iconColor]"></i>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Memory map per image -->
+              <div class="col-12" v-for="(img, imgIdx) in layoutImages" :key="'img-'+imgIdx">
+                <Card class="detail-card">
+                  <template #title>
+                    <div class="flex align-items-center gap-2 flex-wrap">
+                      <i class="pi pi-microchip"></i>
+                      <span v-if="img.role || img.origin" class="text-sm text-600">
+                        {{ img.role || 'image' }}
+                        <span v-if="img.origin"> &mdash; {{ img.origin }}</span>
+                      </span>
+                      <Tag v-if="img.is_primary" value="primary" severity="info" />
+                      <Tag v-if="layoutImages.length > 1" :value="img.file_name" severity="warning" />
+                      <Tag
+                        :value="img.layout_granularity || layoutPayload.granularity || 'coarse'"
+                        :severity="granularitySeverity(img.layout_granularity || layoutPayload.granularity)"
+                        class="text-xs"
+                      />
+                    </div>
+                  </template>
+                  <template #content>
+                    <!-- Memory map visualization -->
+                    <div class="memory-map-container mb-3">
+                      <div class="memory-map-bar">
+                        <div
+                          v-for="(region, rIdx) in (img.layout.regions || [])"
+                          :key="'r-'+rIdx"
+                          class="memory-region"
+                          :class="['region-' + regionClass(region), region.granularity === 'modeled' ? 'region-modeled' : '']"
+                          :style="regionStyle(region, img.layout)"
+                          v-tooltip.top="regionTooltip(region)"
+                          @click="selectedRegion = { imageIdx: imgIdx, regionIdx: rIdx, region, image: img }"
+                        >
+                          <span class="region-label" v-if="regionWidth(region, img.layout) > 8">{{ region.name || '?' }}</span>
+                        </div>
+                      </div>
+                      <!-- Address labels -->
+                      <div class="memory-map-labels flex justify-content-between text-xs text-500 mt-1">
+                        <span>{{ img.layout.address_space_start_hex }}</span>
+                        <span>{{ img.layout.address_space_end_hex }}</span>
+                      </div>
+                    </div>
+
+                    <!-- Region details -->
+                    <div class="mt-3">
+                      <div class="text-700 font-medium mb-2">Memory Regions</div>
+                      <DataTable
+                        :value="img.layout.regions || []"
+                        responsiveLayout="scroll"
+                        class="p-datatable-sm"
+                        :rows="10"
+                        :paginator="(img.layout.regions || []).length > 10"
+                        selectionMode="single"
+                        :selection="selectedRegion && selectedRegion.imageIdx === imgIdx ? [selectedRegion.region] : []"
+                        @row-select="onRegionSelect($event, imgIdx, img)"
+                      >
+                        <Column field="vaddr_hex" header="Base Address">
+                          <template #body="slotProps">
+                            <code class="text-sm">{{ slotProps.data.vaddr_hex }}</code>
+                          </template>
+                        </Column>
+                        <Column field="name" header="Type">
+                          <template #body="slotProps">
+                            <Tag :value="slotProps.data.name || '-'" :severity="regionSeverity(slotProps.data)" />
+                          </template>
+                        </Column>
+                        <Column header="Detail">
+                          <template #body="slotProps">
+                            <Tag
+                              v-if="slotProps.data.granularity === 'modeled'"
+                              value="modeled"
+                              severity="warning"
+                              class="text-xs"
+                              v-tooltip.top="'Inferred from chipset knowledge, not directly from firmware headers'"
+                            />
+                            <Tag
+                              v-else-if="slotProps.data.granularity === 'exact'"
+                              value="exact"
+                              severity="success"
+                              class="text-xs"
+                            />
+                            <span v-else class="text-xs text-500">coarse</span>
+                          </template>
+                        </Column>
+                        <Column field="memsz" header="Size">
+                          <template #body="slotProps">
+                            <span class="text-sm">{{ formatSize(slotProps.data.memsz) }}</span>
+                          </template>
+                        </Column>
+                        <Column header="End Address">
+                          <template #body="slotProps">
+                            <code class="text-sm">{{ regionEndAddr(slotProps.data) }}</code>
+                          </template>
+                        </Column>
+                        <Column header="Permissions">
+                          <template #body="slotProps">
+                            <span class="text-sm" :class="permClass(slotProps.data)">
+                              {{ permString(slotProps.data.flags) }}
+                            </span>
+                          </template>
+                        </Column>
+                      </DataTable>
+                    </div>
+
+                    <!-- Selected region detail -->
+                    <div v-if="selectedRegion && selectedRegion.imageIdx === imgIdx" class="mt-3">
+                      <Card class="p-3 region-detail-card">
+                        <template #title>
+                          <div class="flex align-items-center gap-2 flex-wrap">
+                            <span class="text-sm font-semibold">
+                              Region Detail: {{ selectedRegion.region.vaddr_hex }}
+                            </span>
+                            <Tag
+                              v-if="selectedRegion.region.granularity"
+                              :value="selectedRegion.region.granularity"
+                              :severity="selectedRegion.region.granularity === 'modeled' ? 'warning' : 'info'"
+                              class="text-xs"
+                            />
+                          </div>
+                        </template>
+                        <template #content>
+                          <div class="grid text-sm">
+                            <div class="col-6 md:col-3"><strong>File Offset:</strong> <code>{{ formatHex(selectedRegion.region.offset) }}</code></div>
+                            <div class="col-6 md:col-3"><strong>File Size:</strong> {{ formatSize(selectedRegion.region.filesz) }}</div>
+                            <div class="col-6 md:col-3"><strong>Memory Size:</strong> {{ formatSize(selectedRegion.region.memsz) }}</div>
+                            <div class="col-6 md:col-3"><strong>BSS:</strong> {{ formatSize(Math.max(0, selectedRegion.region.memsz - selectedRegion.region.filesz)) }}</div>
+                            <div v-if="selectedRegion.image.base_source" class="col-12 mt-2">
+                              <strong>Base Source:</strong>
+                              <code class="ml-1 text-xs">{{ selectedRegion.image.base_source }}</code>
+                            </div>
+                            <div v-if="selectedRegion.region.granularity === 'modeled' && selectedRegion.region.source" class="col-12 mt-1">
+                              <strong>Model Source:</strong>
+                              <code class="ml-1 text-xs">{{ selectedRegion.region.source }}</code>
+                            </div>
+                          </div>
+                        </template>
+                      </Card>
+                    </div>
+                  </template>
+                </Card>
+              </div>
+
+              <!-- Fallback: region table only if no ELF layout but have chipset info -->
+              <div v-if="layoutImages.length === 0 && layoutPayload.chipset" class="col-12">
+                <Card class="detail-card">
+                  <template #title>Chipset Info</template>
+                  <template #content>
+                    <div class="text-sm">Chipset: <Tag :value="layoutPayload.chipset" severity="info" /></div>
+                  </template>
+                </Card>
+              </div>
+            </div>
+          </TabPanel>
         </TabView>
       </div>
     </div>
@@ -337,6 +523,10 @@ export default {
       },
       jobsPayload: { jobs: { pending: [], running: [], done: [], failed: [] }, attempts: [] },
       modulesPayload: { modules: [], run_id: null },
+      layoutPayload: { layout_available: false, images: [], reason: null, chipset: null },
+      layoutLoaded: false,
+      layoutError: null,
+      selectedRegion: null,
       activeTabIndex: 0,
       jobsLoaded: false,
       modulesLoaded: false
@@ -463,6 +653,24 @@ export default {
         return String(a.attribute || '').localeCompare(String(b.attribute || ''));
       });
       return rows;
+    },
+    layoutImages() {
+      return Array.isArray(this.layoutPayload.images) ? this.layoutPayload.images : [];
+    },
+    layoutKpis() {
+      const totalRegions = this.layoutPayload.total_regions || 0;
+      const imageCount = this.layoutPayload.image_count || 0;
+      const firstImg = this.layoutImages[0];
+      const entryPoint = firstImg?.layout?.entry_point_hex || 'N/A';
+      const machine = firstImg?.layout?.machine || 'N/A';
+      const granularity = this.layoutPayload.granularity || 'coarse';
+      return [
+        { label: 'Images', value: imageCount, icon: 'pi-images', iconColor: 'text-blue-500', iconBg: 'bg-blue-100' },
+        { label: 'Regions', value: totalRegions, icon: 'pi-th-large', iconColor: 'text-purple-500', iconBg: 'bg-purple-100' },
+        { label: 'Entry Point', value: entryPoint, icon: 'pi-map-marker', iconColor: 'text-orange-500', iconBg: 'bg-orange-100' },
+        { label: 'Architecture', value: machine, icon: 'pi-cog', iconColor: 'text-green-500', iconBg: 'bg-green-100' },
+        { label: 'Granularity', value: granularity, icon: 'pi-chart-bar', iconColor: 'text-teal-500', iconBg: 'bg-teal-100' }
+      ];
     }
   },
   methods: {
@@ -487,6 +695,7 @@ export default {
       await this.refreshDetail();
       if (this.activeTabIndex === 1 || this.activeTabIndex === 3) await this.refreshModules();
       if (this.activeTabIndex === 2) await this.refreshJobs();
+      if (this.activeTabIndex === 4) await this.refreshLayout();
     },
     async refreshDetail() {
       this.loading = true;
@@ -548,12 +757,40 @@ export default {
         this.loading = false;
       }
     },
+    async refreshLayout() {
+      this.loading = true;
+      this.layoutError = null;
+      if (!this.apiBase) {
+        this.layoutError = 'Missing MatterOverwatch API base. Set VITE_APP_MATTEROVERWATCH_API_BASE before starting dcl-ui.';
+        this.loading = false;
+        return;
+      }
+      try {
+        const query = new URLSearchParams({ network: this.selectedNetwork });
+        const layoutResp = await fetch(`${this.apiBase}/api/v1/firmware/${this.firmwareSha256}/layout?${query.toString()}`);
+        if (!layoutResp.ok) {
+          if (layoutResp.status === 404) {
+            this.layoutPayload = { layout_available: false, images: [], reason: 'not_found', chipset: null };
+          } else {
+            throw new Error(`Layout request failed (${layoutResp.status})`);
+          }
+        } else {
+          this.layoutPayload = await layoutResp.json();
+        }
+        this.layoutLoaded = true;
+      } catch (err) {
+        this.layoutError = err instanceof Error ? err.message : 'Failed to load firmware layout';
+      } finally {
+        this.loading = false;
+      }
+    },
     async onTabChange(event) {
       const idx = Number(event?.index ?? this.activeTabIndex);
       this.activeTabIndex = Number.isFinite(idx) ? idx : 0;
       if (this.activeTabIndex === 1 && !this.modulesLoaded) await this.refreshModules();
       if (this.activeTabIndex === 2 && !this.jobsLoaded) await this.refreshJobs();
       if (this.activeTabIndex === 3 && !this.modulesLoaded) await this.refreshModules();
+      if (this.activeTabIndex === 4 && !this.layoutLoaded) await this.refreshLayout();
     },
     enqueueAnalyze() {
       this.builderVisible = true;
@@ -672,6 +909,80 @@ export default {
       const name = ZCL_TYPE_NAME[typeCode];
       if (name) return name;
       return `unknown(0x${typeCode.toString(16).toUpperCase().padStart(2, '0')})`;
+    },
+    // --- Layout helpers ---
+    regionClass(region) {
+      if (region?.flags?.x && !region?.flags?.w) return 'code';
+      if (region?.flags?.w && !region?.flags?.x) return 'data';
+      if (region?.flags?.r && !region?.flags?.w && !region?.flags?.x) return 'rodata';
+      return 'mixed';
+    },
+    regionWidth(region, layout) {
+      if (!layout || !layout.address_space_span) return 0;
+      const sz = Math.max(region.memsz || 0, region.filesz || 0);
+      return Math.max(1, (sz / layout.address_space_span) * 100);
+    },
+    regionStyle(region, layout) {
+      return { width: this.regionWidth(region, layout) + '%' };
+    },
+    regionTooltip(region) {
+      const flags = [];
+      if (region?.flags?.r) flags.push('R');
+      if (region?.flags?.w) flags.push('W');
+      if (region?.flags?.x) flags.push('X');
+      return `${region.vaddr_hex} — ${this.formatSize(region.memsz)} [${flags.join('')}] ${region.name || ''}`;
+    },
+    formatSize(bytes) {
+      if (bytes === null || bytes === undefined) return '-';
+      const n = Number(bytes);
+      if (!Number.isFinite(n)) return '-';
+      if (n >= 1048576) return `${(n / 1048576).toFixed(1)} MiB`;
+      if (n >= 1024) return `${(n / 1024).toFixed(1)} KiB`;
+      return `${n} B`;
+    },
+    formatHex(value) {
+      if (value === null || value === undefined) return '-';
+      return `0x${Number(value).toString(16).toUpperCase()}`;
+    },
+    regionEndAddr(region) {
+      const base = Number(region?.vaddr) || 0;
+      const sz = Math.max(region?.memsz || 0, region?.filesz || 0);
+      const end = base + sz;
+      return `0x${end.toString(16).toUpperCase().padStart(8, '0')}`;
+    },
+    permString(flags) {
+      if (!flags) return '-';
+      const p = [];
+      if (flags.r) p.push('R');
+      if (flags.w) p.push('W');
+      if (flags.x) p.push('X');
+      return p.join('') || '-';
+    },
+    permClass(region) {
+      if (region?.flags?.w && region?.flags?.x) return 'text-orange-500 font-bold';
+      if (region?.flags?.x) return 'text-blue-500';
+      if (region?.flags?.w) return 'text-green-600';
+      return 'text-500';
+    },
+    regionSeverity(region) {
+      if (region?.flags?.x && !region?.flags?.w) return 'info';
+      if (region?.flags?.w && !region?.flags?.x) return 'success';
+      if (region?.flags?.r && !region?.flags?.w && !region?.flags?.x) return 'warning';
+      return 'secondary';
+    },
+    granularitySeverity(value) {
+      if (value === 'fine') return 'success';
+      if (value === 'coarse') return 'info';
+      if (value === 'modeled') return 'warning';
+      return 'secondary';
+    },
+    onRegionSelect(event, imgIdx, img) {
+      this.selectedRegion = {
+        imageIdx: imgIdx,
+        regionIdx: event.index,
+        region: event.data,
+        image: img
+      };
     }
   },
   watch: {
@@ -679,8 +990,12 @@ export default {
       if (next === prev) return;
       this.modulesLoaded = false;
       this.jobsLoaded = false;
+      this.layoutLoaded = false;
+      this.layoutError = null;
+      this.selectedRegion = null;
       this.modulesPayload = { modules: [] };
       this.jobsPayload = { jobs: { pending: [], running: [], done: [], failed: [] }, attempts: [] };
+      this.layoutPayload = { layout_available: false, images: [], reason: null, chipset: null };
       this.refreshAll();
     }
   },
@@ -763,5 +1078,99 @@ export default {
   font-size: 0.9rem;
   text-align: right;
   word-break: break-word;
+}
+
+/* ── Memory map visualization ── */
+.firmware-detail-page .memory-map-container {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1.25rem 1rem 0.75rem;
+}
+
+.firmware-detail-page .memory-map-bar {
+  display: flex;
+  height: 56px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #e9ecef;
+  border: 1px solid #ced4da;
+  position: relative;
+}
+
+.firmware-detail-page .memory-region {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.1s;
+  position: relative;
+  min-width: 0;
+}
+
+.firmware-detail-page .memory-region:hover {
+  filter: brightness(0.92);
+  transform: scaleY(1.08);
+  z-index: 2;
+}
+
+.firmware-detail-page .region-code {
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+  color: #fff;
+}
+
+.firmware-detail-page .region-data {
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  color: #fff;
+}
+
+.firmware-detail-page .region-rodata {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+  color: #fff;
+}
+
+.firmware-detail-page .region-mixed {
+  background: linear-gradient(180deg, #8b5cf6 0%, #7c3aed 100%);
+  color: #fff;
+}
+
+.firmware-detail-page .region-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 2px;
+}
+
+.firmware-detail-page .memory-map-labels {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.7rem;
+}
+
+.firmware-detail-page .region-detail-card {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+}
+
+/* Modeled region styling — dashed overlay + orange tint */
+.firmware-detail-page .region-modeled {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 3px,
+    rgba(255, 255, 255, 0.3) 3px,
+    rgba(255, 255, 255, 0.3) 6px
+  );
+  border: 2px dashed rgba(251, 146, 60, 0.7);
+  box-sizing: border-box;
+}
+
+.firmware-detail-page .region-modeled .region-label {
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 </style>
