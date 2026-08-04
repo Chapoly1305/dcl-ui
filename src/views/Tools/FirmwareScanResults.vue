@@ -296,7 +296,7 @@ export default {
                 const [cluster = '', attribute = ''] = text.split('/');
                 const meta = defaultsMap[text] && typeof defaultsMap[text] === 'object' ? defaultsMap[text] : {};
                 const hasDefault = Object.prototype.hasOwnProperty.call(meta, 'default_raw_u32');
-                return { cluster, attribute, default_raw_u32: meta.default_raw_u32, has_default: hasDefault, length: meta.length, type_u8: meta.type_u8 };
+                return { cluster, attribute, ...meta, has_default: hasDefault };
             });
         },
         capabilityGlobalAttributeRows() {
@@ -308,7 +308,7 @@ export default {
                 const canonical = this.canonicalAttributeId(attribute);
                 if (!GLOBAL_ATTRIBUTE_IDS.has(canonical)) continue;
                 const meta = defaultsMap[key] && typeof defaultsMap[key] === 'object' ? defaultsMap[key] : {};
-                rows.push({ cluster, attribute, default_raw_u32: meta.default_raw_u32, has_default: Object.prototype.hasOwnProperty.call(meta, 'default_raw_u32'), length: meta.length, type_u8: meta.type_u8 });
+                rows.push({ cluster, attribute, ...meta, has_default: Object.prototype.hasOwnProperty.call(meta, 'default_raw_u32') });
             }
             rows.sort((a, b) => {
                 const ca = this.parseHexOrDec(a.cluster), cb = this.parseHexOrDec(b.cluster);
@@ -798,9 +798,13 @@ export default {
         },
         capabilityDefaultRaw(row) {
             if (!row || row.has_default !== true) return 'N/A';
-            const tc = Number(row.type_u8);
-            if ([0x41, 0x42, 0x43, 0x44, 0x48, 0x4c].includes(tc)) return 'N/A (non-scalar)';
-            return String(row.default_raw_u32);
+            const raw = Number(row.default_raw_u32);
+            const rawHex = row.default_raw_hex || (Number.isFinite(raw)
+                ? `0x${(raw >>> 0).toString(16).toUpperCase().padStart(8, '0')}`
+                : String(row.default_raw_u32));
+            if (row.default_kind === 'pointer_address') return `${rawHex} (pointer)`;
+            if (row.default_conflict === true) return `${rawHex} (multiple observed)`;
+            return Number.isFinite(raw) ? `${raw} (${rawHex})` : rawHex;
         },
         capabilityTypeName(row) {
             const tc = Number(row?.type_u8);
