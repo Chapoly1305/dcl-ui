@@ -67,13 +67,23 @@
                   <label class="filter-label">PID</label>
                   <InputText v-model="filters.pid" class="w-full p-inputtext-sm" placeholder="0x..." @keyup.enter="applyFilters" />
                 </div>
-                <div class="col-6 md:col-2 py-1">
-                  <label class="filter-label">Block Height</label>
-                  <InputText v-model="filters.blockHeight" class="w-full p-inputtext-sm" placeholder="Exact..." @keyup.enter="applyFilters" />
+                <div class="col-12 md:col-3 py-1">
+                  <label class="filter-label">Block Height Range</label>
+                  <div class="flex gap-2">
+                    <InputText v-model="filters.blockHeightFrom" class="w-full p-inputtext-sm" placeholder="From" @keyup.enter="applyFilters" />
+                    <InputText v-model="filters.blockHeightTo" class="w-full p-inputtext-sm" placeholder="To" @keyup.enter="applyFilters" />
+                  </div>
                 </div>
                 <div class="col-6 md:col-2 py-1">
                   <label class="filter-label">TX Hash (first 8)</label>
                   <InputText v-model="filters.txHashFirst8" class="w-full p-inputtext-sm" placeholder="e.g. A1B2C3D4" @keyup.enter="applyFilters" />
+                </div>
+                <div class="col-12 md:col-3 py-1">
+                  <label class="filter-label">Release Time Range</label>
+                  <div class="flex gap-2">
+                    <Calendar v-model="filters.releaseFrom" class="w-full p-inputtext-sm" placeholder="From" dateFormat="yy-mm-dd" showTime hourFormat="24" @date-select="applyFilters" />
+                    <Calendar v-model="filters.releaseTo" class="w-full p-inputtext-sm" placeholder="To" dateFormat="yy-mm-dd" showTime hourFormat="24" @date-select="applyFilters" />
+                  </div>
                 </div>
               </div>
               <div class="flex align-items-center justify-content-end gap-3 mt-3 pt-3 border-top-1 surface-border">
@@ -211,7 +221,11 @@ export default {
   },
   methods: {
     defaultFilters() {
-      return { chipset: null, status: 'any', vendor: '', vid: '', pid: '', blockHeight: '', txHashFirst8: '', q: '' };
+      return {
+        chipset: null, status: 'any', vendor: '', vid: '', pid: '',
+        blockHeightFrom: '', blockHeightTo: '', txHashFirst8: '', q: '',
+        releaseFrom: null, releaseTo: null,
+      };
     },
     clearFilters() { this.filters = this.defaultFilters(); this.pageFirst = 0; this.loadInventory(); },
     applyFilters() { this.pageFirst = 0; this.loadInventory(); },
@@ -244,9 +258,12 @@ export default {
       if (this.filters.vendor) f.vendor = this.filters.vendor;
       if (this.filters.vid) f.vid = Number(this.filters.vid);
       if (this.filters.pid) f.pid = Number(this.filters.pid);
-      if (this.filters.blockHeight) f.block_height = Number(this.filters.blockHeight);
+      if (this.filters.blockHeightFrom) f.block_height_from = Number(this.filters.blockHeightFrom);
+      if (this.filters.blockHeightTo) f.block_height_to = Number(this.filters.blockHeightTo);
       if (this.filters.txHashFirst8) f.tx_hash_first8 = this.filters.txHashFirst8.trim().toUpperCase();
       if (this.filters.q) f.q = this.filters.q;
+      if (this.filters.releaseFrom instanceof Date) f.release_time_from = this.filters.releaseFrom.toISOString();
+      if (this.filters.releaseTo instanceof Date) f.release_time_to = this.filters.releaseTo.toISOString();
       return f;
     },
     async onBuilderExecute(payload) {
@@ -303,11 +320,14 @@ export default {
       });
       const map = [['chipset', this.filters.chipset], ['vendor', this.filters.vendor],
         ['vid', this.filters.vid], ['pid', this.filters.pid],
-        ['block_height', this.filters.blockHeight], ['tx_hash_first8', this.filters.txHashFirst8],
+        ['block_height_from', this.filters.blockHeightFrom], ['block_height_to', this.filters.blockHeightTo],
+        ['tx_hash_first8', this.filters.txHashFirst8],
         ['q', this.filters.q]];
       for (const [k, v] of map) {
         if (v !== null && v !== undefined && String(v).trim() !== '') params.set(k, String(v).trim());
       }
+      if (this.filters.releaseFrom instanceof Date) params.set('release_time_from', this.filters.releaseFrom.toISOString());
+      if (this.filters.releaseTo instanceof Date) params.set('release_time_to', this.filters.releaseTo.toISOString());
       return params.toString();
     },
     async loadInventory() {

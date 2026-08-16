@@ -46,7 +46,14 @@ export default defineConfig(({ mode }) => {
         },
         define: {
             'process.env': {},
-            global: 'globalThis',
+            // NOT 'global: globalThis' here (unlike the dev-only esbuildOptions.define
+            // above): Vite's build-time define is a raw text substitution over the
+            // Rollup output, not an AST-aware replace, so it also rewrites the word
+            // "global" inside unrelated string literals — e.g. PrimeVue's basecomponent
+            // pass-through key 'global.css' becomes 'globalThis.css', corrupting its
+            // pass-through prop merging (breaks Calendar's day-cell click handler in
+            // production builds only). rollup-plugin-polyfill-node below already
+            // provides a real `global` shim, so this define was redundant anyway.
             'APP_VERSION': JSON.stringify(require('./package.json').version),
         },
         build: {
