@@ -161,7 +161,7 @@
 <script>
 import FirmwareJobProgressModal from '@/components/FirmwareJobProgressModal.vue';
 import PipelineBuilderDialog from '@/components/PipelineBuilderDialog.vue';
-import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
+import { resolveMatteroverwatchApiBase, describeApiFailure } from '@/utils/matteroverwatchApi';
 
 export default {
   name: 'BatchAnalysis',
@@ -279,7 +279,7 @@ export default {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ network: this.selectedNetwork, force: payload.force, ...target })
           });
-          if (!res.ok) throw new Error(`Scan enqueue failed (${res.status})`);
+          if (!res.ok) throw new Error(await describeApiFailure(res, `Scan enqueue failed (${res.status})`));
           jobId = String((await res.json())?.job?.job_id || '');
           this.actionNote = 'Chipset scan queued.';
         } else {
@@ -296,7 +296,7 @@ export default {
           const res = await fetch(`${this.metadataApiBase}/api/v1/firmware/pool/analyze`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
           });
-          if (!res.ok) throw new Error(`Analyze enqueue failed (${res.status})`);
+          if (!res.ok) throw new Error(await describeApiFailure(res, `Analyze enqueue failed (${res.status})`));
           const d = await res.json();
           jobId = String((d.enqueued || [])[0] || '');
           this.actionNote = `Queued ${(d.enqueued || []).length} analysis job(s); ${(d.skipped_existing || []).length} already queued.`;

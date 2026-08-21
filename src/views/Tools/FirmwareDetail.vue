@@ -450,7 +450,7 @@
 import VueJsonPretty from 'vue-json-pretty';
 import 'vue-json-pretty/lib/styles.css';
 import PipelineBuilderDialog from '@/components/PipelineBuilderDialog.vue';
-import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
+import { resolveMatteroverwatchApiBase, describeApiFailure } from '@/utils/matteroverwatchApi';
 
 const ZCL_TYPE_NAME = {
   0x08: 'data8',
@@ -821,7 +821,7 @@ export default {
           body: JSON.stringify(body)
         });
         if (!response.ok) {
-          throw new Error(`Analyze enqueue failed (${response.status})`);
+          throw new Error(await describeApiFailure(response, `Analyze enqueue failed (${response.status})`));
         }
         this.builderVisible = false;
         await this.refreshAll();

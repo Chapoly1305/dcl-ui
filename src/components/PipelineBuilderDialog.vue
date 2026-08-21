@@ -104,6 +104,18 @@
       </div>
     </div>
 
+    <!-- Sections this backend does not define. Shown rather than dropped
+         quietly: the operator ticked them, and a selection that shrinks without
+         explanation is the same silence this whole boundary exists to end. -->
+    <div v-if="droppedSections.length"
+         class="mt-3 p-3 border-round-lg bg-orange-50 border-1 border-orange-200 text-sm text-orange-900">
+      <i class="pi pi-exclamation-triangle mr-1"></i>
+      Not sent — this build of the UI offers {{ droppedSections.length }}
+      section(s) the backend no longer defines:
+      <span class="font-bold">{{ droppedSections.join(', ') }}</span>.
+      The rest of the selection was submitted.
+    </div>
+
     <!-- Shared options row -->
     <div class="flex align-items-center gap-4 mt-3 pt-3 border-top-1 surface-border flex-wrap">
       <div class="flex align-items-center gap-3 p-3 border-round-lg bg-yellow-50 border-1 border-yellow-200">
@@ -133,7 +145,7 @@
 </template>
 
 <script>
-import { displayStagesRef, pipelinePrereqsRef, loadPipeline } from '@/utils/pipelineDisplay';
+import { displayStagesRef, pipelinePrereqsRef, loadPipeline, pruneUnknownSections } from '@/utils/pipelineDisplay';
 
 export default {
   name: 'PipelineBuilderDialog',
@@ -155,8 +167,9 @@ export default {
       estimating: false,
       running: false,
       estimate: null,
+      droppedSections: [],
       run: {
-        analysis: 'default',
+        analysis: 'full',
         sections: [],
         target: 'selected',
         force: false,
@@ -185,6 +198,7 @@ export default {
       const idx = this.run.activeStages.indexOf(id);
       this.run.analysis = 'custom';
       this.estimate = null;
+      this.droppedSections = [];
       if (idx > -1) {
         this.run.activeStages.splice(idx, 1);
         if (stage && stage.sections) {
@@ -208,6 +222,7 @@ export default {
       const idx = this.run.sections.indexOf(id);
       this.run.analysis = 'custom';
       this.estimate = null;
+      this.droppedSections = [];
       if (idx > -1) {
         this.run.sections.splice(idx, 1);
         if (stage && stage.sections) {
@@ -242,10 +257,11 @@ export default {
     },
     applyPreset(name) {
       this.estimate = null;
+      this.droppedSections = [];
       if (name === 'clear') {
         this.run.activeStages = [];
         this.run.sections = [];
-        this.run.analysis = 'default';
+        this.run.analysis = 'full';
       } else if (name === 'chipset') {
         this.run.activeStages = ['classify'];
         this.run.sections = ['chipset_identify', 'chipset_inference', 'manifest_integrity'];
@@ -258,27 +274,43 @@ export default {
             s.sections.forEach(sec => this.run.sections.push(sec.id));
           }
         });
-        this.run.analysis = 'default';
+        this.run.analysis = 'full';
       } else if (name === 'full') {
         this.run.activeStages = this.pipelineStages.map(s => s.id);
         this.run.sections = [];
         this.pipelineStages.forEach(s => s.sections.forEach(sec => this.run.sections.push(sec.id)));
-        this.run.analysis = 'full_security';
+        this.run.analysis = 'full';
       }
       if (this.mode === 'batch') this.refreshEstimate();
     },
     effectiveAnalysis() {
       if (this.run.analysis === 'custom' || this.run.sections.length > 0) return 'custom';
-      return this.run.analysis || 'default';
+      return this.run.analysis || 'full';
     },
     buildPayload() {
+      // Say what was picked. This used to send 'default' whenever any section
+      // was selected -- i.e. "run everything" on the request that carried the
+      // narrowest possible selection. It worked only because an explicit filter
+      // outranks the profile downstream, and because the backend aliases
+      // 'default' to 'full'; as a statement of intent it was simply false.
       const payload = {
-        analysis_profile: this.effectiveAnalysis() === 'custom' ? 'default' : this.effectiveAnalysis(),
+        analysis_profile: this.effectiveAnalysis(),
         force: this.run.force,
         worker_parallel: this.run.parallel,
       };
       if (this.run.sections && this.run.sections.length) {
-        payload.analysis_section_filter = this.run.sections;
+        // Drop ids this backend does not define, when it has told us what it
+        // defines. A bundle older than the registry it is talking to should
+        // degrade to a smaller selection, not to a rejected batch: unknown ids
+        // used to be dropped server-side and are now a 422 for the whole
+        // request.
+        const { kept, dropped } = pruneUnknownSections(this.run.sections);
+        if (dropped && dropped.length) {
+          this.droppedSections = dropped;
+        }
+        if (kept && kept.length) {
+          payload.analysis_section_filter = kept;
+        }
       }
       return payload;
     },

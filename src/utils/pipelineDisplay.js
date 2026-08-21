@@ -30,7 +30,6 @@ export const DISPLAY_STAGES = [
             { id: 'chipset_identify', name: 'Payload Type / Firmware Orientation', desc: 'File type, architecture, platform/vendor identification, load base, segment recovery' },
             { id: 'entropy', name: 'Entropy / Encryption / Compression', desc: 'Global + sliding-window Shannon entropy, opacity cutoff (7.60 bits/byte), compression detection' },
             { id: 'secure_boot', name: 'Secure Boot / OTA Authenticity', desc: 'Signed-update evidence, default/test key detection, pre-install authenticity path analysis' },
-            { id: 'weak_key_enc', name: 'Firmware Encryption — Weak Key Test', desc: 'Probe known-weak / factory-default encryption keys against an encrypted firmware payload' },
             { id: 'weak_key_ota', name: 'OTA Authenticity — Weak Key Test', desc: 'Probe known-weak / factory-default OTA signing keys against the captured signature' },
             { id: 'chipset_inference', name: 'Chipset Inference (Deterministic)', desc: 'Aggregate Phase I chipset plugin candidates to produce a confirmed / inferred / unknown verdict with KB family mapping' },
             { id: 'chipset_inference_ai', name: 'Chipset Inference (AI-assisted)', desc: 'LLM-based chipset identification fallback; only runs when deterministic inference is not confirmed' },
@@ -43,7 +42,6 @@ export const DISPLAY_STAGES = [
         sections: [
             { id: 'extract_executable', name: 'Extract Executable', desc: 'Extract the chipset executable (ELF / ARM-vector bin) from the payload.' },
             { id: 'non_firmware', name: 'Non-firmware Payload / Pipeline Contamination', desc: 'Classify non-firmware artifacts (JSON/CBOR/config/credential/backup), detect pipeline contamination' },
-            { id: 'sidekick_triage', name: 'Sidekick Deep RE / Triage', desc: 'BNQL semantic queries + Sidekick agent triage over the Binary Ninja .bndb; classifies candidate functions (auth-bypass, command handlers, OTA handlers). Reuses the .bndb built in Phase I.' },
             { id: 'ida_database', name: 'IDA Database', desc: 'Pristine IDA .i64 — recovery pass + FLIRT signature matching.' },
             { id: 'binja_database', name: 'Binary Ninja Database', desc: 'Content-addressed Binary Ninja .bndb cache for downstream RE.' },
         ]
@@ -264,6 +262,34 @@ export const pipelineSummaryRef = shallowRef(null);
 export const pipelinePrereqsRef = shallowRef(null);
 
 let _pipelineLoaded = false;
+
+// The set of section ids the backend currently defines, or null when the
+// registry has not been fetched (backend unreachable, or a page that never
+// called loadPipeline). Null means "cannot judge" — callers must send the
+// selection unchanged rather than guess, since a wrong filter here would
+// silently shrink what the operator asked for.
+//
+// This exists because the backend stopped tolerating unknown ids. It used to
+// drop them silently, which is how 2,945 jobs came to select `weak_key_enc`
+// after it was retired; now the boundary answers 422 and rejects the whole
+// batch. A stale bundle offering a retired id should degrade to a smaller
+// selection, not to a rejected request.
+export function knownSectionIds() {
+    const summary = pipelineSummaryRef.value;
+    const components = summary && summary.components;
+    if (!Array.isArray(components) || !components.length) return null;
+    return new Set(components.map(c => c && c.id).filter(Boolean));
+}
+
+// Drop ids the backend does not define. Returns the list unchanged when the
+// registry is unknown.
+export function pruneUnknownSections(ids) {
+    const known = knownSectionIds();
+    if (!known || !Array.isArray(ids)) return { kept: ids, dropped: [] };
+    const kept = ids.filter(id => known.has(id));
+    const dropped = ids.filter(id => !known.has(id));
+    return { kept, dropped };
+}
 
 export async function loadPipeline(apiBase) {
     if (_pipelineLoaded || !apiBase) return;

@@ -262,7 +262,7 @@
 <script>
 import FirmwareJobProgressModal from '@/components/FirmwareJobProgressModal.vue';
 import PipelineBuilderDialog from '@/components/PipelineBuilderDialog.vue';
-import { resolveMatteroverwatchApiBase } from '@/utils/matteroverwatchApi';
+import { resolveMatteroverwatchApiBase, describeApiFailure } from '@/utils/matteroverwatchApi';
 
 export default {
   name: 'FirmwareAvailable',
@@ -559,7 +559,7 @@ export default {
           body: JSON.stringify(body)
         });
         if (!response.ok) {
-          throw new Error(`Analyze enqueue failed (${response.status})`);
+          throw new Error(await describeApiFailure(response, `Analyze enqueue failed (${response.status})`));
         }
         const result = await response.json();
         this.builderVisible = false;
