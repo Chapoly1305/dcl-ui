@@ -78,6 +78,16 @@
                 <InputNumber id="llm-timeout" v-model="form.llm_timeout_sec" :min="5" :max="3600" :useGrouping="false" class="w-full" />
                 <small class="text-500">Maximum wall-clock time for one Claude agent run.</small>
               </div>
+              <div class="field col-12 md:col-4">
+                <label class="form-label" for="worker-parallel">Concurrent Analysis Jobs</label>
+                <InputNumber id="worker-parallel" v-model="form.worker_parallel" :min="1" :max="64" :useGrouping="false" class="w-full" />
+                <small class="text-500">
+                  How many analysis containers run at once. This is the only place it is
+                  set. <strong>Takes effect when Central restarts</strong> — the dispatch
+                  pool is process-wide and sized once at startup. One full-modules job
+                  peaks at about 8.7 cores and 6 GiB, so CPU is the ceiling, not memory.
+                </small>
+              </div>
             </div>
 
             <!-- LLM test result -->
@@ -135,6 +145,9 @@ export default {
         llm_api_base: '',
         llm_model: '',
         llm_timeout_sec: 600,
+        // Displayed and owned by this page, so it belongs here: this is the
+        // only surface that sets dispatch concurrency.
+        worker_parallel: 6,
         // Nothing else belongs here. This page previously carried a block of
         // fields it does not display -- analysis_profile, analysis_code_only,
         // chipset_override_mode and friends -- and re-sent them on every save,
@@ -172,6 +185,7 @@ export default {
       this.form.llm_api_base = s.llm_api_base || '';
       this.form.llm_model = s.llm_model || '';
       this.form.llm_timeout_sec = s.llm_timeout_sec != null ? Number(s.llm_timeout_sec) : 600;
+      this.form.worker_parallel = s.worker_parallel != null ? Number(s.worker_parallel) : 6;
       this.activeNetwork = String(payload.active_network || '');
       this.scopeNetwork = this.normalizeNetwork(payload.network) || this.resolveScopeNetwork();
       this.accessTokenConfigured = Boolean(payload.access_token_configured);
@@ -221,6 +235,7 @@ export default {
           llm_model: this.form.llm_model || null,
           llm_api_key: this.sessionToken || null,
           llm_timeout_sec: this.form.llm_timeout_sec,
+          worker_parallel: this.form.worker_parallel,
         };
         const response = await fetch(this.settingsEndpoint(), {
           method: 'PUT',
@@ -261,6 +276,7 @@ export default {
           llm_api_base: this.form.llm_api_base || null,
           llm_model: this.form.llm_model || null,
           llm_timeout_sec: this.form.llm_timeout_sec,
+          worker_parallel: this.form.worker_parallel,
           llm_api_key: this.sessionToken || null,
         };
         const network = this.resolveScopeNetwork();

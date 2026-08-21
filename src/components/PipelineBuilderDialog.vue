@@ -122,10 +122,6 @@
         <Checkbox v-model="run.force" :binary="true" inputId="builder-force" />
         <label for="builder-force" class="text-sm font-bold text-yellow-800 cursor-pointer">Force Re-run (Overwrites existing results)</label>
       </div>
-      <div class="flex align-items-center gap-2">
-        <label for="builder-parallel" class="text-sm font-bold text-700">Parallel Jobs</label>
-        <InputNumber v-model="run.parallel" inputId="builder-parallel" :min="1" :max="64" class="w-5rem" />
-      </div>
     </div>
 
     <template #footer>
@@ -173,7 +169,6 @@ export default {
         sections: [],
         target: 'selected',
         force: false,
-        parallel: 4,
         activeStages: displayStagesRef.value.filter(s => s.id !== 'analysis').map(s => s.id)
       },
     };
@@ -296,7 +291,11 @@ export default {
       const payload = {
         analysis_profile: this.effectiveAnalysis(),
         force: this.run.force,
-        worker_parallel: this.run.parallel,
+        // worker_parallel is not sent. The dispatch pool is process-wide and
+        // sized once when Central starts, from scanner settings -- nothing can
+        // honour a per-batch value, and the API says so where it drops it. A
+        // 1-64 spinner here let an operator set a number that never applied.
+        // Concurrency lives on the Scanner Settings page.
       };
       if (this.run.sections && this.run.sections.length) {
         // Drop ids this backend does not define, when it has told us what it
