@@ -567,7 +567,7 @@ export default {
                                 <div class="flex align-items-center gap-1 flex-wrap">
                                     <code class="text-xs">{{ shortSha(m.firmware_sha256) }}</code>
                                     <Tag v-if="m.replaced_by_job_id" value="superseded" severity="warning" class="version-tag" v-tooltip.top="`Replaced by ${shortId(m.replaced_by_job_id)}`" />
-                                    <Tag v-else-if="m.replaces_job_id" value="re-run" severity="info" class="version-tag" v-tooltip.top="`Re-run of ${shortId(m.replaces_job_id)}`" />
+                                    <Tag v-else-if="m.replaces_job_id" value="re-run" severity="info" class="version-tag" v-tooltip.top="m.rerun_reason ? `Re-run of ${shortId(m.replaces_job_id)} — ${m.rerun_reason}` : `Re-run of ${shortId(m.replaces_job_id)}`" />
                                 </div>
                                 <span v-if="m.source_rel_path" class="text-xs text-500 ml-2">{{ pathTail(m.source_rel_path) }}</span>
                             </template>
