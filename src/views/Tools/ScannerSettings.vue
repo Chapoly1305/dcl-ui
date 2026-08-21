@@ -135,14 +135,13 @@ export default {
         llm_api_base: '',
         llm_model: '',
         llm_timeout_sec: 600,
-        // Static fields required by PUT model but not displayed:
-        analysis_profile: 'authenticity',
-        phase_ii_section_filter: null,
-        phase_ii_code_only: false,
-        phase_ii_max_workers: null,
-        worker_parallel: null,
-        chipset_override_mode: 'auto',
-        chipset_override_value: null,
+        // Nothing else belongs here. This page previously carried a block of
+        // fields it does not display -- analysis_profile, analysis_code_only,
+        // chipset_override_mode and friends -- and re-sent them on every save,
+        // so saving an LLM model silently rewrote the saved analysis profile to
+        // 'authenticity' and code_only to false. The PUT body is now built from
+        // the fields this page actually owns; the API preserves anything it is
+        // not sent.
       },
     };
   },
@@ -213,14 +212,10 @@ export default {
         return;
       }
       try {
+        // Only what this page displays and owns. Omitted fields are left alone
+        // by the API, which distinguishes "not sent" from "sent as the default"
+        // via pydantic's model_fields_set.
         const body = {
-          analysis_profile: this.form.analysis_profile,
-          phase_ii_section_filter: this.form.phase_ii_section_filter,
-          phase_ii_code_only: this.form.phase_ii_code_only,
-          phase_ii_max_workers: this.form.phase_ii_max_workers,
-          worker_parallel: this.form.worker_parallel,
-          chipset_override_mode: this.form.chipset_override_mode,
-          chipset_override_value: this.form.chipset_override_value,
           llm_harness: this.form.llm_harness,
           llm_api_base: this.form.llm_api_base || null,
           llm_model: this.form.llm_model || null,

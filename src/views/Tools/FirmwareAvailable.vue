@@ -550,8 +550,8 @@ export default {
           analysis_profile: payload.analysis_profile,
           force: payload.force,
         };
-        if (payload.phase_ii_section_filter && payload.phase_ii_section_filter.length) {
-          body.phase_ii_section_filter = payload.phase_ii_section_filter;
+        if (payload.analysis_section_filter && payload.analysis_section_filter.length) {
+          body.analysis_section_filter = payload.analysis_section_filter;
         }
         const response = await fetch(`${this.metadataApiBase}/api/v1/jobs/analyze-firmware`, {
           method: 'POST',

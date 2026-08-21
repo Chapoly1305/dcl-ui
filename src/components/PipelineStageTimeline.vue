@@ -28,7 +28,7 @@
 
       <!-- DAG dependency graph view (shares the single status legend below) -->
       <div v-if="dag && viewMode === 'dag'" class="mb-3">
-        <PipelineDagView :dag="dag" :phase-ii-sections="phaseIiSections" :backend-stages="backendStages" />
+        <PipelineDagView :dag="dag" :analysis-sections="analysisSections" :backend-stages="backendStages" />
       </div>
 
       <div v-if="!dag || viewMode === 'timeline'" class="text-xs mb-3 flex flex-wrap align-items-center gap-3">
@@ -123,7 +123,7 @@ export default {
       type: Array,
       required: true
     },
-    phaseIiSections: {
+    analysisSections: {
       type: Object,
       default: () => ({})
     },
@@ -229,7 +229,7 @@ export default {
         // (e.g. `capability_recovery`) fall back to the backend stage
         // of the same name so the card surfaces its real status
         // instead of orphan "pending".
-        const result = this.phaseIiSections[def.id] || null;
+        const result = this.analysisSections[def.id] || null;
         const backend = backendMap[def.id] || null;
         const status = result?.status || backend?.status || 'pending';
         return {
@@ -242,7 +242,7 @@ export default {
       });
     },
     checklistStatus(secId) {
-      const r = this.phaseIiSections[secId];
+      const r = this.analysisSections[secId];
       if (r) return r.status || 'pending';
       const backend = this.backendStageByName()[secId];
       if (backend) return backend.status || 'pending';
@@ -268,7 +268,7 @@ export default {
       return stageStatusBadgeLabel(this.checklistStatus(secId));
     },
     sectionHasTranscript(secId) {
-      const r = this.phaseIiSections[secId];
+      const r = this.analysisSections[secId];
       const path = r?.output?.transcript_path;
       return typeof path === 'string' && path.length > 0;
     },
@@ -277,7 +277,7 @@ export default {
       // chips below the section name. Only emit when the section's
       // own output has positively identified the algorithm — never
       // guess. Empty list → template renders nothing.
-      const r = this.phaseIiSections[secId];
+      const r = this.analysisSections[secId];
       const out = r?.output || {};
       const chips = [];
       const pushEnc = (value, tooltip) => {
@@ -329,7 +329,7 @@ export default {
       return chips;
     },
     checklistOutcome(sec) {
-      const r = this.phaseIiSections[sec.id];
+      const r = this.analysisSections[sec.id];
       if (!r) {
         // Phase I shuttle fallback — no Phase II result, but if the
         // section ID matches a backend stage we can still render a

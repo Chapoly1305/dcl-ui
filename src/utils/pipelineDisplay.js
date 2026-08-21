@@ -191,11 +191,14 @@ export function aggregateDisplayStatus(display, linkedBackendStages, sectionResu
 // ---------------------------------------------------------------------------
 
 // Transform a pipeline summary into the DISPLAY_STAGES shape (groups → cards).
-// The `conformance` group (paper Phase I / DCL spec) is excluded from the
+// The `conformance` track (DCL spec-metadata checks) is excluded from the
 // firmware-analysis timeline + DAG, matching the curated design.
 export function buildDisplayStages(summary) {
     const groups = (summary && summary.groups ? summary.groups : []).filter((g) => g.id !== 'conformance');
-    const comps = (summary && summary.components ? summary.components : []).filter(c => c.phase !== 1);
+    // `track` is the current field; `phase === 1` is the pre-rename encoding of
+    // the same thing, kept so an older backend still filters correctly.
+    const comps = (summary && summary.components ? summary.components : [])
+        .filter(c => (c.track ? c.track !== 'conformance' : c.phase !== 1));
     const byGroup = {};
     for (const c of comps) {
         if (!byGroup[c.group]) byGroup[c.group] = [];

@@ -251,7 +251,11 @@ export default {
         },
 
         parseReportSections(report) {
-            const results = (report && report.outputs && report.outputs.phase_ii && report.outputs.phase_ii.results) || {};
+            // `analysis` is the current report key; older reports only
+            // carry `phase_ii`.
+            const _analysis = (report && report.outputs
+                && (report.outputs.analysis || report.outputs.phase_ii)) || {};
+            const results = _analysis.results || {};
             const rows = [];
             for (const sectionId of Object.keys(results)) {
                 const wrapper = results[sectionId] || {};

@@ -139,11 +139,67 @@
         <PipelineStageTimeline
           v-if="!isSimpleJob"
           :stage-rows="displayStageRows"
-          :phase-ii-sections="phaseIiSections"
+          :analysis-sections="analysisSections"
           :backend-stages="pipeline?.stages || []"
           :dag="dagData"
           empty-message="Waiting for pipeline stages..."
         />
+
+        <div v-if="!isSimpleJob && llmUsageRows.length" class="mt-4">
+          <div class="flex align-items-center justify-content-between mb-2">
+            <span class="text-700 font-bold">LLM Usage Accounting</span>
+            <span class="text-500 text-xs">Provider counters · responses deduplicated by message ID</span>
+          </div>
+          <div class="llm-usage-table-wrap">
+            <table class="llm-usage-table">
+              <thead>
+                <tr>
+                  <th>Module</th>
+                  <th>Status</th>
+                  <th>Responses</th>
+                  <th>Cache Hit</th>
+                  <th>Cache Miss</th>
+                  <th>Hit Rate</th>
+                  <th>Total Input</th>
+                  <th>Output</th>
+                  <th>Last Activity</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in llmUsageRows" :key="row.section_id">
+                  <td><code>{{ row.section_id }}</code></td>
+                  <td><Tag :value="row.status" :severity="usageSeverity(row.status)" /></td>
+                  <td>{{ formatTokenCount(row.provider_responses) }}</td>
+                  <td>{{ formatTokenCount(row.cache_hit_input_tokens) }}</td>
+                  <td>{{ formatTokenCount(row.cache_miss_input_tokens) }}</td>
+                  <td>{{ formatHitRate(row.cache_hit_rate_percent) }}</td>
+                  <td>{{ formatTokenCount(row.input_tokens) }}</td>
+                  <td>
+                    <span v-if="row.output_tokens != null">{{ formatTokenCount(row.output_tokens) }}</span>
+                    <span v-else class="text-500">Pending</span>
+                  </td>
+                  <td>{{ formatTimestamp(row.last_activity_at) || '-' }}</td>
+                </tr>
+              </tbody>
+              <tfoot v-if="llmUsageTotal">
+                <tr>
+                  <th>Total</th>
+                  <th>{{ llmUsageTotal.accounting_complete ? 'Final' : 'In progress' }}</th>
+                  <th>{{ formatTokenCount(llmUsageTotal.provider_responses) }}</th>
+                  <th>{{ formatTokenCount(llmUsageTotal.cache_hit_input_tokens) }}</th>
+                  <th>{{ formatTokenCount(llmUsageTotal.cache_miss_input_tokens) }}</th>
+                  <th>{{ formatHitRate(llmUsageTotal.cache_hit_rate_percent) }}</th>
+                  <th>{{ formatTokenCount(llmUsageTotal.input_tokens) }}</th>
+                  <th>{{ formatTotalOutput(llmUsageTotal) }}</th>
+                  <th></th>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <div class="text-500 text-xs mt-2">
+            Output remains pending until the provider emits terminal usage. Token totals are billing inputs; apply the model rate effective at each request time for cost reconciliation.
+          </div>
+        </div>
 
         <!-- Live AI Activity (collapsible) -->
         <div v-if="!isSimpleJob" class="mt-4">
@@ -251,24 +307,32 @@ export default {
     summary() {
       return this.payload.summary || { state_label: 'Unknown', message: '' };
     },
-    phaseIiSections() {
-      const phaseIi = this.payload.phase_ii;
-      return phaseIi ? (phaseIi.sections || {}) : {};
+    analysisSections() {
+      // `analysis` is the current payload key; `phase_ii` is what an
+      // API container predating the rename still sends.
+      const analysis = this.payload.analysis || this.payload.phase_ii;
+      return analysis ? (analysis.sections || {}) : {};
     },
     dagData() {
-      const phaseIi = this.payload.phase_ii;
-      return phaseIi ? (phaseIi.dag || null) : null;
+      const analysis = this.payload.analysis || this.payload.phase_ii;
+      return analysis ? (analysis.dag || null) : null;
+    },
+    llmUsageRows() {
+      return Array.isArray(this.payload?.llm_usage?.sections) ? this.payload.llm_usage.sections : [];
+    },
+    llmUsageTotal() {
+      return this.payload?.llm_usage?.total || null;
     },
     displayStageRows() {
       const backendStages = Array.isArray(this.pipeline.stages) ? this.pipeline.stages : [];
       const byName = new Map(backendStages.map((s) => [String(s?.name || ''), s]));
-      const phaseIiResults = this.phaseIiSections;
+      const analysisResults = this.analysisSections;
       return displayStagesRef.value.map((display) => {
         const linked = display.backend.map((name) => byName.get(name)).filter(Boolean);
         const starts = linked.map((s) => s?.started_at).filter(Boolean);
         const ends = linked.map((s) => s?.ended_at).filter(Boolean);
         for (const sec of display.sections || []) {
-          const piResult = phaseIiResults[sec.id];
+          const piResult = analysisResults[sec.id];
           if (piResult) {
             if (piResult.started_at) starts.push(piResult.started_at);
             if (piResult.ended_at) ends.push(piResult.ended_at);
@@ -281,14 +345,14 @@ export default {
         const error = linked.map((s) => s?.details?.error || s?.error).filter(Boolean).join('; ') || null;
         const backendDurationMs = linked.length === 1 && linked[0]?.duration_ms != null ? Number(linked[0].duration_ms) : null;
         const hasPhaseIiTiming = (display.sections || []).some((s) => {
-          const r = phaseIiResults[s.id];
+          const r = analysisResults[s.id];
           return r && (r.started_at || r.ended_at);
         });
         return {
           id: display.id,
           name: display.id,
           label: display.label,
-          status: aggregateDisplayStatus(display, linked, this.phaseIiSections),
+          status: aggregateDisplayStatus(display, linked, this.analysisSections),
           started_at,
           ended_at,
           duration: this.displayDuration(started_at, ended_at, hasPhaseIiTiming ? null : backendDurationMs),
@@ -409,6 +473,28 @@ export default {
     },
     stateSeverity(status) {
       return stageSeverity(status);
+    },
+    usageSeverity(status) {
+      if (status === 'completed') return 'success';
+      if (status === 'failed') return 'danger';
+      if (status === 'running') return 'info';
+      return 'secondary';
+    },
+    formatTokenCount(value) {
+      if (value === null || value === undefined) return '-';
+      const n = Number(value);
+      return Number.isFinite(n) ? n.toLocaleString() : '-';
+    },
+    formatHitRate(value) {
+      if (value === null || value === undefined) return '-';
+      const n = Number(value);
+      return Number.isFinite(n) ? `${n.toFixed(2)}%` : '-';
+    },
+    formatTotalOutput(total) {
+      if (!total) return '-';
+      if (total.output_tokens != null) return this.formatTokenCount(total.output_tokens);
+      const known = Number(total.known_output_tokens || 0);
+      return known > 0 ? `${known.toLocaleString()}+` : 'Pending';
     },
     formatTimestamp(value) {
       if (!value) return '';
@@ -538,6 +624,35 @@ button[data-pd-tooltip] {
 
 .job-progress-content .summary-row {
   margin-bottom: 0.45rem;
+}
+
+.llm-usage-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--surface-border, #dee2e6);
+  border-radius: 8px;
+}
+.llm-usage-table {
+  width: 100%;
+  min-width: 940px;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+.llm-usage-table th,
+.llm-usage-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--surface-border, #dee2e6);
+  text-align: right;
+  white-space: nowrap;
+}
+.llm-usage-table th:first-child,
+.llm-usage-table td:first-child,
+.llm-usage-table th:nth-child(2),
+.llm-usage-table td:nth-child(2) {
+  text-align: left;
+}
+.llm-usage-table tfoot th {
+  background: var(--surface-ground, #f8f9fa);
+  border-bottom: 0;
 }
 
 /* ---- Live AI Activity pane ---- */

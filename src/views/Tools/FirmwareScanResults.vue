@@ -115,11 +115,13 @@ export default {
         reportOutputs() {
             return this.sanitizedReport?.outputs || {};
         },
-        phaseIiReport() {
-            return this.reportOutputs?.phase_ii || {};
+        analysisReport() {
+            // `analysis` is the current report key; `phase_ii` is the
+            // pre-rename name still present in older reports.
+            return this.reportOutputs?.analysis || this.reportOutputs?.phase_ii || {};
         },
         dagData() {
-            return this.phaseIiReport?.dag || null;
+            return this.analysisReport?.dag || null;
         },
         // Merge DCL provenance from Phase II Section provenance, filename parse, and backend enrichment
         dclProvenance() {
@@ -192,7 +194,7 @@ export default {
         },
 
         checklistResults() {
-            return this.phaseIiReport?.results || {};
+            return this.analysisReport?.results || {};
         },
         verdictCards() {
             const r = this.selectedResult || {};
@@ -340,7 +342,7 @@ export default {
         stageRows() {
             const backendStages = Array.isArray(this.sanitizedReport?.stages) ? this.sanitizedReport.stages : [];
             const byName = new Map(backendStages.map((s) => [String(s?.name || ''), s]));
-            const phaseIiResults = this.phaseIiReport?.results || {};
+            const analysisResults = this.analysisReport?.results || {};
             return displayStagesRef.value.map((display) => {
                 const linked = display.backend.map((name) => byName.get(name)).filter(Boolean);
                 const starts = linked.map((s) => s?.started_at).filter(Boolean);
@@ -348,7 +350,7 @@ export default {
                 // Merge Phase II section timing into the envelope so display stages
                 // that include LLM sections (e.g. custom_auth) show the full wall-clock span.
                 for (const sec of display.sections || []) {
-                    const piResult = phaseIiResults[sec.id];
+                    const piResult = analysisResults[sec.id];
                     if (piResult) {
                         if (piResult.started_at) starts.push(piResult.started_at);
                         if (piResult.ended_at) ends.push(piResult.ended_at);
@@ -368,7 +370,7 @@ export default {
                 // II sections contribute timing to the envelope.
                 const backendDurationMs = linked.length === 1 && linked[0]?.duration_ms != null ? Number(linked[0].duration_ms) : null;
                 const hasPhaseIiTiming = (display.sections || []).some((s) => {
-                    const r = phaseIiResults[s.id];
+                    const r = analysisResults[s.id];
                     return r && (r.started_at || r.ended_at);
                 });
                 return {
@@ -1353,7 +1355,7 @@ export default {
                         <PipelineStageTimeline
                             :key="selectedResultId"
                             :stage-rows="stageRows"
-                            :phase-ii-sections="checklistResults"
+                            :analysis-sections="checklistResults"
                             :backend-stages="sanitizedReport?.stages || []"
                             :dag="dagData"
                             :show-transcript-button="true"

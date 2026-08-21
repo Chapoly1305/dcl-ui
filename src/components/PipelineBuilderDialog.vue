@@ -278,7 +278,7 @@ export default {
         worker_parallel: this.run.parallel,
       };
       if (this.run.sections && this.run.sections.length) {
-        payload.phase_ii_section_filter = this.run.sections;
+        payload.analysis_section_filter = this.run.sections;
       }
       return payload;
     },

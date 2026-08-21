@@ -224,7 +224,7 @@ export default {
         const form = new FormData();
         form.append('file', this.selectedFile);
         form.append('analysis_profile', this.analysisProfile || 'full');
-        form.append('phase_ii_code_only', this.codeOnly ? 'true' : 'false');
+        form.append('analysis_code_only', this.codeOnly ? 'true' : 'false');
         const res = await fetch(`${this.metadataApiBase}/api/v1/firmware/upload`, { method: 'POST', body: form });
         if (!res.ok) {
           let detail = `Upload failed (${res.status})`;

@@ -48,7 +48,7 @@ const props = defineProps({
     type: Object,
     default: () => ({ tiers: [], edges: [], metadata: {} })
   },
-  phaseIiSections: {
+  analysisSections: {
     type: Object,
     default: () => ({})
   },
@@ -200,7 +200,7 @@ const resolveSource = () => {
 // Status for a node: Phase II section result wins, else the matching Phase I
 // backend stage (ctx_stage / synthetic), else pending.
 const statusOf = (id) => {
-  const r = props.phaseIiSections[id];
+  const r = props.analysisSections[id];
   if (r && r.status) return r.status;
   const b = (props.backendStages || []).find((s) => s && s.name === id);
   return (b && b.status) ? b.status : 'pending';
@@ -290,7 +290,7 @@ const refit = () => {
 
 let resizeObserver = null;
 
-watch(() => [props.dag, props.phaseIiSections, props.backendStages, pipelineSummaryRef.value], () => {
+watch(() => [props.dag, props.analysisSections, props.backendStages, pipelineSummaryRef.value], () => {
   elements.value = layoutGraph();
   refit();
 }, { deep: true, immediate: true });

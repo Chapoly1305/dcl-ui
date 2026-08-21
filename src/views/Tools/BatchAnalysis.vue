@@ -290,8 +290,8 @@ export default {
             force: payload.force,
             ...target
           };
-          if (payload.phase_ii_section_filter && payload.phase_ii_section_filter.length) {
-            body.phase_ii_section_filter = payload.phase_ii_section_filter;
+          if (payload.analysis_section_filter && payload.analysis_section_filter.length) {
+            body.analysis_section_filter = payload.analysis_section_filter;
           }
           const res = await fetch(`${this.metadataApiBase}/api/v1/firmware/pool/analyze`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
