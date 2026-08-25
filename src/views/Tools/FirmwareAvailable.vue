@@ -188,7 +188,7 @@
                     Formality Conformance
                     <i
                       class="pi pi-info-circle text-500"
-                      v-tooltip.top="'Conformance validation based on DCL manifest, firmware independent.'"
+                      v-tooltip.top="'Conformance validation of DCL records; downloaded artifacts are also checked against declared OtaFileSize when available.'"
                       style="cursor: help;"
                     />
                   </span>
