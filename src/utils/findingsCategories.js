@@ -19,6 +19,10 @@ export const FINDINGS_CATEGORIES = {
     lineage:             { label: 'Version / Lineage Issues',         icon: 'pi-history',                  order: 12 },
     url_tls:             { label: 'OTA URL / TLS Issues',             icon: 'pi-link',                     order: 13 },
     entropy:             { label: 'Encryption / Entropy',             icon: 'pi-shield',                  order: 14 },
+    release_hygiene:     { label: 'Release Hygiene (Test / Debug Material)', icon: 'pi-box',            order: 15 },
+    reset_lifecycle:     { label: 'Reset / Removal Lifecycle',        icon: 'pi-refresh',                  order: 16 },
+    vendor_data_model:   { label: 'Vendor Data Model / Privileges',   icon: 'pi-sliders-h',                order: 17 },
+    bridge_proxy:        { label: 'Bridge / Cross-Protocol',          icon: 'pi-share-alt',                order: 18 },
 };
 
 /** PrimeVue severity / colour mapping for finding severities. */

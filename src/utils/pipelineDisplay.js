@@ -21,6 +21,20 @@
 
 import { shallowRef } from 'vue';
 
+// Vendor-surface investigators (backend docs/vendor_investigators.md). Their
+// output carries `findings` with a four-part evidence contract and a
+// `coverage` list; the timeline summarises both instead of listing keys.
+export const VENDOR_INVESTIGATORS = new Set(['release_hygiene', 'reset_lifecycle', 'vendor_data_model', 'bridge_proxy']);
+
+// A finding counts as confirmed when the code shows the defect and the path to
+// it is at least conditionally reachable — same rule as the backend
+// (sections/llm/evidence_contract.py: is_runtime_supported).
+export function isConfirmedFinding(finding) {
+    const c = (finding && finding.contract) || {};
+    return ['static_supported', 'execution_supported'].includes(c.defect_evidence)
+        && ['conditional', 'statically_traced', 'dynamically_confirmed'].includes(c.reachability);
+}
+
 export const DISPLAY_STAGES = [
     {
         id: 'classify',
@@ -66,6 +80,10 @@ export const DISPLAY_STAGES = [
             { id: 'backdoor', name: 'Vendor Implementation / Sink-driven RE', desc: 'AI-driven backdoor detection; decompiles candidate sinks, traces data flow, assesses exploitability, discovers missed patterns' },
             { id: 'connectivity', name: 'Vendor-cloud Telemetry / Privacy', desc: 'AI-enriched endpoint audit; researches unclassified endpoints, assesses privacy risk, flags C2 indicators' },
             { id: 'supply_chain', name: 'Supply-chain / Integration Failure', desc: 'AI-enriched aggregation of secure_boot/rng_init/secrets/sdk_baseline signals; identifies SDK-reuse patterns, assesses key-reuse potential, recommends remediation' },
+            { id: 'release_hygiene', name: 'Release Hygiene (Test / Debug Material)', desc: 'Test attestation credentials, SDK test passcode/SPAKE2+ salt, example certification declaration and debug leftovers shipped in a DCL release; AI decides whether the runtime selects them' },
+            { id: 'reset_lifecycle', name: 'Reset / Removal Lifecycle', desc: "Whether factory reset, RemoveFabric and unpair erase the vendor's own data: network credentials, cloud tokens, vendor secrets, user data" },
+            { id: 'vendor_data_model', name: 'Vendor Data Model (Manufacturer Clusters)', desc: 'Privileges and input checks of manufacturer-specific clusters, vendor command handlers, attribute callbacks and test event triggers' },
+            { id: 'bridge_proxy', name: 'Bridge / Cross-Protocol Proxy', desc: 'Bridges exposing non-Matter devices: privilege mapping to downstream commands, trust in downstream reports, endpoint reuse; skipped when no bridge marker exists' },
         ]
     },
     {

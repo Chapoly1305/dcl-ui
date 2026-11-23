@@ -95,6 +95,12 @@
                     </span>
                   </div>
                   <div class="cl-outcome">{{ sec.outcome }}</div>
+                  <ul v-if="sectionFindings(sec.id).length > 0" class="cl-findings">
+                    <li v-for="(f, fi) in sectionFindings(sec.id)" :key="`${sec.id}-f-${fi}`" class="cl-finding" v-tooltip.top="f.tooltip">
+                      <span class="cl-finding-tag" :class="f.confirmed ? 'cl-finding-confirmed' : 'cl-finding-lead'">{{ f.confirmed ? 'Confirmed' : 'Lead' }}</span>
+                      <span class="cl-finding-title">{{ f.title }}</span>
+                    </li>
+                  </ul>
                   <Button v-if="showTranscriptButton && sectionHasTranscript(sec.id)" label="View AI transcript" icon="pi pi-comments" text size="small" class="cl-transcript-btn mt-1" @click.stop="$emit('open-transcript', sec.id)" />
                 </div>
               </div>
@@ -111,8 +117,10 @@
 import PipelineDagView from '@/components/PipelineDagView.vue';
 import {
   displayStagesRef,
+  isConfirmedFinding,
   stageSeverity,
   stageStatusBadgeLabel,
+  VENDOR_INVESTIGATORS,
 } from '@/utils/pipelineDisplay';
 
 export default {
@@ -272,6 +280,30 @@ export default {
       const path = r?.output?.transcript_path;
       return typeof path === 'string' && path.length > 0;
     },
+    sectionFindings(secId) {
+      // First few findings of a vendor-surface investigator, confirmed first.
+      if (!VENDOR_INVESTIGATORS.has(secId)) return [];
+      const out = this.analysisSections[secId]?.output || {};
+      const findings = Array.isArray(out.findings) ? out.findings : [];
+      return findings
+        .map((f) => {
+          const c = f.contract || {};
+          return {
+            confirmed: isConfirmedFinding(f),
+            title: String(f.title || f.category || 'finding'),
+            tooltip: [
+              f.category,
+              f.attacker ? `attacker: ${f.attacker}` : null,
+              `defect: ${c.defect_evidence || '?'}`,
+              `reachability: ${c.reachability || '?'}`,
+              `exposure: ${c.deployment_exposure || '?'}`,
+              f.impact || null,
+            ].filter(Boolean).join(' · '),
+          };
+        })
+        .sort((a, b) => Number(b.confirmed) - Number(a.confirmed))
+        .slice(0, 3);
+    },
     sectionAlgoChips(secId) {
       // Surface identified encryption / signature algorithms as small
       // chips below the section name. Only emit when the section's
@@ -289,6 +321,19 @@ export default {
         chips.push({ kind: 'sig', label: 'Signature', value: String(value), tooltip: tooltip || '' });
       };
 
+      if (VENDOR_INVESTIGATORS.has(secId)) {
+        const findings = Array.isArray(out.findings) ? out.findings : [];
+        const confirmed = findings.filter(isConfirmedFinding).length;
+        const leads = findings.length - confirmed;
+        if (confirmed > 0) chips.push({ kind: 'confirmed', label: 'Confirmed', value: String(confirmed), tooltip: 'Code shows the defect and the path to it is at least conditionally reachable' });
+        if (leads > 0) chips.push({ kind: 'lead', label: 'Leads', value: String(leads), tooltip: 'Reported without code-backed reachability — worth a look, not a confirmed issue' });
+        const coverage = Array.isArray(out.coverage) ? out.coverage : [];
+        if (coverage.length > 0) {
+          const checked = coverage.filter((c) => c && c.status !== 'not_checked').length;
+          chips.push({ kind: 'coverage', label: 'Checks', value: `${checked}/${coverage.length}`, tooltip: 'Checks the agent completed (checked or shown not present) out of those the job lists' });
+        }
+        return chips;
+      }
       if (secId === 'weak_key_enc') {
         // enc_type names the wrapping cipher (X25519 / EC256 / AES-KW);
         // header_encryption_flag is the MCUboot image-key flag (AES-128
@@ -374,6 +419,9 @@ export default {
           if (r.error && r.error !== 'Skipped: LLM section (code_only mode)') {
             return String(r.error).substring(0, 160);
           }
+          // A section that skipped itself (e.g. bridge_proxy on a non-bridge)
+          // says why in its own output.
+          if (r.output?.detail) return `Not applicable — ${String(r.output.detail).substring(0, 140)}`;
           return 'Deferred — LLM analysis not yet configured';
         }
         // Show the specific reason from the dispatcher or section output
@@ -399,6 +447,9 @@ export default {
       }
       if (r.status === 'success' || r.status === 'done') {
         const output = r.output || {};
+        if (VENDOR_INVESTIGATORS.has(sec.id) && output.detail) {
+          return String(output.detail).substring(0, 160);
+        }
         // Section-specific summaries — say what the card actually proved.
         if (sec.id === 'entropy') {
           if (output.encrypted === true) {
@@ -532,6 +583,40 @@ export default {
 }
 .cl-algo-chip-enc { background: #ede9fe; color: #5b21b6; border-color: #ddd6fe; }
 .cl-algo-chip-sig { background: #ecfeff; color: #0e7490; border-color: #cffafe; }
+.cl-algo-chip-confirmed { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+.cl-algo-chip-lead { background: #fef9c3; color: #a16207; border-color: #fef08a; }
+.cl-algo-chip-coverage { background: #f1f5f9; color: #334155; border-color: #e2e8f0; }
+.cl-findings {
+  list-style: none;
+  margin: 0.3rem 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.cl-finding {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: #334155;
+}
+.cl-finding-tag {
+  flex: none;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+}
+.cl-finding-confirmed { background: #fee2e2; color: #b91c1c; }
+.cl-finding-lead { background: #fef9c3; color: #a16207; }
+.cl-finding-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .cl-legend {
   font-size: 0.85rem;
   display: inline-flex;
