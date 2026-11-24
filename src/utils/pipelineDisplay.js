@@ -56,8 +56,8 @@ export const DISPLAY_STAGES = [
         sections: [
             { id: 'extract_executable', name: 'Extract Executable', desc: 'Extract the chipset executable (ELF / ARM-vector bin) from the payload.' },
             { id: 'non_firmware', name: 'Non-firmware Payload / Pipeline Contamination', desc: 'Classify non-firmware artifacts (JSON/CBOR/config/credential/backup), detect pipeline contamination' },
-            { id: 'ida_database', name: 'IDA Database', desc: 'Pristine IDA .i64 — recovery pass + FLIRT signature matching.' },
-            { id: 'binja_database', name: 'Binary Ninja Database', desc: 'Content-addressed Binary Ninja .bndb cache for downstream RE.' },
+            { id: 'binja_database', name: 'Binary Ninja Database', desc: 'Content-addressed Binary Ninja .bndb, named from the selected WARP signature and reused by every BN-backed AI section.' },
+            { id: 'ghidra_database', name: 'Ghidra Project', desc: 'Shared Ghidra project with FunctionID names applied; built once during signature selection and reused by every Ghidra-backed AI section.' },
         ]
     },
     {
